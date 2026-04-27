@@ -16,7 +16,7 @@ jobs:
       - name: Check generated keymap is committed
         run: git diff --exit-code -- config/glove80.keymap
       - name: Build combined Glove80 firmware
-        run: nix build .#firmware
+        run: nix build -L .#firmware
       - name: Copy result
         run: cp result/glove80.uf2 glove80.uf2
       - name: Upload firmware
