@@ -71,7 +71,7 @@ ${formatRows(bindings.map(formatBinding))}
 }
 
 function rgbBinding(color) {
-  return `&ug ${color ?? "___"}`;
+  return `&ug ${color ?? "______"}`;
 }
 
 function rgbLayerBlock(name, colors) {
