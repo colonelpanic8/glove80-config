@@ -24,6 +24,8 @@ const rgbLayerMaps = {
   Mac_Hyper: new Map([[72, "RED"]]),
 };
 
+const bindingAliases = new Map([["&reset", "&sys_reset"]]);
+
 function sanitizeLayerName(name) {
   const sanitized = String(name).replace(/[^A-Za-z0-9_]/g, "_");
   return /^[A-Za-z_]/.test(sanitized) ? sanitized : `L_${sanitized}`;
@@ -41,7 +43,7 @@ function formatParam(param) {
 }
 
 function formatBinding(binding) {
-  const value = binding.value;
+  const value = bindingAliases.get(binding.value) ?? binding.value;
   if (value === "&magic") {
     return "&magic LAYER_Magic 0";
   }
