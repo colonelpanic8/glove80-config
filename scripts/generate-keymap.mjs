@@ -11,9 +11,27 @@ const layout = JSON.parse(fs.readFileSync(layoutPath, "utf8"));
 const rowLengths = [10, 12, 12, 12, 18, 16];
 
 const layerNames = layout.layer_names.map(sanitizeLayerName);
-const layerIdByIndex = new Map(layerNames.map((name, index) => [index, `LAYER_${name}`]));
+const syntheticLayers = [
+  {
+    name: "Games_Mac_Hyper",
+    ifLayers: ["Games", "Mac_Hyper"],
+    bindings: Array.from({ length: 80 }, () => ({ value: "&trans" })),
+  },
+];
+const allLayerNames = [...layerNames, ...syntheticLayers.map(({ name }) => name)];
+const layerIdByIndex = new Map(allLayerNames.map((name, index) => [index, `LAYER_${name}`]));
 
-const rgbLayerMaps = {
+const baseModifierRgbMap = new Map([
+  [34, "GREEN"],
+  [46, "GREEN"],
+  [55, "GREEN"],
+  [63, "GREEN"],
+  [70, "GREEN"],
+  [71, "GREEN"],
+  [72, "GREEN"],
+]);
+
+const explicitRgbLayerMaps = {
   Games: new Map([
     [24, "BLUE"],
     [35, "BLUE"],
@@ -23,6 +41,22 @@ const rgbLayerMaps = {
   ]),
   Mac_Hyper: new Map([[72, "RED"]]),
 };
+
+function mergeRgbMaps(...maps) {
+  return new Map(maps.flatMap((map) => Array.from(map.entries())));
+}
+
+explicitRgbLayerMaps.Games_Mac_Hyper = mergeRgbMaps(
+  explicitRgbLayerMaps.Games,
+  explicitRgbLayerMaps.Mac_Hyper,
+);
+
+const rgbLayerMaps = Object.fromEntries([
+  ...allLayerNames.map((name) => [
+    name,
+    mergeRgbMaps(baseModifierRgbMap, explicitRgbLayerMaps[name] ?? new Map()),
+  ]),
+]);
 
 const bindingAliases = new Map([["&reset", "&sys_reset"]]);
 
@@ -87,7 +121,7 @@ ${formatRows(bindings)}
 }
 
 function generatedLayerDefines() {
-  return layerNames.map((name, index) => `#define LAYER_${name} ${index}`).join("\n");
+  return allLayerNames.map((name, index) => `#define LAYER_${name} ${index}`).join("\n");
 }
 
 function generatedRgbLayers() {
@@ -97,8 +131,24 @@ function generatedRgbLayers() {
 }
 
 function generatedKeymapLayers() {
-  return layout.layers
+  const sourceLayers = layout.layers
     .map((bindings, index) => layerBlock(layerNames[index], index, bindings))
+    .join("\n\n");
+  const generatedSyntheticLayers = syntheticLayers
+    .map((layer, index) => layerBlock(layer.name, layerNames.length + index, layer.bindings))
+    .join("\n\n");
+  return [sourceLayers, generatedSyntheticLayers].filter(Boolean).join("\n\n");
+}
+
+function generatedConditionalLayers() {
+  return syntheticLayers
+    .filter(({ ifLayers }) => ifLayers?.length)
+    .map(
+      ({ name, ifLayers }) => `        ${name.toLowerCase()} {
+            if-layers = <${ifLayers.map((layer) => `LAYER_${layer}`).join(" ")}>;
+            then-layer = <LAYER_${name}>;
+        };`,
+    )
     .join("\n\n");
 }
 
@@ -129,6 +179,14 @@ ${generatedLayerDefines()}
         compatible = "zmk,underglow-layer";
 
 ${generatedRgbLayers()}
+    };
+};
+
+/ {
+    conditional_layers {
+        compatible = "zmk,conditional-layers";
+
+${generatedConditionalLayers()}
     };
 };
 

@@ -9,8 +9,15 @@ are editor-only; this repo adds physical RGB maps for selected layers.
 
 ## RGB Layer Maps
 
+- All layers: Ctrl, Shift, Alt, and GUI modifier keys are green.
 - `Games`: W/A/S/D and the backspace-position space key are blue.
 - `Mac_Hyper`: the main right-thumb Hyper key is red.
+- `Games_Mac_Hyper`: generated locally as a transparent conditional layer so
+  the two independently toggled layer maps appear together when both layers are
+  active.
+
+The base modifier lights are included in every generated RGB layer map because
+the current ZMK RGB layer effect renders one active layer map at a time.
 
 The RGB layer effect must be selected on the keyboard. If it is not already
 active after flashing, use your Magic layer RGB effect key to cycle to the layer
