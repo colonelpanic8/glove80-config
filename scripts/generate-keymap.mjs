@@ -9,6 +9,9 @@ const outputPath = path.join(repoRoot, "config", "glove80.keymap");
 
 const layout = JSON.parse(fs.readFileSync(layoutPath, "utf8"));
 const rowLengths = [10, 12, 12, 12, 18, 16];
+const studioUnlockLayer = "Magic";
+const studioUnlockPosition = 64;
+const reservedStudioLayerCount = 4;
 
 const layerNames = layout.layer_names.map(sanitizeLayerName);
 const syntheticLayers = [
@@ -20,43 +23,6 @@ const syntheticLayers = [
 ];
 const allLayerNames = [...layerNames, ...syntheticLayers.map(({ name }) => name)];
 const layerIdByIndex = new Map(allLayerNames.map((name, index) => [index, `LAYER_${name}`]));
-
-const baseModifierRgbMap = new Map([
-  [34, "GREEN"],
-  [46, "GREEN"],
-  [55, "GREEN"],
-  [63, "GREEN"],
-  [70, "GREEN"],
-  [71, "GREEN"],
-  [72, "GREEN"],
-]);
-
-const explicitRgbLayerMaps = {
-  Games: new Map([
-    [24, "BLUE"],
-    [35, "BLUE"],
-    [36, "BLUE"],
-    [37, "BLUE"],
-    [69, "BLUE"],
-  ]),
-  Mac_Hyper: new Map([[72, "RED"]]),
-};
-
-function mergeRgbMaps(...maps) {
-  return new Map(maps.flatMap((map) => Array.from(map.entries())));
-}
-
-explicitRgbLayerMaps.Games_Mac_Hyper = mergeRgbMaps(
-  explicitRgbLayerMaps.Games,
-  explicitRgbLayerMaps.Mac_Hyper,
-);
-
-const rgbLayerMaps = Object.fromEntries([
-  ...allLayerNames.map((name) => [
-    name,
-    mergeRgbMaps(baseModifierRgbMap, explicitRgbLayerMaps[name] ?? new Map()),
-  ]),
-]);
 
 const bindingAliases = new Map([["&reset", "&sys_reset"]]);
 
@@ -99,35 +65,21 @@ function formatRows(items, indent = "                ") {
 }
 
 function layerBlock(name, index, bindings) {
+  const generatedBindings = bindings.map((binding, position) =>
+    name === studioUnlockLayer && position === studioUnlockPosition
+      ? "&studio_unlock"
+      : formatBinding(binding),
+  );
   return `        layer_${name} {
+            display-name = "${name.replaceAll("_", " ")}";
             bindings = <
-${formatRows(bindings.map(formatBinding))}
+${formatRows(generatedBindings)}
             >;
-        };`;
-}
-
-function rgbBinding(color) {
-  return color ?? "______";
-}
-
-function rgbLayerBlock(name, colors) {
-  const bindings = Array.from({ length: 80 }, (_, index) => rgbBinding(colors.get(index)));
-  return `        ${name.toLowerCase()} {
-            bindings = <
-${formatRows(bindings)}
-            >;
-            layer-id = <LAYER_${name}>;
         };`;
 }
 
 function generatedLayerDefines() {
   return allLayerNames.map((name, index) => `#define LAYER_${name} ${index}`).join("\n");
-}
-
-function generatedRgbLayers() {
-  return Object.entries(rgbLayerMaps)
-    .map(([name, colors]) => rgbLayerBlock(name, colors))
-    .join("\n\n");
 }
 
 function generatedKeymapLayers() {
@@ -137,7 +89,15 @@ function generatedKeymapLayers() {
   const generatedSyntheticLayers = syntheticLayers
     .map((layer, index) => layerBlock(layer.name, layerNames.length + index, layer.bindings))
     .join("\n\n");
-  return [sourceLayers, generatedSyntheticLayers].filter(Boolean).join("\n\n");
+  const reservedStudioLayers = Array.from(
+    { length: reservedStudioLayerCount },
+    (_, index) => `        studio_reserved_${index + 1} {
+            status = "reserved";
+        };`,
+  ).join("\n\n");
+  return [sourceLayers, generatedSyntheticLayers, reservedStudioLayers]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function generatedConditionalLayers() {
@@ -166,21 +126,12 @@ const output = `/*
 #include <dt-bindings/zmk/keys.h>
 #include <dt-bindings/zmk/bt.h>
 #include <dt-bindings/zmk/rgb.h>
-#include <dt-bindings/zmk/rgb_colors.h>
 
 ${generatedLayerDefines()}
 
 #ifndef LAYER_Lower
 #define LAYER_Lower 0
 #endif
-
-/ {
-    underglow-layer {
-        compatible = "zmk,underglow-layer";
-
-${generatedRgbLayers()}
-    };
-};
 
 / {
     conditional_layers {

@@ -12,7 +12,6 @@
 #include <dt-bindings/zmk/keys.h>
 #include <dt-bindings/zmk/bt.h>
 #include <dt-bindings/zmk/rgb.h>
-#include <dt-bindings/zmk/rgb_colors.h>
 
 #define LAYER_Base 0
 #define LAYER_Lower 1
@@ -24,84 +23,6 @@
 #ifndef LAYER_Lower
 #define LAYER_Lower 0
 #endif
-
-/ {
-    underglow-layer {
-        compatible = "zmk,underglow-layer";
-
-        base {
-            bindings = <
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  GREEN  ______  ______  ______  ______  ______  ______  ______  GREEN
-                ______  ______  ______  ______  ______  ______  GREEN  GREEN  GREEN  ______  ______  ______  ______  ______  ______  ______
-            >;
-            layer-id = <LAYER_Base>;
-        };
-
-        lower {
-            bindings = <
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  GREEN  ______  ______  ______  ______  ______  ______  ______  GREEN
-                ______  ______  ______  ______  ______  ______  GREEN  GREEN  GREEN  ______  ______  ______  ______  ______  ______  ______
-            >;
-            layer-id = <LAYER_Lower>;
-        };
-
-        magic {
-            bindings = <
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  GREEN  ______  ______  ______  ______  ______  ______  ______  GREEN
-                ______  ______  ______  ______  ______  ______  GREEN  GREEN  GREEN  ______  ______  ______  ______  ______  ______  ______
-            >;
-            layer-id = <LAYER_Magic>;
-        };
-
-        games {
-            bindings = <
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  BLUE  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  BLUE  BLUE  BLUE  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  GREEN  ______  ______  ______  ______  ______  ______  ______  GREEN
-                ______  ______  ______  ______  ______  BLUE  GREEN  GREEN  GREEN  ______  ______  ______  ______  ______  ______  ______
-            >;
-            layer-id = <LAYER_Games>;
-        };
-
-        mac_hyper {
-            bindings = <
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  GREEN  ______  ______  ______  ______  ______  ______  ______  GREEN
-                ______  ______  ______  ______  ______  ______  GREEN  GREEN  RED  ______  ______  ______  ______  ______  ______  ______
-            >;
-            layer-id = <LAYER_Mac_Hyper>;
-        };
-
-        games_mac_hyper {
-            bindings = <
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                ______  ______  BLUE  ______  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  BLUE  BLUE  BLUE  ______  ______  ______  ______  ______  ______  ______  ______
-                GREEN  ______  ______  ______  ______  ______  ______  ______  ______  GREEN  ______  ______  ______  ______  ______  ______  ______  GREEN
-                ______  ______  ______  ______  ______  BLUE  GREEN  GREEN  RED  ______  ______  ______  ______  ______  ______  ______
-            >;
-            layer-id = <LAYER_Games_Mac_Hyper>;
-        };
-    };
-};
 
 / {
     conditional_layers {
@@ -231,6 +152,7 @@
         compatible = "zmk,keymap";
 
         layer_Base {
+            display-name = "Base";
             bindings = <
                 &kp F1  &kp F2  &kp F3  &kp F4  &kp F5  &kp F6  &kp F7  &kp F8  &kp F9  &kp F10
                 &kp EQUAL  &kp N1  &kp N2  &kp N3  &kp N4  &kp N5  &kp N6  &kp N7  &kp N8  &kp N9  &kp N0  &kp MINUS
@@ -242,6 +164,7 @@
         };
 
         layer_Lower {
+            display-name = "Lower";
             bindings = <
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
@@ -253,17 +176,19 @@
         };
 
         layer_Magic {
+            display-name = "Magic";
             bindings = <
                 &bt BT_CLR  &none  &none  &none  &none  &none  &none  &none  &none  &bt BT_CLR_ALL
                 &none  &none  &none  &none  &none  &none  &none  &none  &none  &none  &none  &none
                 &none  &rgb_ug RGB_SPI  &rgb_ug RGB_SAI  &rgb_ug RGB_HUI  &rgb_ug RGB_BRI  &rgb_ug RGB_TOG  &none  &none  &none  &none  &none  &none
                 &bootloader  &rgb_ug RGB_SPD  &rgb_ug RGB_SAD  &rgb_ug RGB_HUD  &rgb_ug RGB_BRD  &rgb_ug RGB_EFF  &none  &none  &none  &none  &none  &bootloader
                 &sys_reset  &none  &none  &none  &none  &none  &bt_2  &bt_3  &none  &none  &none  &none  &none  &none  &none  &none  &none  &sys_reset
-                &none  &none  &none  &none  &none  &bt_0  &bt_1  &out OUT_USB  &none  &none  &none  &none  &none  &none  &none  &to LAYER_Games
+                &studio_unlock  &none  &none  &none  &none  &bt_0  &bt_1  &out OUT_USB  &none  &none  &none  &none  &none  &none  &none  &to LAYER_Games
             >;
         };
 
         layer_Games {
+            display-name = "Games";
             bindings = <
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
@@ -275,6 +200,7 @@
         };
 
         layer_Mac_Hyper {
+            display-name = "Mac Hyper";
             bindings = <
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
@@ -286,6 +212,7 @@
         };
 
         layer_Games_Mac_Hyper {
+            display-name = "Games Mac Hyper";
             bindings = <
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
@@ -294,6 +221,22 @@
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
                 &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans  &trans
             >;
+        };
+
+        studio_reserved_1 {
+            status = "reserved";
+        };
+
+        studio_reserved_2 {
+            status = "reserved";
+        };
+
+        studio_reserved_3 {
+            status = "reserved";
+        };
+
+        studio_reserved_4 {
+            status = "reserved";
         };
     };
 };

@@ -59,16 +59,15 @@
     "zmk": {
       "flake": false,
       "locked": {
-        "lastModified": 1716636649,
-        "narHash": "sha256-b9M0/yZ3oUxKHOjwLxDQXEn/neVE1jhuEFDB5AWXTRA=",
-        "owner": "darknao",
+        "lastModified": 1776053885,
+        "narHash": "sha256-WsQaX+g8XAmhTD9DjODzzw37Br1Wpd7wz34Rd9BvIvM=",
+        "owner": "moergo-sc",
         "repo": "zmk",
-        "rev": "6d82f4819c71df9fea7b8e4f7936c60f4b6a50b4",
+        "rev": "2f73a230e2fc7b2bd64a9736181e87bf54338131",
         "type": "github"
       },
       "original": {
-        "owner": "darknao",
-        "ref": "darknao/rgb-dts",
+        "owner": "moergo-sc",
         "repo": "zmk",
         "type": "github"
       }

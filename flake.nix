@@ -1,11 +1,11 @@
 {
-  description = "Ivan's Glove80 ZMK configuration with per-layer RGB maps";
+  description = "Ivan's Glove80 ZMK Studio configuration";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
     flake-utils.url = "github:numtide/flake-utils";
     zmk = {
-      url = "github:darknao/zmk/darknao/rgb-dts";
+      url = "github:moergo-sc/zmk";
       flake = false;
     };
   };
@@ -14,7 +14,13 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        firmware = import zmk { inherit pkgs; };
+        zmkPkgs = import (zmk + "/nix/pinned-nixpkgs.nix") { inherit system; };
+        patchedZmk = zmkPkgs.applyPatches {
+          name = "moergo-zmk-studio";
+          src = zmk;
+          patches = [ ./nix/moergo-zmk-studio-modules.patch ];
+        };
+        firmware = import patchedZmk { pkgs = zmkPkgs; };
       in
       {
         packages.firmware = import ./config {

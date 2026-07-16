@@ -9,6 +9,7 @@ let
     board = "glove80_lh";
     keymap = "${config}/glove80.keymap";
     kconfig = "${config}/glove80.conf";
+    snippets = [ "studio-rpc-usb-uart" ];
   };
 
   glove80_right = firmware.zmk.override {

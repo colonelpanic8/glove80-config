@@ -1,0 +1,61 @@
+diff --git a/nix/zmk.nix b/nix/zmk.nix
+index f43c466..bc5a2d2 100644
+--- a/nix/zmk.nix
++++ b/nix/zmk.nix
+@@ -1,5 +1,5 @@
+ { stdenvNoCC, lib, buildPackages
+-, cmake, ninja, dtc, gcc-arm-embedded
++, cmake, ninja, dtc, gcc-arm-embedded, protobuf
+ , zephyr
+ , board ? "glove80_lh"
+ , shield ? null
+@@ -40,6 +40,8 @@ let
+     packaging
+     progress
+     anytree
++    ps.protobuf
++    setuptools
+     intelhex
+ 
+     # TODO: this was required but not in shell.nix
+@@ -48,6 +49,7 @@ let
+ 
+   requiredZephyrModules = [
+     "cmsis" "hal_nordic" "tinycrypt" "lvgl" "picolibc" "segger" "cirque-input-module"
++    "nanopb" "zmk-studio-messages"
+   ];
+ 
+   # Some Zephyr modules seemingly need a symlink indirection (modulePath),
+@@ -55,9 +57,21 @@ let
+   # This is not the best way to fix it, but it works around the problem.
+   directZephyrModules = [ "cirque-input-module" ];
+ 
++  patchedNanopbModule = buildPackages.runCommand "zmk-module-nanopb-patched" {
++    nativeBuildInputs = [ python ];
++  } ''
++    cp -R ${zephyr.modules.nanopb.src} $out
++    chmod -R u+w $out
++    patchShebangs --build $out
++  '';
++
+   zephyrModuleDeps =
+-    let modules = lib.attrVals requiredZephyrModules zephyr.modules;
+-    in map (x: if builtins.elem x.src.name directZephyrModules then x.src else x.modulePath) modules;
++    map (name:
++      let module = zephyr.modules.${name};
++      in if name == "nanopb" then patchedNanopbModule
++         else if builtins.elem module.src.name directZephyrModules then module.src
++         else module.modulePath
++    ) requiredZephyrModules;
+ in
+ 
+ stdenvNoCC.mkDerivation {
+@@ -107,7 +121,7 @@ stdenvNoCC.mkDerivation {
+   (lib.optional (extraModules != []) "-DZMK_EXTRA_MODULES=${lib.concatStringsSep ";" extraModules}") ++
+   (lib.optional (snippets != []) "-DSNIPPET=${lib.concatStringsSep ";" snippets}");
+ 
+-  nativeBuildInputs = [ cmake ninja python dtc gcc-arm-embedded ];
++  nativeBuildInputs = [ cmake ninja python protobuf dtc gcc-arm-embedded ];
+   buildInputs = [ zephyr ];
+ 
+   installPhase = ''
