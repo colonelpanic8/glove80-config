@@ -44,6 +44,29 @@ struct zmk_split_transport_host_lighting_command {
     struct zmk_split_transport_host_lighting_pixel pixels[ZMK_SPLIT_HOST_LIGHTING_MAX_PIXELS];
 } __packed;
 
+#define ZMK_SPLIT_HOST_LIGHTING_MAX_EFFECTS 2
+#define ZMK_SPLIT_HOST_LIGHTING_EFFECT_TYPE_MASK 0x03
+#define ZMK_SPLIT_HOST_LIGHTING_EFFECT_DUTY_SHIFT 2
+
+struct zmk_split_transport_host_lighting_effect {
+    uint8_t index;
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint8_t period_steps;
+    uint8_t phase_steps;
+    uint8_t type_and_duty;
+} __packed;
+
+/* 18 bytes: two compact effects fit in one default BLE ATT payload. */
+struct zmk_split_transport_host_lighting_effect_command {
+    uint16_t timeout_ms;
+    uint8_t effect_count;
+    uint8_t flags;
+    struct zmk_split_transport_host_lighting_effect
+        effects[ZMK_SPLIT_HOST_LIGHTING_MAX_EFFECTS];
+} __packed;
+
 enum zmk_split_transport_peripheral_event_type {
     ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_KEY_POSITION_EVENT,
     ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_SENSOR_EVENT,
@@ -86,6 +109,7 @@ enum zmk_split_transport_central_command_type {
     ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SET_PHYSICAL_LAYOUT,
     ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SET_HID_INDICATORS,
     ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_HOST_LIGHTING,
+    ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_HOST_LIGHTING_EFFECTS,
 } __packed;
 
 struct zmk_split_transport_central_command {
@@ -109,5 +133,6 @@ struct zmk_split_transport_central_command {
         } set_hid_indicators;
 
         struct zmk_split_transport_host_lighting_command host_lighting;
+        struct zmk_split_transport_host_lighting_effect_command host_lighting_effects;
     } data;
 } __packed;

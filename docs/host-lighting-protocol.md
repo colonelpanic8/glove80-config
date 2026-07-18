@@ -5,20 +5,25 @@ lighting. It is intentionally separate from the generated keymap and standard
 Studio configuration. A desktop client may use the same extension over Studio's
 USB serial or Bluetooth GATT transport.
 
-The implementation is experimental. It builds for both halves, but has not yet
-been exercised on a physical keyboard.
+The implementation is experimental. Static per-key lighting has been exercised
+on both halves; the protocol-v2 animation path still needs hardware validation.
 
 ## Transport and envelope
 
 The extension adds `host_lighting` as field 6 of the Studio request and response
 subsystem `oneof`. Its schema is in
 [`protocol/proto/zmk/host_lighting.proto`](../protocol/proto/zmk/host_lighting.proto).
-Protocol version 1 supports three requests:
+Protocol version 2 supports four requests:
 
 - `get_capabilities` reports the limits compiled into the keyboard.
 - `set_pixels` updates up to eight pixels and optionally clears the previous
   host frame first.
+- `set_effects` assigns static, blink, or breathe rendering to up to eight
+  pixels, with a color and timing parameters for each pixel.
 - `clear` removes the host override immediately.
+
+Version 2 is additive. Clients may continue using the version-1 requests, and
+should check `supports_effects` before sending `set_effects`.
 
 These RPCs are not gated by Studio's physical unlock because they are ephemeral:
 they cannot change bindings, persist settings, or write lighting frames to
@@ -40,6 +45,17 @@ With `replace = true`, all host pixels are first set to black and the supplied
 updates become the complete frame fragment. With `replace = false`, supplied
 pixels update the existing host frame.
 
+Effects are rendered in keyboard firmware, so blink and breathe continue
+without a desktop stream between keepalives. Each pixel independently stores:
+
+- mode: static, blink, or breathe;
+- RGB color;
+- period and phase offset, quantized to the advertised 50 ms resolution;
+- on-time percentage for blink.
+
+The default supported period range is 200 ms through 10 seconds. Sending a
+regular `set_pixels` update for a pixel returns that pixel to static mode.
+
 ## Lifetime and fallback
 
 `timeout_ms = 0` selects the five-second default. Other values are capped at the
@@ -50,11 +66,12 @@ Host lighting is optional and RAM-only. A missing, stopped, or disconnected
 daemon therefore affects only the temporary lighting overlay; typing, layers,
 bindings, and Studio-saved settings continue to work independently.
 
-Commands for the right half use a dedicated 20-byte split packet containing up
-to four pixel updates. This fits the default BLE ATT payload without
-fragmentation and is also supported by wired split transport. A response can
-report a partial application if one half is unavailable. Lighting rendering
-runs on ZMK's low-priority work queue, below key scanning and HID work.
+Commands for the right half use compact split packets: a 20-byte packet carries
+up to four static pixel updates, while an 18-byte packet carries up to two
+effects. Both fit the default BLE ATT payload without fragmentation and are also
+supported by wired split transport. A response can report a partial application
+if one half is unavailable. Lighting rendering runs on ZMK's low-priority work
+queue, below key scanning and HID work.
 The advertised rate is currently 20 updates per second; firmware-side rate
 enforcement and frame coalescing remain roadmap work.
 

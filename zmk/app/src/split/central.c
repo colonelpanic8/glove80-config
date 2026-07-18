@@ -123,6 +123,19 @@ int zmk_split_central_update_host_lighting(
                 });
 }
 
+int zmk_split_central_update_host_lighting_effects(
+    uint8_t source, const struct zmk_split_transport_host_lighting_effect_command *effects) {
+    if (!active_transport || !active_transport->api || !active_transport->api->send_command) {
+        return -ENODEV;
+    }
+
+    return active_transport->api->send_command(
+        source, (struct zmk_split_transport_central_command){
+                    .type = ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_HOST_LIGHTING_EFFECTS,
+                    .data = {.host_lighting_effects = *effects},
+                });
+}
+
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
 
 int zmk_split_central_update_hid_indicator(zmk_hid_indicators_t indicators) {

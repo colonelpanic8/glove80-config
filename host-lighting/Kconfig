@@ -37,6 +37,24 @@ config ZMK_HOST_LIGHTING_MAX_CHANNEL
     default 96
     range 1 255
 
+config ZMK_HOST_LIGHTING_EFFECT_PERIOD_MIN_MS
+    int "Minimum per-key effect period"
+    default 200
+    range 100 2000
+
+config ZMK_HOST_LIGHTING_EFFECT_PERIOD_MAX_MS
+    int "Maximum per-key effect period"
+    default 10000
+    range 2000 12000
+
+config ZMK_HOST_LIGHTING_EFFECT_TIME_QUANTUM_MS
+    int "Per-key effect timing quantum"
+    default 50
+    range 25 100
+    help
+      Periods and phase offsets are rounded to this resolution so two effect
+      descriptions fit in one default BLE ATT payload.
+
 config ZMK_HOST_LIGHTING_STATUS_PIXEL
     int "Firmware status LED index (-1 disables)"
     default 2 if ZMK_SPLIT_ROLE_CENTRAL

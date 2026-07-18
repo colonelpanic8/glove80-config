@@ -84,6 +84,13 @@ static struct rgb_underglow_state state;
 
 #if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
 static struct led_rgb host_pixels[STRIP_NUM_PIXELS];
+struct host_pixel_effect {
+    uint16_t period_ms;
+    uint16_t phase_ms;
+    uint8_t type;
+    uint8_t duty_percent;
+};
+static struct host_pixel_effect host_effects[STRIP_NUM_PIXELS];
 static struct k_spinlock host_pixels_lock;
 static atomic_t host_lighting_active;
 static struct k_work_delayable host_lighting_timeout_work;
@@ -203,6 +210,39 @@ static void zmk_rgb_underglow_effect_swirl(void) {
 static int zmk_led_generate_status(void);
 
 #if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+static uint8_t host_effect_intensity(const struct host_pixel_effect *effect, uint32_t now_ms) {
+    if (effect->type == ZMK_RGB_UNDERGLOW_HOST_EFFECT_STATIC || effect->period_ms == 0) {
+        return UINT8_MAX;
+    }
+
+    const uint32_t position = (now_ms + effect->phase_ms) % effect->period_ms;
+    if (effect->type == ZMK_RGB_UNDERGLOW_HOST_EFFECT_BLINK) {
+        return position * 100U < effect->period_ms * effect->duty_percent ? UINT8_MAX : 0;
+    }
+
+    const uint32_t half = effect->period_ms / 2U;
+    const uint32_t denominator = position < half ? MAX(half, 1U)
+                                                 : MAX(effect->period_ms - half, 1U);
+    const uint32_t distance = position < half ? position : effect->period_ms - position;
+    const uint32_t linear = MIN(distance * UINT8_MAX / denominator, UINT8_MAX);
+    return linear * linear * (3U * UINT8_MAX - 2U * linear) /
+           (UINT8_MAX * UINT8_MAX);
+}
+
+static void zmk_host_lighting_render(void) {
+    const uint32_t now_ms = k_uptime_get_32();
+    k_spinlock_key_t key = k_spin_lock(&host_pixels_lock);
+    for (size_t i = 0; i < STRIP_NUM_PIXELS; i++) {
+        const uint8_t intensity = host_effect_intensity(&host_effects[i], now_ms);
+        pixels[i] = (struct led_rgb){
+            .r = host_pixels[i].r * intensity / UINT8_MAX,
+            .g = host_pixels[i].g * intensity / UINT8_MAX,
+            .b = host_pixels[i].b * intensity / UINT8_MAX,
+        };
+    }
+    k_spin_unlock(&host_pixels_lock, key);
+}
+
 static void zmk_host_lighting_apply_status_pixel(struct led_rgb *buffer) {
 #if CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL >= 0
     const size_t index = CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL;
@@ -471,9 +511,7 @@ static int zmk_led_generate_status(void) {
 static void zmk_rgb_underglow_tick(struct k_work *work) {
 #if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
     if (atomic_get(&host_lighting_active)) {
-        k_spinlock_key_t key = k_spin_lock(&host_pixels_lock);
-        memcpy(pixels, host_pixels, sizeof(pixels));
-        k_spin_unlock(&host_pixels_lock, key);
+        zmk_host_lighting_render();
         zmk_led_write_pixels();
         return;
     }
@@ -552,6 +590,7 @@ size_t zmk_rgb_underglow_host_pixel_count(void) { return STRIP_NUM_PIXELS; }
 int zmk_rgb_underglow_host_replace(uint32_t timeout_ms) {
     k_spinlock_key_t key = k_spin_lock(&host_pixels_lock);
     memset(host_pixels, 0, sizeof(host_pixels));
+    memset(host_effects, 0, sizeof(host_effects));
     k_spin_unlock(&host_pixels_lock, key);
     host_lighting_schedule_render(timeout_ms);
     return 0;
@@ -575,6 +614,54 @@ int zmk_rgb_underglow_host_update(const struct zmk_rgb_underglow_host_pixel *upd
             .r = MIN(updates[i].r, CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL),
             .g = MIN(updates[i].g, CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL),
             .b = MIN(updates[i].b, CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL),
+        };
+        host_effects[updates[i].index] = (struct host_pixel_effect){
+            .type = ZMK_RGB_UNDERGLOW_HOST_EFFECT_STATIC,
+        };
+    }
+    k_spin_unlock(&host_pixels_lock, key);
+
+    host_lighting_schedule_render(timeout_ms);
+    return 0;
+}
+
+int zmk_rgb_underglow_host_update_effects(const struct zmk_rgb_underglow_host_effect *effects,
+                                          size_t effect_count, uint32_t timeout_ms) {
+    if (!effects && effect_count > 0) {
+        return -EINVAL;
+    }
+
+    for (size_t i = 0; i < effect_count; i++) {
+        if (effects[i].index >= STRIP_NUM_PIXELS) {
+            return -ERANGE;
+        }
+        if (effects[i].type > ZMK_RGB_UNDERGLOW_HOST_EFFECT_BREATHE) {
+            return -EINVAL;
+        }
+        if (effects[i].type != ZMK_RGB_UNDERGLOW_HOST_EFFECT_STATIC &&
+            (effects[i].period_ms < CONFIG_ZMK_HOST_LIGHTING_EFFECT_PERIOD_MIN_MS ||
+             effects[i].period_ms > CONFIG_ZMK_HOST_LIGHTING_EFFECT_PERIOD_MAX_MS)) {
+            return -EINVAL;
+        }
+        if (effects[i].type == ZMK_RGB_UNDERGLOW_HOST_EFFECT_BLINK &&
+            (effects[i].duty_percent == 0 || effects[i].duty_percent >= 100)) {
+            return -EINVAL;
+        }
+    }
+
+    k_spinlock_key_t key = k_spin_lock(&host_pixels_lock);
+    for (size_t i = 0; i < effect_count; i++) {
+        const struct zmk_rgb_underglow_host_effect *effect = &effects[i];
+        host_pixels[effect->index] = (struct led_rgb){
+            .r = MIN(effect->r, CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL),
+            .g = MIN(effect->g, CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL),
+            .b = MIN(effect->b, CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL),
+        };
+        host_effects[effect->index] = (struct host_pixel_effect){
+            .period_ms = effect->period_ms,
+            .phase_ms = effect->period_ms == 0 ? 0 : effect->phase_ms % effect->period_ms,
+            .type = effect->type,
+            .duty_percent = effect->duty_percent,
         };
     }
     k_spin_unlock(&host_pixels_lock, key);

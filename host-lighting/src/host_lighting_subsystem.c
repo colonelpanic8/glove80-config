@@ -10,6 +10,11 @@ LOG_MODULE_DECLARE(zmk_studio, CONFIG_ZMK_STUDIO_LOG_LEVEL);
 
 ZMK_RPC_SUBSYSTEM(host_lighting)
 
+BUILD_ASSERT(CONFIG_ZMK_HOST_LIGHTING_EFFECT_PERIOD_MAX_MS /
+                     CONFIG_ZMK_HOST_LIGHTING_EFFECT_TIME_QUANTUM_MS <=
+                 UINT8_MAX,
+             "Host lighting effect periods must fit in the split transport");
+
 #define HOST_LIGHTING_RESPONSE(type, ...) ZMK_RPC_RESPONSE(host_lighting, type, __VA_ARGS__)
 
 static int send_peripheral_batch(const struct zmk_rgb_underglow_host_pixel *pixels,
@@ -48,6 +53,50 @@ static int send_peripheral_batch(const struct zmk_rgb_underglow_host_pixel *pixe
     return 0;
 }
 
+static int send_peripheral_effect_batch(const struct zmk_rgb_underglow_host_effect *effects,
+                                        size_t effect_count, bool replace, uint32_t timeout_ms) {
+    if (timeout_ms > UINT16_MAX) {
+        return -EINVAL;
+    }
+
+    size_t offset = 0;
+    do {
+        const size_t count = MIN(effect_count - offset, ZMK_SPLIT_HOST_LIGHTING_MAX_EFFECTS);
+        struct zmk_split_transport_host_lighting_effect_command command = {
+            .timeout_ms = timeout_ms,
+            .effect_count = count,
+            .flags = replace && offset == 0 ? ZMK_SPLIT_HOST_LIGHTING_FLAG_REPLACE : 0,
+        };
+
+        for (size_t i = 0; i < count; i++) {
+            const struct zmk_rgb_underglow_host_effect *effect = &effects[offset + i];
+            const uint8_t duty_steps = CLAMP(
+                DIV_ROUND_CLOSEST(effect->duty_percent * 63U, 100U), 1, 62);
+            command.effects[i] = (struct zmk_split_transport_host_lighting_effect){
+                .index = effect->index,
+                .r = effect->r,
+                .g = effect->g,
+                .b = effect->b,
+                .period_steps = effect->period_ms /
+                                CONFIG_ZMK_HOST_LIGHTING_EFFECT_TIME_QUANTUM_MS,
+                .phase_steps = effect->phase_ms /
+                               CONFIG_ZMK_HOST_LIGHTING_EFFECT_TIME_QUANTUM_MS,
+                .type_and_duty =
+                    (effect->type & ZMK_SPLIT_HOST_LIGHTING_EFFECT_TYPE_MASK) |
+                    (duty_steps << ZMK_SPLIT_HOST_LIGHTING_EFFECT_DUTY_SHIFT),
+            };
+        }
+
+        int err = zmk_split_central_update_host_lighting_effects(0, &command);
+        if (err < 0) {
+            return err;
+        }
+        offset += count;
+    } while (offset < effect_count);
+
+    return 0;
+}
+
 static zmk_host_lighting_ApplyResult result_for_errors(bool local_error, bool peripheral_error) {
     if (local_error && peripheral_error) {
         return zmk_host_lighting_ApplyResult_APPLY_RESULT_INTERNAL_ERROR;
@@ -71,9 +120,80 @@ zmk_studio_Response get_capabilities(const zmk_studio_Request *req) {
         .max_channel_value = CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL,
         .supports_replace = true,
         .supports_split = true,
+        .supports_effects = true,
+        .min_effect_period_ms = CONFIG_ZMK_HOST_LIGHTING_EFFECT_PERIOD_MIN_MS,
+        .max_effect_period_ms = CONFIG_ZMK_HOST_LIGHTING_EFFECT_PERIOD_MAX_MS,
+        .effect_time_quantum_ms = CONFIG_ZMK_HOST_LIGHTING_EFFECT_TIME_QUANTUM_MS,
     };
 
     return HOST_LIGHTING_RESPONSE(get_capabilities, capabilities);
+}
+
+zmk_studio_Response set_effects(const zmk_studio_Request *req) {
+    const zmk_host_lighting_SetEffectsRequest *request =
+        &req->subsystem.host_lighting.request_type.set_effects;
+    const size_t pixels_per_half = zmk_rgb_underglow_host_pixel_count();
+    struct zmk_rgb_underglow_host_effect local_effects[CONFIG_ZMK_HOST_LIGHTING_MAX_UPDATES];
+    struct zmk_rgb_underglow_host_effect peripheral_effects[CONFIG_ZMK_HOST_LIGHTING_MAX_UPDATES];
+    size_t local_count = 0;
+    size_t peripheral_count = 0;
+
+    for (size_t i = 0; i < request->effects_count; i++) {
+        const zmk_host_lighting_Effect *effect = &request->effects[i];
+        if (effect->index >= pixels_per_half * 2) {
+            return HOST_LIGHTING_RESPONSE(
+                set_effects, zmk_host_lighting_ApplyResult_APPLY_RESULT_INVALID_PIXEL);
+        }
+        if (effect->type > zmk_host_lighting_EffectType_EFFECT_TYPE_BREATHE) {
+            return HOST_LIGHTING_RESPONSE(
+                set_effects, zmk_host_lighting_ApplyResult_APPLY_RESULT_INVALID_EFFECT);
+        }
+        if (effect->type != zmk_host_lighting_EffectType_EFFECT_TYPE_STATIC &&
+            (effect->period_ms < CONFIG_ZMK_HOST_LIGHTING_EFFECT_PERIOD_MIN_MS ||
+             effect->period_ms > CONFIG_ZMK_HOST_LIGHTING_EFFECT_PERIOD_MAX_MS ||
+             effect->period_ms % CONFIG_ZMK_HOST_LIGHTING_EFFECT_TIME_QUANTUM_MS != 0 ||
+             effect->phase_ms >= effect->period_ms ||
+             effect->phase_ms % CONFIG_ZMK_HOST_LIGHTING_EFFECT_TIME_QUANTUM_MS != 0)) {
+            return HOST_LIGHTING_RESPONSE(
+                set_effects, zmk_host_lighting_ApplyResult_APPLY_RESULT_INVALID_EFFECT);
+        }
+        if (effect->type == zmk_host_lighting_EffectType_EFFECT_TYPE_BLINK &&
+            (effect->duty_percent == 0 || effect->duty_percent >= 100)) {
+            return HOST_LIGHTING_RESPONSE(
+                set_effects, zmk_host_lighting_ApplyResult_APPLY_RESULT_INVALID_EFFECT);
+        }
+    }
+
+    bool local_error = request->replace && zmk_rgb_underglow_host_replace(request->timeout_ms) < 0;
+    for (size_t i = 0; i < request->effects_count; i++) {
+        const zmk_host_lighting_Effect *effect = &request->effects[i];
+        struct zmk_rgb_underglow_host_effect update = {
+            .index = effect->index % pixels_per_half,
+            .r = (effect->rgb >> 16) & 0xff,
+            .g = (effect->rgb >> 8) & 0xff,
+            .b = effect->rgb & 0xff,
+            .period_ms = effect->period_ms,
+            .phase_ms = effect->phase_ms,
+            .type = effect->type,
+            .duty_percent = effect->duty_percent,
+        };
+        if (effect->index < pixels_per_half) {
+            local_effects[local_count++] = update;
+        } else {
+            peripheral_effects[peripheral_count++] = update;
+        }
+    }
+
+    if (local_count > 0 &&
+        zmk_rgb_underglow_host_update_effects(local_effects, local_count, request->timeout_ms) < 0) {
+        local_error = true;
+    }
+    const bool peripheral_error =
+        (peripheral_count > 0 || request->replace) &&
+        send_peripheral_effect_batch(peripheral_effects, peripheral_count, request->replace,
+                                     request->timeout_ms) < 0;
+
+    return HOST_LIGHTING_RESPONSE(set_effects, result_for_errors(local_error, peripheral_error));
 }
 
 zmk_studio_Response set_pixels(const zmk_studio_Request *req) {
@@ -142,3 +262,4 @@ ZMK_RPC_SUBSYSTEM_HANDLER(host_lighting, get_capabilities,
                           ZMK_STUDIO_RPC_HANDLER_UNSECURED);
 ZMK_RPC_SUBSYSTEM_HANDLER(host_lighting, set_pixels, ZMK_STUDIO_RPC_HANDLER_UNSECURED);
 ZMK_RPC_SUBSYSTEM_HANDLER(host_lighting, clear, ZMK_STUDIO_RPC_HANDLER_UNSECURED);
+ZMK_RPC_SUBSYSTEM_HANDLER(host_lighting, set_effects, ZMK_STUDIO_RPC_HANDLER_UNSECURED);

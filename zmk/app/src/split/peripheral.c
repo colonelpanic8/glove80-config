@@ -93,6 +93,49 @@ int zmk_split_transport_peripheral_command_handler(
         return -ENOTSUP;
 #endif
     }
+    case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_HOST_LIGHTING_EFFECTS: {
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+        const struct zmk_split_transport_host_lighting_effect_command *lighting =
+            &cmd.data.host_lighting_effects;
+        if (lighting->effect_count > ZMK_SPLIT_HOST_LIGHTING_MAX_EFFECTS) {
+            return -EINVAL;
+        }
+
+        int err = 0;
+        if (lighting->flags & ZMK_SPLIT_HOST_LIGHTING_FLAG_REPLACE) {
+            err = zmk_rgb_underglow_host_replace(lighting->timeout_ms);
+        }
+
+        struct zmk_rgb_underglow_host_effect effects[ZMK_SPLIT_HOST_LIGHTING_MAX_EFFECTS];
+        for (size_t i = 0; i < lighting->effect_count; i++) {
+            const struct zmk_split_transport_host_lighting_effect *effect =
+                &lighting->effects[i];
+            const uint8_t duty_steps =
+                effect->type_and_duty >> ZMK_SPLIT_HOST_LIGHTING_EFFECT_DUTY_SHIFT;
+            effects[i] = (struct zmk_rgb_underglow_host_effect){
+                .index = effect->index,
+                .r = effect->r,
+                .g = effect->g,
+                .b = effect->b,
+                .period_ms = effect->period_steps *
+                             CONFIG_ZMK_HOST_LIGHTING_EFFECT_TIME_QUANTUM_MS,
+                .phase_ms = effect->phase_steps *
+                            CONFIG_ZMK_HOST_LIGHTING_EFFECT_TIME_QUANTUM_MS,
+                .type = effect->type_and_duty & ZMK_SPLIT_HOST_LIGHTING_EFFECT_TYPE_MASK,
+                .duty_percent = duty_steps * 100U / 63U,
+            };
+        }
+
+        if (lighting->effect_count > 0 &&
+            zmk_rgb_underglow_host_update_effects(effects, lighting->effect_count,
+                                                  lighting->timeout_ms) < 0) {
+            err = -EIO;
+        }
+        return err;
+#else
+        return -ENOTSUP;
+#endif
+    }
     default:
         LOG_WRN("Unhandled command type %d", cmd.type);
         return -ENOTSUP;
