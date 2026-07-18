@@ -2,6 +2,10 @@
 
 The detailed architecture and phased implementation plan now lives in
 [`docs/runtime-configuration-plan.md`](./docs/runtime-configuration-plan.md).
+The firmware-independent requirements are captured in
+[`docs/desired-system.md`](./docs/desired-system.md), with a side-by-side RMK
+assessment and hardware spike plan in
+[`docs/rmk-evaluation.md`](./docs/rmk-evaluation.md).
 
 The keyboard must always remain a complete standalone keyboard. Host software
 may enhance lighting and configuration, but typing, the stock keymap, and saved
