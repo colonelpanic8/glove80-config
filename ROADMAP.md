@@ -1,5 +1,8 @@
 # Glove80 Host Integration Roadmap
 
+The detailed architecture and phased implementation plan now lives in
+[`docs/runtime-configuration-plan.md`](./docs/runtime-configuration-plan.md).
+
 The keyboard must always remain a complete standalone keyboard. Host software
 may enhance lighting and configuration, but typing, the stock keymap, and saved
 Studio configuration must never depend on a daemon being present.
@@ -9,8 +12,8 @@ Studio configuration must never depend on a daemon being present.
 - [x] Build against the maintained MoErgo Glove80 ZMK distribution.
 - [x] Support ZMK Studio over USB serial and Bluetooth GATT.
 - [x] Preserve the generated keymap as the recoverable stock configuration.
-- [x] Reserve extra layers for runtime editing.
-- [x] Require the physical Studio unlock binding before persistent changes.
+- [x] Replace user-visible reserved-layer semantics with one total runtime layer capacity.
+- [x] Disable Studio locking and remove the physical unlock binding.
 
 ## Next: host-controlled lighting
 
@@ -63,7 +66,19 @@ reasoning effort.
 Persistent or consequential actions should remain protected by explicit user
 intent; ordinary typing must never be interpreted as a Codex command.
 
-## Later: configuration tooling
+## Runtime configuration and composited lighting
+
+- [x] Define and validate the versioned symbolic runtime schema in Rust.
+- [ ] Represent factory keymap defaults as a versioned data snapshot.
+- [ ] Load factory and edited keymaps into one runtime layer representation.
+- [ ] Add transactional import, export, validation, and recovery.
+- [ ] Replace legacy underglow modes with one sparse lighting compositor.
+- [ ] Associate lighting with active keymap layers.
+- [ ] Add independently toggleable and stackable lighting layers.
+- [ ] Treat live host lighting as a sparse highest-priority overlay.
+- [ ] Extend the Rust CLI and Lightbench around one canonical schema.
+
+## Configuration tooling
 
 Use standard ZMK Studio RPC for supported keymap changes. Extend configuration
 only where Studio cannot express the desired behavior, and keep custom RPCs

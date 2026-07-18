@@ -15,15 +15,20 @@ does not depend on the JavaScript keymap generator.
 
 ## ZMK Studio
 
-- Hold the `Magic` key and press the far-left key in the bottom row to unlock
-  Studio configuration.
+- Studio configuration is intentionally unlocked whenever connected; no
+  physical unlock chord is required.
 - USB Studio communication uses the CDC/ACM serial transport on the left half.
 - Bluetooth Studio communication uses ZMK's GATT transport.
-- Four empty layers are reserved so Studio can add layers without reflashing.
+- The firmware has a configurable total capacity of eight runtime layers.
 
-Open [ZMK Studio](https://zmk.studio/) after connecting and unlocking the
-keyboard. If both USB and Bluetooth are connected, select the same keyboard
-output transport that Studio is using.
+Open [ZMK Studio](https://zmk.studio/) after connecting the keyboard. If both
+USB and Bluetooth are connected, select the same keyboard output transport that
+Studio is using.
+
+ZMK allocates its keymap as a fixed-size array at build time, so Studio cannot
+grow beyond the firmware-provided capacity. Occupied slots all use the same
+mutable runtime representation; empty capacity is not exposed as a separate
+kind of layer.
 
 Studio changes are stored on the keyboard. Later changes to the generated
 `glove80.keymap` become the new stock configuration, but do not replace saved
@@ -38,7 +43,7 @@ firmware lighting when the host clears the override or its timeout expires.
 
 See [`docs/host-lighting-protocol.md`](./docs/host-lighting-protocol.md) for the
 wire contract and current limitations. Static lighting has been exercised on
-both halves over USB; animated effects remain to be verified on hardware.
+both halves over USB, including simultaneous blink and breathe effects.
 
 ## Manual lighting editor
 
@@ -65,6 +70,7 @@ cargo run --quiet -- set 0=ff0000 1=00ff00 40=0000ff
 cargo run --quiet -- effect 0 blink ff0000 --period-ms 500
 cargo run --quiet -- effect 40 breathe 00aaff --period-ms 1500
 cargo run --quiet -- clear
+cargo run --quiet -- config validate path/to/config.json --layer-capacity 8
 ```
 
 Run `cargo install --path tools/glove80-control` if you prefer a normal

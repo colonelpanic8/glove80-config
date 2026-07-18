@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 
+mod config;
+
 const SOF: u8 = 0xab;
 const ESC: u8 = 0xac;
 const EOF: u8 = 0xad;
@@ -24,6 +26,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Manage canonical runtime configuration.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
     /// Show firmware lighting capabilities.
     Capabilities,
     /// Set every key to one color.
@@ -67,6 +74,17 @@ enum Command {
     Bootloader {
         #[arg(value_enum, default_value_t = Half::Left)]
         target: Half,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigCommand {
+    /// Parse and semantically validate a canonical configuration file.
+    Validate {
+        path: PathBuf,
+        /// Validate against a target firmware's total layer capacity.
+        #[arg(long, value_name = "COUNT")]
+        layer_capacity: Option<usize>,
     },
 }
 
@@ -759,6 +777,24 @@ fn print_capabilities(value: &Capabilities) {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    if let Command::Config {
+        command: ConfigCommand::Validate {
+            path,
+            layer_capacity,
+        },
+    } = &cli.command
+    {
+        let configuration = config::read_and_validate(path, *layer_capacity)?;
+        println!(
+            "Valid schema v{} configuration: {} layers, {} lighting layers, {} toggles",
+            configuration.schema_version,
+            configuration.layers.len(),
+            configuration.lighting_layers.len(),
+            configuration.toggles.len()
+        );
+        return Ok(());
+    }
+
     let mut client = SerialClient::open(&cli.device)?;
     if let Command::Bootloader { target } = cli.command {
         client.enter_bootloader(target)?;
@@ -866,6 +902,7 @@ fn run(cli: Cli) -> Result<()> {
             );
         }
         Command::Bootloader { .. } => unreachable!(),
+        Command::Config { .. } => unreachable!(),
     }
     Ok(())
 }

@@ -264,6 +264,19 @@ menu "Keymaps"
 config ZMK_KEYMAP_LAYER_REORDERING
     bool "Layer Reordering Support"
 
+config ZMK_KEYMAP_LAYER_CAPACITY
+    int "Maximum number of keymap layers"
+    depends on ZMK_KEYMAP_LAYER_REORDERING
+    range 0 32
+    default 0
+    help
+      Sets the total number of runtime layer slots when layer reordering is
+      enabled. Enabled layers in the devicetree provide the stock keymap, while
+      the remaining slots can be added and edited at runtime. This value must
+      be at least the number of stock layers. The default value of zero uses
+      exactly the number of stock layers, preserving the traditional memory
+      footprint.
+
 config ZMK_KEYMAP_SETTINGS_STORAGE
     bool "Settings Save/Load"
     depends on SETTINGS

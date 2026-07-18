@@ -34,6 +34,11 @@ static zmk_keymap_layer_id_t _zmk_keymap_layer_default = 0;
 
 #endif
 
+BUILD_ASSERT(ZMK_KEYMAP_LAYERS_LEN >= ZMK_KEYMAP_STOCK_LAYERS_LEN,
+             "CONFIG_ZMK_KEYMAP_LAYER_CAPACITY must be at least the number of stock layers");
+BUILD_ASSERT(ZMK_KEYMAP_LAYERS_LEN <= 32,
+             "Keymap layer capacity exceeds the 32-bit layer state mask");
+
 #define TRANSFORMED_LAYER(node)                                                                    \
     {COND_CODE_1(DT_NODE_HAS_PROP(node, bindings),                                                 \
                  (LISTIFY(DT_PROP_LEN(node, bindings), ZMK_KEYMAP_EXTRACT_BINDING, (, ), node)),   \
@@ -74,12 +79,8 @@ static uint8_t keymap_layer_orders[ZMK_KEYMAP_LAYERS_LEN];
 
 #define KEYMAP_VAR(_name, _opts, no_init)                                                          \
     static _opts struct zmk_behavior_binding _name[ZMK_KEYMAP_LAYERS_LEN][ZMK_KEYMAP_LEN] = {      \
-        COND_CODE_0(                                                                               \
-            no_init,                                                                               \
-            (COND_CODE_1(IS_ENABLED(CONFIG_ZMK_STUDIO),                                            \
-                         (DT_INST_FOREACH_CHILD_SEP(0, TRANSFORMED_LAYER, (, ))),                  \
-                         (DT_INST_FOREACH_CHILD_STATUS_OKAY_SEP(0, TRANSFORMED_LAYER, (, ))))),    \
-            (0))};
+        COND_CODE_0(no_init, (DT_INST_FOREACH_CHILD_STATUS_OKAY_SEP(0, TRANSFORMED_LAYER, (, ))),  \
+                    (0))};
 
 KEYMAP_VAR(zmk_keymap, COND_CODE_1(IS_ENABLED(CONFIG_ZMK_KEYMAP_SETTINGS_STORAGE), (), (const)),
            IS_ENABLED(CONFIG_ZMK_STUDIO))
@@ -89,14 +90,14 @@ KEYMAP_VAR(zmk_keymap, COND_CODE_1(IS_ENABLED(CONFIG_ZMK_KEYMAP_SETTINGS_STORAGE
 KEYMAP_VAR(zmk_stock_keymap, const, 0)
 
 static char zmk_keymap_layer_names[ZMK_KEYMAP_LAYERS_LEN][CONFIG_ZMK_KEYMAP_LAYER_NAME_MAX_LEN] = {
-    DT_INST_FOREACH_CHILD_SEP(0, LAYER_NAME, (, ))};
+    DT_INST_FOREACH_CHILD_STATUS_OKAY_SEP(0, LAYER_NAME, (, ))};
 
 static uint32_t changed_layer_names = 0;
 
 #else
 
 static const char *zmk_keymap_layer_names[ZMK_KEYMAP_LAYERS_LEN] = {
-    DT_INST_FOREACH_CHILD_SEP(0, LAYER_NAME, (, ))};
+    DT_INST_FOREACH_CHILD_STATUS_OKAY_SEP(0, LAYER_NAME, (, ))};
 
 #endif
 
@@ -104,7 +105,7 @@ static const char *zmk_keymap_layer_names[ZMK_KEYMAP_LAYERS_LEN] = {
 
 static struct zmk_behavior_binding
     zmk_sensor_keymap[ZMK_KEYMAP_LAYERS_LEN][ZMK_KEYMAP_SENSORS_LEN] = {
-        DT_INST_FOREACH_CHILD_SEP(0, SENSOR_LAYER, (, ))};
+        DT_INST_FOREACH_CHILD_STATUS_OKAY_SEP(0, SENSOR_LAYER, (, ))};
 
 #endif /* ZMK_KEYMAP_HAS_SENSORS */
 
@@ -319,6 +320,29 @@ int zmk_keymap_set_layer_binding_at_idx(zmk_keymap_layer_id_t layer_id, uint8_t 
 #if IS_ENABLED(CONFIG_ZMK_KEYMAP_SETTINGS_STORAGE)
 
 static uint8_t settings_layer_orders[ZMK_KEYMAP_LAYERS_LEN];
+
+static void sanitize_loaded_layer_ordering(void) {
+    uint32_t seen_layer_ids = 0;
+    zmk_keymap_layer_index_t write_index = 0;
+
+    for (zmk_keymap_layer_index_t read_index = 0; read_index < ZMK_KEYMAP_LAYERS_LEN;
+         read_index++) {
+        zmk_keymap_layer_id_t id = keymap_layer_orders[read_index];
+
+        if (id >= ZMK_KEYMAP_LAYERS_LEN || (seen_layer_ids & BIT(id))) {
+            continue;
+        }
+
+        keymap_layer_orders[write_index++] = id;
+        WRITE_BIT(seen_layer_ids, id, 1);
+    }
+
+    while (write_index < ZMK_KEYMAP_LAYERS_LEN) {
+        keymap_layer_orders[write_index++] = ZMK_KEYMAP_LAYER_ID_INVAL;
+    }
+
+    memcpy(settings_layer_orders, keymap_layer_orders, ARRAY_SIZE(settings_layer_orders));
+}
 
 #endif
 
@@ -584,6 +608,7 @@ static void load_stock_keymap_layer_ordering() {
     DT_INST_FOREACH_CHILD_STATUS_OKAY(0, KEYMAP_LAYER_ORDER_INIT)
     while (i < ZMK_KEYMAP_LAYERS_LEN) {
         keymap_layer_orders[i] = ZMK_KEYMAP_LAYER_ID_INVAL;
+        settings_layer_orders[i] = ZMK_KEYMAP_LAYER_ID_INVAL;
         i++;
     }
 }
@@ -633,6 +658,11 @@ static int keymap_track_changed_bindings(const char *key, size_t len, settings_r
             return -EINVAL;
         }
 
+        if (layer >= ZMK_KEYMAP_LAYERS_LEN || key_position >= ZMK_KEYMAP_LEN) {
+            LOG_WRN("Ignoring binding change outside the configured keymap capacity");
+            return 0;
+        }
+
         WRITE_BIT((*state)[layer][key_position / 8], key_position % 8, 1);
     }
     return 0;
@@ -641,7 +671,7 @@ static int keymap_track_changed_bindings(const char *key, size_t len, settings_r
 int zmk_keymap_reset_settings(void) {
     settings_delete(LAYER_ORDER_SETTINGS_KEY);
 
-    uint8_t zmk_keymap_layer_changes[ZMK_KEYMAP_LAYERS_LEN][PENDING_ARRAY_SIZE];
+    uint8_t zmk_keymap_layer_changes[ZMK_KEYMAP_LAYERS_LEN][PENDING_ARRAY_SIZE] = {0};
 
     settings_load_subtree_direct("keymap", keymap_track_changed_bindings,
                                  &zmk_keymap_layer_changes);
@@ -843,6 +873,7 @@ static int keymap_handle_set(const char *name, size_t len, settings_read_cb read
 
         if (layer >= ZMK_KEYMAP_LAYERS_LEN) {
             LOG_WRN("Found layer name for invalid layer ID %d", layer);
+            return 0;
         }
 
         int ret = read_cb(cb_arg, zmk_keymap_layer_names[layer],
@@ -876,12 +907,12 @@ static int keymap_handle_set(const char *name, size_t len, settings_read_cb read
 
         if (layer >= ZMK_KEYMAP_LAYERS_LEN) {
             LOG_WRN("Layer %d is larger than max of %d", layer, ZMK_KEYMAP_LAYERS_LEN);
-            return -EINVAL;
+            return 0;
         }
 
         if (key_position >= ZMK_KEYMAP_LEN) {
             LOG_WRN("Key position %d is larger than max of %d", key_position, ZMK_KEYMAP_LEN);
-            return -EINVAL;
+            return 0;
         }
 
         struct zmk_behavior_binding_setting binding_setting = {0};
@@ -922,6 +953,7 @@ static int keymap_handle_set(const char *name, size_t len, settings_read_cb read
 
         memcpy(keymap_layer_orders, settings_layer_orders,
                MIN(len, ARRAY_SIZE(settings_layer_orders)));
+        sanitize_loaded_layer_ordering();
     }
 #endif // IS_ENABLED(CONFIG_ZMK_KEYMAP_LAYER_REORDERING)
 

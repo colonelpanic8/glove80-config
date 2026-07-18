@@ -9,9 +9,6 @@ const outputPath = path.join(repoRoot, "config", "glove80.keymap");
 
 const layout = JSON.parse(fs.readFileSync(layoutPath, "utf8"));
 const rowLengths = [10, 12, 12, 12, 18, 16];
-const studioUnlockLayer = "Magic";
-const studioUnlockPosition = 64;
-const reservedStudioLayerCount = 4;
 
 const layerNames = layout.layer_names.map(sanitizeLayerName);
 const syntheticLayers = [
@@ -65,11 +62,7 @@ function formatRows(items, indent = "                ") {
 }
 
 function layerBlock(name, index, bindings) {
-  const generatedBindings = bindings.map((binding, position) =>
-    name === studioUnlockLayer && position === studioUnlockPosition
-      ? "&studio_unlock"
-      : formatBinding(binding),
-  );
+  const generatedBindings = bindings.map(formatBinding);
   return `        layer_${name} {
             display-name = "${name.replaceAll("_", " ")}";
             bindings = <
@@ -89,15 +82,7 @@ function generatedKeymapLayers() {
   const generatedSyntheticLayers = syntheticLayers
     .map((layer, index) => layerBlock(layer.name, layerNames.length + index, layer.bindings))
     .join("\n\n");
-  const reservedStudioLayers = Array.from(
-    { length: reservedStudioLayerCount },
-    (_, index) => `        studio_reserved_${index + 1} {
-            status = "reserved";
-        };`,
-  ).join("\n\n");
-  return [sourceLayers, generatedSyntheticLayers, reservedStudioLayers]
-    .filter(Boolean)
-    .join("\n\n");
+  return [sourceLayers, generatedSyntheticLayers].filter(Boolean).join("\n\n");
 }
 
 function generatedConditionalLayers() {
