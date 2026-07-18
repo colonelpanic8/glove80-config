@@ -7,6 +7,10 @@ The firmware-independent requirements are captured in
 assessment and hardware spike plan in
 [`docs/rmk-evaluation.md`](./docs/rmk-evaluation.md).
 
+An RMK replacement firmware is being evaluated through the staged spike in
+[`rmk/glove80/`](./rmk/glove80/README.md); Stage 1 (compile-only board
+skeleton with verified UF2 address ranges) is complete.
+
 The keyboard must always remain a complete standalone keyboard. Host software
 may enhance lighting and configuration, but typing, the stock keymap, and saved
 Studio configuration must never depend on a daemon being present.
