@@ -3,6 +3,19 @@ export type PixelUpdate = {
   rgb: number;
 };
 
+export enum EffectType {
+  Static = 0,
+  Blink = 1,
+  Breathe = 2,
+}
+
+export type EffectUpdate = PixelUpdate & {
+  type: EffectType;
+  periodMs: number;
+  phaseMs: number;
+  dutyPercent: number;
+};
+
 export type LightingCapabilities = {
   protocolVersion: number;
   pixelCount: number;
@@ -14,6 +27,10 @@ export type LightingCapabilities = {
   maxChannelValue: number;
   supportsReplace: boolean;
   supportsSplit: boolean;
+  supportsEffects: boolean;
+  minEffectPeriodMs: number;
+  maxEffectPeriodMs: number;
+  effectTimeQuantumMs: number;
 };
 
 export enum ApplyResult {
@@ -22,11 +39,12 @@ export enum ApplyResult {
   Partial = 2,
   PeripheralUnavailable = 3,
   InternalError = 4,
+  InvalidEffect = 5,
 }
 
 export type LightingResponse =
   | { requestId: number; kind: "capabilities"; capabilities: LightingCapabilities }
-  | { requestId: number; kind: "setPixels" | "clear"; result: ApplyResult }
+  | { requestId: number; kind: "setPixels" | "setEffects" | "clear"; result: ApplyResult }
   | { requestId: number; kind: "notification" }
   | { requestId: number; kind: "unknown" };
 
@@ -170,6 +188,30 @@ export function encodeClear(requestId: number): Uint8Array {
   return encodeEnvelope(requestId, (host) => host.bool(3, true));
 }
 
+export function encodeSetEffects(
+  requestId: number,
+  effects: EffectUpdate[],
+  replace: boolean,
+  timeoutMs: number,
+): Uint8Array {
+  return encodeEnvelope(requestId, (host) => {
+    host.message(4, (request) => {
+      for (const effect of effects) {
+        request.message(1, (item) => {
+          item.fieldUint32(1, effect.index);
+          item.fieldUint32(2, effect.rgb);
+          if (effect.type !== EffectType.Static) item.fieldUint32(3, effect.type);
+          if (effect.periodMs > 0) item.fieldUint32(4, effect.periodMs);
+          if (effect.phaseMs > 0) item.fieldUint32(5, effect.phaseMs);
+          if (effect.dutyPercent > 0) item.fieldUint32(6, effect.dutyPercent);
+        });
+      }
+      if (replace) request.bool(2, true);
+      if (timeoutMs > 0) request.fieldUint32(3, timeoutMs);
+    });
+  });
+}
+
 function decodeCapabilities(bytes: Uint8Array): LightingCapabilities {
   const values = new Map<number, number>();
   readFields(bytes, (field, wireType, reader) => {
@@ -187,6 +229,10 @@ function decodeCapabilities(bytes: Uint8Array): LightingCapabilities {
     maxChannelValue: values.get(8) ?? 0,
     supportsReplace: values.get(9) === 1,
     supportsSplit: values.get(10) === 1,
+    supportsEffects: values.get(11) === 1,
+    minEffectPeriodMs: values.get(12) ?? 0,
+    maxEffectPeriodMs: values.get(13) ?? 0,
+    effectTimeQuantumMs: values.get(14) ?? 0,
   };
 }
 
@@ -199,10 +245,10 @@ function decodeHostResponse(requestId: number, bytes: Uint8Array): LightingRespo
         kind: "capabilities",
         capabilities: decodeCapabilities(reader.bytes()),
       };
-    } else if ((field === 2 || field === 3) && wireType === 0) {
+    } else if ((field === 2 || field === 3 || field === 4) && wireType === 0) {
       response = {
         requestId,
-        kind: field === 2 ? "setPixels" : "clear",
+        kind: field === 2 ? "setPixels" : field === 3 ? "clear" : "setEffects",
         result: reader.uint32() as ApplyResult,
       };
     } else {

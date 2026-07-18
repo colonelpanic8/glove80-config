@@ -29,6 +29,8 @@ Firmware requirements:
 - [x] Propagate four-pixel batches through a dedicated BLE/wired split command.
 - [x] Add a daemon-independent manual editor with USB and BLE transports.
 - [x] Map all logical keys to their hardware LED-chain indices.
+- [x] Render per-key static, blink, and breathe effects locally in firmware.
+- [x] Add effect controls and previews to the daemon-independent editor.
 - [ ] Coalesce incoming frames and enforce the update-rate limit in firmware.
 - [ ] Verify USB, Bluetooth, timeout, split, and low-battery behavior on hardware.
 - [ ] Add a native/background transport service for shared device ownership.

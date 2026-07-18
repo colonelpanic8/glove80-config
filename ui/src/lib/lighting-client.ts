@@ -7,6 +7,9 @@ import {
   encodeClear,
   encodeGetCapabilities,
   encodeSetPixels,
+  encodeSetEffects,
+  EffectType,
+  type EffectUpdate,
   type LightingCapabilities,
   type LightingResponse,
   type PixelUpdate,
@@ -16,6 +19,7 @@ export interface LightingClient {
   readonly label: string;
   readonly capabilities: LightingCapabilities;
   setPixels(pixels: PixelUpdate[], replace?: boolean, timeoutMs?: number): Promise<void>;
+  setEffects(effects: EffectUpdate[], replace?: boolean, timeoutMs?: number): Promise<void>;
   applyFrame(colorsByPixel: readonly number[], timeoutMs?: number): Promise<void>;
   clear(): Promise<void>;
   close(): Promise<void>;
@@ -75,13 +79,17 @@ export class ZmkLightingClient implements LightingClient {
       maxChannelValue: 0,
       supportsReplace: false,
       supportsSplit: false,
+      supportsEffects: false,
+      minEffectPeriodMs: 0,
+      maxEffectPeriodMs: 0,
+      effectTimeQuantumMs: 0,
     });
     const response = await provisional.call(encodeGetCapabilities(provisional.nextRequestId()));
     if (response.kind !== "capabilities") {
       await provisional.close();
       throw new Error("The selected device does not expose the host-lighting protocol");
     }
-    if (response.capabilities.protocolVersion !== 1) {
+    if (![1, 2].includes(response.capabilities.protocolVersion)) {
       await provisional.close();
       throw new Error(
         `Unsupported host-lighting protocol version ${response.capabilities.protocolVersion}`,
@@ -148,6 +156,49 @@ export class ZmkLightingClient implements LightingClient {
         encodeSetPixels(this.nextRequestId(), safePixels, replace, timeoutMs),
       );
       if (response.kind !== "setPixels") throw new Error("Unexpected lighting response");
+      if (response.result !== ApplyResult.Ok) throw new LightingApplyError(response.result);
+    });
+  }
+
+  async setEffects(
+    effects: EffectUpdate[],
+    replace = false,
+    timeoutMs = this.capabilities.defaultTimeoutMs,
+  ): Promise<void> {
+    return this.enqueue(async () => {
+      if (!this.capabilities.supportsEffects) {
+        throw new Error("This firmware does not support per-key effects");
+      }
+      const limit = this.capabilities.maxUpdatesPerRequest;
+      if (effects.length > limit) throw new Error(`At most ${limit} effects may be sent at once`);
+      const quantum = this.capabilities.effectTimeQuantumMs;
+      for (const effect of effects) {
+        if (effect.index < 0 || effect.index >= this.capabilities.pixelCount) {
+          throw new Error(`This firmware exposes pixels 0–${this.capabilities.pixelCount - 1}`);
+        }
+        if (
+          effect.type !== EffectType.Static &&
+          (effect.periodMs < this.capabilities.minEffectPeriodMs ||
+            effect.periodMs > this.capabilities.maxEffectPeriodMs ||
+            effect.periodMs % quantum !== 0 ||
+            effect.phaseMs < 0 ||
+            effect.phaseMs >= effect.periodMs ||
+            effect.phaseMs % quantum !== 0)
+        ) {
+          throw new Error("Effect period and phase are outside the firmware timing limits");
+        }
+        if (effect.type === EffectType.Blink && (effect.dutyPercent <= 0 || effect.dutyPercent >= 100)) {
+          throw new Error("Blink duty cycle must be between 1% and 99%");
+        }
+      }
+      const safeEffects = effects.map((effect) => ({
+        ...effect,
+        rgb: scaleToChannelLimit(effect.rgb, this.capabilities.maxChannelValue),
+      }));
+      const response = await this.call(
+        encodeSetEffects(this.nextRequestId(), safeEffects, replace, timeoutMs),
+      );
+      if (response.kind !== "setEffects") throw new Error("Unexpected lighting response");
       if (response.result !== ApplyResult.Ok) throw new LightingApplyError(response.result);
     });
   }

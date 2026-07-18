@@ -116,6 +116,12 @@ button { color: inherit; }
 .range-control strong { color: #dfe5df; font: 500 11px/1 ui-monospace, "SFMono-Regular", Consolas, monospace; }
 .range-control input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
 
+.mode-selector { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: #111411; }
+.mode-selector button { min-height: 32px; padding: 0 6px; color: var(--muted); border: 0; border-radius: 6px; background: transparent; cursor: pointer; font-size: 10px; font-weight: 650; }
+.mode-selector button:hover { color: #dfe5df; }
+.mode-selector button.selected { color: var(--accent-ink); background: var(--accent); }
+.motion-ranges { margin-top: 14px; display: grid; gap: 14px; }
+
 .scene-tools { margin-top: auto; }
 .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .button.tool { padding: 0 8px; font-size: 11px; }
@@ -166,18 +172,22 @@ button { color: inherit; }
 .keycap.thumb:hover { transform: translateY(-2px) rotate(calc((var(--key-x) - 7) * 1.3deg)); }
 
 .key-light { position: absolute; inset: 5px; border-radius: 6px 6px 8px 8px; background: var(--key-color); opacity: .9; box-shadow: 0 0 15px color-mix(in srgb, var(--key-color) 65%, transparent), inset 0 0 0 1px rgba(255,255,255,.13); }
+.effect-blink .key-light { animation: key-blink var(--effect-period) steps(1, end) var(--effect-delay) infinite; }
+.effect-breathe .key-light { animation: key-breathe var(--effect-period) ease-in-out var(--effect-delay) infinite; }
 .key-label { position: absolute; left: 8px; top: 7px; max-width: calc(100% - 13px); overflow: hidden; color: color-mix(in srgb, var(--key-color) 12%, white); font-size: clamp(8px, .72vw, 11px); font-weight: 700; text-shadow: 0 1px 2px #000, 0 0 4px #000; white-space: nowrap; }
 .keycap small { position: absolute; right: 6px; bottom: 5px; color: rgba(255,255,255,.57); font: 500 clamp(6px, .52vw, 8px)/1 ui-monospace, "SFMono-Regular", Consolas, monospace; text-shadow: 0 1px 2px #000; }
 
 .stage-footer { padding-top: 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 24px; color: #687169; font-size: 10px; }
 
 @keyframes pulse { from { opacity: .55; } to { opacity: 1; } }
+@keyframes key-blink { 0%, 49.999% { opacity: .9; } 50%, 100% { opacity: 0; } }
+@keyframes key-breathe { 0%, 100% { opacity: .08; } 50% { opacity: .9; } }
 
 @media (max-width: 900px) {
   .topbar { align-items: flex-start; }
   .connection-cluster { align-items: flex-end; flex-direction: column; }
   .workspace { grid-template-columns: 1fr; }
-  .tool-panel { border-right: 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr 1fr; }
+  .tool-panel { border-right: 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: repeat(2, 1fr); }
   .scene-tools { margin-top: 0; }
 }
 

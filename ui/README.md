@@ -45,8 +45,11 @@ manual editor nor the firmware protocol contains Codex-specific state.
 ## Behavior
 
 - Clicking or dragging paints individual keys.
+- Static, blink, and breathe modes can be painted independently per key; period
+  and blink duty cycle are configurable, and motion is previewed on the canvas.
 - Complete scenes, fill, blackout, and left-to-right mirroring are supported.
-- The current canvas is stored only in browser local storage.
+- The current colors and per-key effects are stored only in browser local
+  storage.
 - Live frames are kept in keyboard RAM and refreshed while connected.
 - **Release** clears the host override without erasing the local canvas.
 - Disconnecting clears the override; an unexpected disconnect falls back when

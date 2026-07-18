@@ -7,9 +7,11 @@ import {
   type KeySpec,
 } from "./lib/glove80-layout";
 import type { LightingClient } from "./lib/lighting-client";
+import { EffectType, type EffectUpdate } from "./lib/protobuf";
 import { connectLighting, transportSupported, type TransportKind } from "./lib/transports";
 
 const STORAGE_KEY = "glove80-lightbench-scene-v1";
+const EFFECT_STORAGE_KEY = "glove80-lightbench-effects-v1";
 const FRAME_TIMEOUT_MS = 10_000;
 const KEEPALIVE_MS = 5_000;
 const EMPTY_SCENE = Array<number>(80).fill(0);
@@ -17,6 +19,20 @@ const PALETTE = [
   0xf05d3e, 0xf5a524, 0xf4d35e, 0x6ecb63, 0x48cae4, 0x4d7cff, 0x9b6cff, 0xe56bdb,
   0xffffff, 0x5d6460, 0x151716, 0x000000,
 ];
+
+type KeyEffect = {
+  type: EffectType;
+  periodMs: number;
+  phaseMs: number;
+  dutyPercent: number;
+};
+
+const DEFAULT_EFFECT: KeyEffect = {
+  type: EffectType.Static,
+  periodMs: 1500,
+  phaseMs: 0,
+  dutyPercent: 50,
+};
 
 type Status = {
   tone: "idle" | "busy" | "ok" | "error";
@@ -57,6 +73,35 @@ function loadScene(): number[] {
   return [...EMPTY_SCENE];
 }
 
+function loadEffects(): KeyEffect[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(EFFECT_STORAGE_KEY) ?? "null");
+    if (
+      Array.isArray(stored) &&
+      stored.length === 80 &&
+      stored.every(
+        (effect) =>
+          effect &&
+          Number.isInteger(effect.type) &&
+          effect.type >= EffectType.Static &&
+          effect.type <= EffectType.Breathe &&
+          Number.isInteger(effect.periodMs) &&
+          Number.isInteger(effect.phaseMs) &&
+          Number.isInteger(effect.dutyPercent),
+      )
+    ) {
+      return stored;
+    }
+  } catch {
+    // Fall back to a static scene if saved effect data is malformed.
+  }
+  return Array.from({ length: 80 }, () => ({ ...DEFAULT_EFFECT }));
+}
+
+function effectLabel(type: EffectType): string {
+  return type === EffectType.Blink ? "Blink" : type === EffectType.Breathe ? "Breathe" : "Static";
+}
+
 function connectionError(error: unknown): string {
   if (error instanceof DOMException && error.name === "NotFoundError") {
     return "Connection cancelled";
@@ -69,6 +114,10 @@ export function App() {
   const [paintColor, setPaintColor] = useState(0x48cae4);
   const [hexDraft, setHexDraft] = useState(rgbToHex(paintColor));
   const [brightness, setBrightness] = useState(100);
+  const [keyEffects, setKeyEffects] = useState(loadEffects);
+  const [paintEffect, setPaintEffect] = useState(EffectType.Static);
+  const [effectPeriodMs, setEffectPeriodMs] = useState(1500);
+  const [blinkDutyPercent, setBlinkDutyPercent] = useState(50);
   const [client, setClient] = useState<LightingClient | null>(null);
   const [connecting, setConnecting] = useState<TransportKind | null>(null);
   const [status, setStatus] = useState<Status>({
@@ -76,8 +125,9 @@ export function App() {
     message: "Design offline, then connect when you are ready",
   });
   const colorsRef = useRef(colors);
+  const effectsRef = useRef(keyEffects);
   const brightnessRef = useRef(brightness);
-  const pendingPixels = useRef(new Map<number, number>());
+  const pendingPixels = useRef(new Map<number, { rgb: number; effect: KeyEffect }>());
   const pendingTimer = useRef<number | undefined>(undefined);
   const painting = useRef(false);
 
@@ -85,6 +135,11 @@ export function App() {
     colorsRef.current = colors;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(colors));
   }, [colors]);
+
+  useEffect(() => {
+    effectsRef.current = keyEffects;
+    localStorage.setItem(EFFECT_STORAGE_KEY, JSON.stringify(keyEffects));
+  }, [keyEffects]);
 
   useEffect(() => {
     brightnessRef.current = brightness;
@@ -97,18 +152,34 @@ export function App() {
     );
   }, []);
 
+  const effectsByLed = useCallback((source: readonly KeyEffect[] = effectsRef.current) => {
+    const result = Array.from({ length: 80 }, () => ({ ...DEFAULT_EFFECT }));
+    for (const keySpec of GLOVE80_KEYS) result[keySpec.ledIndex] = source[keySpec.logicalIndex];
+    return result;
+  }, []);
+
   const flushPending = useCallback(async () => {
     pendingTimer.current = undefined;
     if (!client || pendingPixels.current.size === 0) return;
-    const updates = [...pendingPixels.current].map(([index, rgb]) => ({
+    const updates = [...pendingPixels.current].map(([index, update]) => ({
       index,
-      rgb: withBrightness(rgb, brightnessRef.current),
+      rgb: withBrightness(update.rgb, brightnessRef.current),
+      effect: update.effect,
     })).filter(({ index }) => index < client.capabilities.pixelCount);
     pendingPixels.current.clear();
     const chunkSize = client.capabilities.maxUpdatesPerRequest;
     try {
-      for (let offset = 0; offset < updates.length; offset += chunkSize) {
-        await client.setPixels(updates.slice(offset, offset + chunkSize), false, FRAME_TIMEOUT_MS);
+      const staticUpdates = updates
+        .filter(({ effect }) => effect.type === EffectType.Static)
+        .map(({ index, rgb }) => ({ index, rgb }));
+      const animatedUpdates: EffectUpdate[] = updates
+        .filter(({ effect }) => effect.type !== EffectType.Static)
+        .map(({ index, rgb, effect }) => ({ index, rgb, ...effect }));
+      for (let offset = 0; offset < staticUpdates.length; offset += chunkSize) {
+        await client.setPixels(staticUpdates.slice(offset, offset + chunkSize), false, FRAME_TIMEOUT_MS);
+      }
+      for (let offset = 0; offset < animatedUpdates.length; offset += chunkSize) {
+        await client.setEffects(animatedUpdates.slice(offset, offset + chunkSize), false, FRAME_TIMEOUT_MS);
       }
       setStatus({ tone: "ok", message: "Keyboard updated" });
     } catch (error) {
@@ -117,9 +188,9 @@ export function App() {
   }, [client]);
 
   const queuePixel = useCallback(
-    (keySpec: KeySpec, rgb: number) => {
+    (keySpec: KeySpec, rgb: number, effect: KeyEffect) => {
       if (!client) return;
-      pendingPixels.current.set(keySpec.ledIndex, rgb);
+      pendingPixels.current.set(keySpec.ledIndex, { rgb, effect });
       if (pendingTimer.current === undefined) {
         pendingTimer.current = window.setTimeout(flushPending, 50);
       }
@@ -129,15 +200,26 @@ export function App() {
 
   const paintKey = useCallback(
     (keySpec: KeySpec) => {
+      const effect = {
+        type: paintEffect,
+        periodMs: effectPeriodMs,
+        phaseMs: 0,
+        dutyPercent: blinkDutyPercent,
+      };
       setColors((current) => {
         if (current[keySpec.logicalIndex] === paintColor) return current;
         const next = [...current];
         next[keySpec.logicalIndex] = paintColor;
         return next;
       });
-      queuePixel(keySpec, paintColor);
+      setKeyEffects((current) => {
+        const next = [...current];
+        next[keySpec.logicalIndex] = effect;
+        return next;
+      });
+      queuePixel(keySpec, paintColor, effect);
     },
-    [paintColor, queuePixel],
+    [blinkDutyPercent, effectPeriodMs, paintColor, paintEffect, queuePixel],
   );
 
   useEffect(() => {
@@ -156,16 +238,27 @@ export function App() {
     if (!client) return;
     const interval = window.setInterval(() => {
       const frame = deviceColors();
-      const keepalive = [{ index: 0, rgb: frame[0] }];
+      const effectFrame = effectsByLed();
+      const indices = [0];
       if (client.capabilities.supportsSplit && client.capabilities.pixelCount > 40) {
-        keepalive.push({ index: 40, rgb: frame[40] });
+        indices.push(40);
       }
-      client
-        .setPixels(keepalive, false, FRAME_TIMEOUT_MS)
+      const keepalive = client.capabilities.supportsEffects
+        ? client.setEffects(
+            indices.map((index) => ({ index, rgb: frame[index], ...effectFrame[index] })),
+            false,
+            FRAME_TIMEOUT_MS,
+          )
+        : client.setPixels(
+            indices.map((index) => ({ index, rgb: frame[index] })),
+            false,
+            FRAME_TIMEOUT_MS,
+          );
+      keepalive
         .catch((error) => setStatus({ tone: "error", message: connectionError(error) }));
     }, KEEPALIVE_MS);
     return () => window.clearInterval(interval);
-  }, [client, deviceColors]);
+  }, [client, deviceColors, effectsByLed]);
 
   useEffect(() => {
     return () => {
@@ -202,30 +295,60 @@ export function App() {
     }
   };
 
-  const applyScene = async (nextColors: readonly number[] = colors) => {
+  const applyScene = async (
+    nextColors: readonly number[] = colors,
+    nextEffects: readonly KeyEffect[] = keyEffects,
+  ) => {
     if (!client) {
       setStatus({ tone: "idle", message: "Scene saved locally · connect to apply it" });
       return;
     }
     setStatus({ tone: "busy", message: "Sending complete scene…" });
     try {
-      await client.applyFrame(deviceColors(nextColors), FRAME_TIMEOUT_MS);
+      const frame = deviceColors(nextColors);
+      await client.applyFrame(frame, FRAME_TIMEOUT_MS);
+      if (client.capabilities.supportsEffects) {
+        const effectFrame = effectsByLed(nextEffects);
+        const animated: EffectUpdate[] = effectFrame
+          .map((effect, index) => ({ index, rgb: frame[index], ...effect }))
+          .filter((effect) => effect.type !== EffectType.Static)
+          .slice(0, client.capabilities.pixelCount);
+        const chunkSize = client.capabilities.maxUpdatesPerRequest;
+        for (let offset = 0; offset < animated.length; offset += chunkSize) {
+          await client.setEffects(
+            animated.slice(offset, offset + chunkSize),
+            false,
+            FRAME_TIMEOUT_MS,
+          );
+        }
+      }
       setStatus({ tone: "ok", message: "Complete scene applied" });
     } catch (error) {
       setStatus({ tone: "error", message: connectionError(error) });
     }
   };
 
-  const updateAll = (rgb: number) => {
-    const next = Array<number>(80).fill(rgb);
-    setColors(next);
-    void applyScene(next);
+  const updateAll = (rgb: number, effect: KeyEffect) => {
+    const nextColors = Array<number>(80).fill(rgb);
+    const nextEffects = Array.from({ length: 80 }, () => ({ ...effect }));
+    setColors(nextColors);
+    setKeyEffects(nextEffects);
+    void applyScene(nextColors, nextEffects);
   };
 
   const mirror = () => {
-    const next = mirrorLeftToRight(colors);
-    setColors(next);
-    void applyScene(next);
+    const nextColors = mirrorLeftToRight(colors);
+    const nextEffects = mirrorLeftToRight(keyEffects);
+    setColors(nextColors);
+    setKeyEffects(nextEffects);
+    void applyScene(nextColors, nextEffects);
+  };
+
+  const brushEffect: KeyEffect = {
+    type: paintEffect,
+    periodMs: effectPeriodMs,
+    phaseMs: 0,
+    dutyPercent: blinkDutyPercent,
   };
 
   const releaseLighting = async () => {
@@ -342,6 +465,57 @@ export function App() {
             <div className="section-heading compact">
               <span className="step-number">02</span>
               <div>
+                <h2>Motion</h2>
+                <p>Stored per key with the scene</p>
+              </div>
+            </div>
+            <div className="mode-selector" role="group" aria-label="Paint effect">
+              {([EffectType.Static, EffectType.Blink, EffectType.Breathe] as const).map((type) => (
+                <button
+                  key={type}
+                  className={paintEffect === type ? "selected" : ""}
+                  onClick={() => setPaintEffect(type)}
+                  aria-pressed={paintEffect === type}
+                >
+                  {effectLabel(type)}
+                </button>
+              ))}
+            </div>
+            {paintEffect !== EffectType.Static && (
+              <div className="motion-ranges">
+                <label className="range-control">
+                  <span>Period</span>
+                  <strong>{(effectPeriodMs / 1000).toFixed(2)}s</strong>
+                  <input
+                    type="range"
+                    min="200"
+                    max="10000"
+                    step="50"
+                    value={effectPeriodMs}
+                    onChange={(event) => setEffectPeriodMs(Number(event.target.value))}
+                  />
+                </label>
+                {paintEffect === EffectType.Blink && (
+                  <label className="range-control">
+                    <span>On time</span>
+                    <strong>{blinkDutyPercent}%</strong>
+                    <input
+                      type="range"
+                      min="1"
+                      max="99"
+                      value={blinkDutyPercent}
+                      onChange={(event) => setBlinkDutyPercent(Number(event.target.value))}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <div className="section-heading compact">
+              <span className="step-number">03</span>
+              <div>
                 <h2>Output</h2>
                 <p>Within the firmware safety cap</p>
               </div>
@@ -362,16 +536,16 @@ export function App() {
 
           <section className="scene-tools">
             <div className="section-heading compact">
-              <span className="step-number">03</span>
+              <span className="step-number">04</span>
               <div>
                 <h2>Scene tools</h2>
                 <p>Canvas is saved in this browser</p>
               </div>
             </div>
             <div className="tool-grid">
-              <button className="button tool" onClick={() => updateAll(paintColor)}>Fill all</button>
+              <button className="button tool" onClick={() => updateAll(paintColor, brushEffect)}>Fill all</button>
               <button className="button tool" onClick={mirror}>Mirror L → R</button>
-              <button className="button tool" onClick={() => updateAll(0)}>Black out</button>
+              <button className="button tool" onClick={() => updateAll(0, DEFAULT_EFFECT)}>Black out</button>
               <button className="button tool" disabled={!client} onClick={() => void releaseLighting()}>Release</button>
             </div>
             <button className="button apply" disabled={!client} onClick={() => void applyScene()}>
@@ -399,15 +573,18 @@ export function App() {
               <div className="center-mark" aria-hidden="true"><span /></div>
               {GLOVE80_KEYS.map((keySpec) => {
                 const rgb = colors[keySpec.logicalIndex];
+                const effect = keyEffects[keySpec.logicalIndex];
                 const color = rgbToHex(rgb);
                 return (
                   <button
                     key={keySpec.logicalIndex}
-                    className={`keycap ${keySpec.kind}`}
+                    className={`keycap ${keySpec.kind} effect-${effectLabel(effect.type).toLowerCase()}`}
                     style={{
                       "--key-x": keySpec.x,
                       "--key-y": keySpec.y,
                       "--key-color": color,
+                      "--effect-period": `${effect.periodMs}ms`,
+                      "--effect-delay": `${-effect.phaseMs}ms`,
                     } as React.CSSProperties}
                     onPointerDown={(event) => {
                       if (event.button !== 0) return;
@@ -418,8 +595,8 @@ export function App() {
                     onPointerEnter={(event) => {
                       if (painting.current && (event.buttons & 1) === 1) paintKey(keySpec);
                     }}
-                    title={`${keySpec.label} · LED ${keySpec.ledIndex} · ${color}`}
-                    aria-label={`Set ${keySpec.label} to ${rgbToHex(paintColor)}`}
+                    title={`${keySpec.label} · LED ${keySpec.ledIndex} · ${color} · ${effectLabel(effect.type)}`}
+                    aria-label={`Set ${keySpec.label} to ${rgbToHex(paintColor)} with ${effectLabel(paintEffect).toLowerCase()} effect`}
                   >
                     <span className="key-light" aria-hidden="true" />
                     <span className="key-label">{keySpec.label}</span>

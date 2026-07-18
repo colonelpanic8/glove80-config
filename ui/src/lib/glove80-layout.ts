@@ -78,8 +78,8 @@ export function colorsByLed(keys: readonly KeySpec[], colorsByLogicalKey: readon
   return result;
 }
 
-export function mirrorLeftToRight(colorsByLogicalKey: readonly number[]): number[] {
-  const result = [...colorsByLogicalKey];
+export function mirrorLeftToRight<T>(valuesByLogicalKey: readonly T[]): T[] {
+  const result = [...valuesByLogicalKey];
   const logicalByLed = new Map(GLOVE80_KEYS.map((item) => [item.ledIndex, item.logicalIndex]));
   for (const keySpec of GLOVE80_KEYS) {
     if (keySpec.ledIndex >= 40) continue;
