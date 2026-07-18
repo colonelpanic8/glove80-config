@@ -8,6 +8,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 
 mod config;
+pub mod runtime_manifest;
 
 const SOF: u8 = 0xab;
 const ESC: u8 = 0xac;
