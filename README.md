@@ -3,16 +3,15 @@
 Custom Glove80 firmware for Ivan's layout, generated from the MoErgo layout
 `34957465-9943-4236-852c-d88044706dcb`.
 
-This uses the current MoErgo Glove80 ZMK distribution with ZMK Studio enabled.
+This is a monorepo: the MoErgo Glove80 ZMK source is vendored as a Git subtree
+under [`zmk/`](./zmk/), and the custom firmware code is maintained there as
+ordinary source changes. There is no source-patching layer or separate firmware
+fork to coordinate.
+
 The keyboard remains fully functional with the generated keymap when Studio is
 not connected, while Studio can edit and persist bindings at runtime over USB
-or Bluetooth.
-
-The repository carries small compatibility patches for the MoErgo build: one
-adds Studio's `nanopb` and protocol-message dependencies inside Nix, and one
-adds the firmware hook used by the experimental host-lighting extension. The
-host protocol is protobuf over ZMK Studio RPC; it does not depend on the
-JavaScript keymap generator.
+or Bluetooth. The host-lighting protocol is protobuf over ZMK Studio RPC; it
+does not depend on the JavaScript keymap generator.
 
 ## ZMK Studio
 
@@ -83,15 +82,30 @@ nix run .#generate-keymap
 nix build .#firmware
 ```
 
-The combined firmware is written to:
+The build produces half-specific images plus a combined archival artifact:
 
 ```sh
+result/glove80-left.uf2
+result/glove80-right.uf2
 result/glove80.uf2
 ```
 
-Flash that same `.uf2` to both halves.
+Flash `glove80-left.uf2` to the left bootloader and `glove80-right.uf2` to the
+right bootloader. Do not use the combined artifact for routine flashing.
 
 ## Updating From MoErgo
+
+To merge a newer MoErgo ZMK revision into the vendored subtree:
+
+```sh
+git subtree pull --prefix=zmk https://github.com/moergo-sc/zmk.git main --squash
+```
+
+Resolve any conflicts in the locally customized firmware source, then run the
+full firmware build before committing the merge. The initial subtree import is
+MoErgo ZMK revision `2f73a230e2fc7b2bd64a9736181e87bf54338131`.
+
+To update the keyboard layout itself:
 
 1. Export or fetch the MoErgo layout JSON.
 2. Replace `config/moergo-layout.json`.

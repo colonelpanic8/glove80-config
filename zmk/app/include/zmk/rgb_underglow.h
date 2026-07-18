@@ -6,11 +6,29 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 struct zmk_led_hsb {
     uint16_t h;
     uint8_t s;
     uint8_t b;
 };
+
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+struct zmk_rgb_underglow_host_pixel {
+    uint8_t index;
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+};
+
+size_t zmk_rgb_underglow_host_pixel_count(void);
+int zmk_rgb_underglow_host_replace(uint32_t timeout_ms);
+int zmk_rgb_underglow_host_update(const struct zmk_rgb_underglow_host_pixel *updates,
+                                  size_t update_count, uint32_t timeout_ms);
+int zmk_rgb_underglow_host_clear(void);
+#endif
 
 int zmk_rgb_underglow_toggle(void);
 int zmk_rgb_underglow_get_state(bool *state);

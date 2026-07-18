@@ -37,8 +37,7 @@
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs",
-        "zmk": "zmk"
+        "nixpkgs": "nixpkgs"
       }
     },
     "systems": {
@@ -53,22 +52,6 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
-        "type": "github"
-      }
-    },
-    "zmk": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1776053885,
-        "narHash": "sha256-WsQaX+g8XAmhTD9DjODzzw37Br1Wpd7wz34Rd9BvIvM=",
-        "owner": "moergo-sc",
-        "repo": "zmk",
-        "rev": "2f73a230e2fc7b2bd64a9736181e87bf54338131",
-        "type": "github"
-      },
-      "original": {
-        "owner": "moergo-sc",
-        "repo": "zmk",
         "type": "github"
       }
     }

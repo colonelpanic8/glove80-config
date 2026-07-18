@@ -117,13 +117,21 @@ if (CONFIG_ZMK_STUDIO_RPC)
     # Turn off the default nanopb behavior
   set(NANOPB_GENERATE_CPP_STANDALONE OFF)
 
-  nanopb_generate_cpp(proto_srcs proto_hdrs RELPATH ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}
-                        ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/studio.proto
-                        ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/meta.proto
-                        ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/core.proto
-                        ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/behaviors.proto
-                        ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/keymap.proto
-  )
+  set(studio_proto_files
+      ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/studio.proto
+      ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/meta.proto
+      ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/core.proto
+      ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/behaviors.proto
+      ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/keymap.proto)
+
+  if(CONFIG_ZMK_HOST_LIGHTING)
+    list(APPEND studio_proto_files
+         ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}/proto/zmk/host_lighting.proto)
+  endif()
+
+  nanopb_generate_cpp(proto_srcs proto_hdrs
+                      RELPATH ${ZEPHYR_ZMK_STUDIO_MESSAGES_MODULE_DIR}
+                      ${studio_proto_files})
 
   target_include_directories(app PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
   target_sources(app PRIVATE ${proto_srcs} ${proto_hdrs})

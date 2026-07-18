@@ -67,6 +67,11 @@ static int backlight_settings_load_cb(const char *name, size_t len, settings_rea
 
         int rc = read_cb(cb_arg, &state, sizeof(state));
         if (rc >= 0) {
+#if IS_ENABLED(CONFIG_ZMK_BACKLIGHT_AUTO_OFF_USB)
+            // Glove80 uses this device as its USB power indicator. Persisted
+            // generic backlight state must not override the live USB state.
+            state.on = zmk_usb_is_powered();
+#endif
             rc = zmk_backlight_update();
         }
 

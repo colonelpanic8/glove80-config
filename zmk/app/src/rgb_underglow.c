@@ -8,6 +8,7 @@
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/settings/settings.h>
+#include <zephyr/sys/atomic.h>
 
 #include <math.h>
 #include <stdlib.h>
@@ -29,6 +30,8 @@
 #include <zmk/activity.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/activity_state_changed.h>
+#include <zmk/events/ble_active_profile_changed.h>
+#include <zmk/events/endpoint_changed.h>
 #include <zmk/events/usb_conn_state_changed.h>
 #include <zmk/workqueue.h>
 
@@ -78,6 +81,13 @@ static struct led_rgb pixels[STRIP_NUM_PIXELS];
 static struct led_rgb status_pixels[STRIP_NUM_PIXELS];
 
 static struct rgb_underglow_state state;
+
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+static struct led_rgb host_pixels[STRIP_NUM_PIXELS];
+static struct k_spinlock host_pixels_lock;
+static atomic_t host_lighting_active;
+static struct k_work_delayable host_lighting_timeout_work;
+#endif
 
 #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_EXT_POWER)
 static const struct device *const ext_power = DEVICE_DT_GET(DT_INST(0, zmk_ext_power_generic));
@@ -192,6 +202,35 @@ static void zmk_rgb_underglow_effect_swirl(void) {
 
 static int zmk_led_generate_status(void);
 
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+static void zmk_host_lighting_apply_status_pixel(struct led_rgb *buffer) {
+#if CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL >= 0
+    const size_t index = CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL;
+    if (index >= STRIP_NUM_PIXELS) {
+        return;
+    }
+
+    struct led_rgb color = {.r = 24, .g = 24, .b = 24};
+    if (atomic_get(&host_lighting_active)) {
+        color = (struct led_rgb){.r = 0, .g = 96, .b = 96};
+    } else {
+        const struct zmk_endpoint_instance endpoint = zmk_endpoints_selected();
+        if (endpoint.transport == ZMK_TRANSPORT_USB) {
+            color = zmk_usb_is_hid_ready() ? (struct led_rgb){.r = 0, .g = 96, .b = 0}
+                                           : (struct led_rgb){.r = 96, .g = 32, .b = 0};
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+        } else if (endpoint.transport == ZMK_TRANSPORT_BLE) {
+            color = zmk_ble_active_profile_is_connected()
+                        ? (struct led_rgb){.r = 0, .g = 32, .b = 96}
+                        : (struct led_rgb){.r = 96, .g = 32, .b = 0};
+#endif
+        }
+    }
+    buffer[index] = color;
+#endif
+}
+#endif
+
 static void zmk_led_write_pixels(void) {
     static struct led_rgb led_buffer[STRIP_NUM_PIXELS];
     int bat0;
@@ -210,13 +249,20 @@ static void zmk_led_write_pixels(void) {
 
     // fast path: no status indicators, battery level OK
     if (blend == 0 && bat0 >= 20) {
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+        zmk_host_lighting_apply_status_pixel(pixels);
+#endif
         led_strip_update_rgb(led_strip, pixels, STRIP_NUM_PIXELS);
         return;
     }
     // battery below minimum charge
     if (bat0 < 10) {
         memset(pixels, 0, sizeof(struct led_rgb) * STRIP_NUM_PIXELS);
-        if (state.on) {
+        if (state.on
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+            || atomic_get(&host_lighting_active)
+#endif
+        ) {
             int c_power = ext_power_get(ext_power);
             if (c_power && !state.status_active) {
                 // power is on, RGB underglow is on, but battery is too low
@@ -256,6 +302,9 @@ static void zmk_led_write_pixels(void) {
         }
     }
 
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+    zmk_host_lighting_apply_status_pixel(led_buffer);
+#endif
     int err = led_strip_update_rgb(led_strip, led_buffer, STRIP_NUM_PIXELS);
     if (err < 0) {
         LOG_ERR("Failed to update the RGB strip (%d)", err);
@@ -420,6 +469,23 @@ static int zmk_led_generate_status(void) {
 #endif // underglow_indicators exists
 
 static void zmk_rgb_underglow_tick(struct k_work *work) {
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+    if (atomic_get(&host_lighting_active)) {
+        k_spinlock_key_t key = k_spin_lock(&host_pixels_lock);
+        memcpy(pixels, host_pixels, sizeof(pixels));
+        k_spin_unlock(&host_pixels_lock, key);
+        zmk_led_write_pixels();
+        return;
+    }
+#endif
+
+    if (!state.on) {
+        memset(pixels, 0, sizeof(pixels));
+        zmk_led_write_pixels();
+        zmk_rgb_set_ext_power();
+        return;
+    }
+
     switch (state.current_effect) {
     case UNDERGLOW_EFFECT_SOLID:
         zmk_rgb_underglow_effect_solid();
@@ -441,7 +507,11 @@ static void zmk_rgb_underglow_tick(struct k_work *work) {
 K_WORK_DEFINE(underglow_tick_work, zmk_rgb_underglow_tick);
 
 static void zmk_rgb_underglow_tick_handler(struct k_timer *timer) {
-    if (!state.on) {
+    if (!state.on
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+        && !atomic_get(&host_lighting_active)
+#endif
+    ) {
         return;
     }
 
@@ -449,6 +519,80 @@ static void zmk_rgb_underglow_tick_handler(struct k_timer *timer) {
 }
 
 K_TIMER_DEFINE(underglow_tick, zmk_rgb_underglow_tick_handler, NULL);
+
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+static uint32_t host_lighting_timeout(uint32_t timeout_ms) {
+    if (timeout_ms == 0) {
+        return CONFIG_ZMK_HOST_LIGHTING_TIMEOUT_DEFAULT_MS;
+    }
+
+    return CLAMP(timeout_ms, 250, CONFIG_ZMK_HOST_LIGHTING_TIMEOUT_MAX_MS);
+}
+
+static void host_lighting_schedule_render(uint32_t timeout_ms) {
+    atomic_set(&host_lighting_active, true);
+    zmk_rgb_set_ext_power();
+    k_timer_start(&underglow_tick, K_NO_WAIT, K_MSEC(25));
+    k_work_reschedule(&host_lighting_timeout_work, K_MSEC(host_lighting_timeout(timeout_ms)));
+    if (!k_work_is_pending(&underglow_tick_work)) {
+        k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &underglow_tick_work);
+    }
+}
+
+static void host_lighting_timeout_handler(struct k_work *work) {
+    atomic_clear(&host_lighting_active);
+    if (!state.on) {
+        k_timer_stop(&underglow_tick);
+    }
+    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &underglow_tick_work);
+}
+
+size_t zmk_rgb_underglow_host_pixel_count(void) { return STRIP_NUM_PIXELS; }
+
+int zmk_rgb_underglow_host_replace(uint32_t timeout_ms) {
+    k_spinlock_key_t key = k_spin_lock(&host_pixels_lock);
+    memset(host_pixels, 0, sizeof(host_pixels));
+    k_spin_unlock(&host_pixels_lock, key);
+    host_lighting_schedule_render(timeout_ms);
+    return 0;
+}
+
+int zmk_rgb_underglow_host_update(const struct zmk_rgb_underglow_host_pixel *updates,
+                                  size_t update_count, uint32_t timeout_ms) {
+    if (!updates && update_count > 0) {
+        return -EINVAL;
+    }
+
+    for (size_t i = 0; i < update_count; i++) {
+        if (updates[i].index >= STRIP_NUM_PIXELS) {
+            return -ERANGE;
+        }
+    }
+
+    k_spinlock_key_t key = k_spin_lock(&host_pixels_lock);
+    for (size_t i = 0; i < update_count; i++) {
+        host_pixels[updates[i].index] = (struct led_rgb){
+            .r = MIN(updates[i].r, CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL),
+            .g = MIN(updates[i].g, CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL),
+            .b = MIN(updates[i].b, CONFIG_ZMK_HOST_LIGHTING_MAX_CHANNEL),
+        };
+    }
+    k_spin_unlock(&host_pixels_lock, key);
+
+    host_lighting_schedule_render(timeout_ms);
+    return 0;
+}
+
+int zmk_rgb_underglow_host_clear(void) {
+    k_work_cancel_delayable(&host_lighting_timeout_work);
+    atomic_clear(&host_lighting_active);
+    if (!state.on) {
+        k_timer_stop(&underglow_tick);
+    }
+    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &underglow_tick_work);
+    return 0;
+}
+#endif
 
 #if IS_ENABLED(CONFIG_SETTINGS)
 static int rgb_settings_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg) {
@@ -510,8 +654,18 @@ static int zmk_rgb_underglow_init(void) {
     k_work_init_delayable(&underglow_save_work, zmk_rgb_underglow_save_state_work);
 #endif
 
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+    k_work_init_delayable(&host_lighting_timeout_work, host_lighting_timeout_handler);
+#endif
+
 #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB)
     state.on = zmk_usb_is_powered();
+#endif
+
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING) && CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL >= 0
+    // Keep the status key independent of the user's normal underglow setting.
+    zmk_rgb_set_ext_power();
+    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &underglow_tick_work);
 #endif
 
     if (state.on) {
@@ -547,11 +701,22 @@ void zmk_rgb_set_ext_power(void) {
         LOG_ERR("Unable to examine EXT_POWER: %d", c_power);
         c_power = 0;
     }
-    int desired_state = state.on || state.status_active;
+    int desired_state = state.on || state.status_active
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+                        || atomic_get(&host_lighting_active)
+                        || CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL >= 0
+#endif
+        ;
 
 #if IS_ENABLED(CONFIG_ZMK_BATTERY_REPORTING)
     // force power off, when battery low (<10%)
-    if (state.on && !state.status_active) {
+    if ((state.on
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+         || atomic_get(&host_lighting_active)
+         || CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL >= 0
+#endif
+         ) &&
+        !state.status_active) {
         if (zmk_battery_state_of_charge() < 10) {
             desired_state = false;
         }
@@ -599,10 +764,18 @@ int zmk_rgb_underglow_off(void) {
     if (!led_strip)
         return -ENODEV;
 
-    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &underglow_off_work);
-
-    k_timer_stop(&underglow_tick);
     state.on = false;
+
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING)
+    if (atomic_get(&host_lighting_active)) {
+        k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &underglow_tick_work);
+    } else
+#endif
+    {
+        k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &underglow_off_work);
+        k_timer_stop(&underglow_tick);
+    }
+
     zmk_rgb_set_ext_power();
 
     return zmk_rgb_underglow_save_state();
@@ -763,7 +936,8 @@ int zmk_rgb_underglow_change_spd(int direction) {
 }
 
 #if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE) ||                                          \
-    IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB)
+    IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB) ||                                           \
+    (IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING) && CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL >= 0)
 struct rgb_underglow_sleep_state {
     bool is_awake;
     bool rgb_state_before_sleeping;
@@ -807,6 +981,18 @@ static int rgb_underglow_event_listener(const zmk_event_t *eh) {
     }
 #endif
 
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING) && CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL >= 0
+    bool refresh_status = as_zmk_usb_conn_state_changed(eh) || as_zmk_endpoint_changed(eh);
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+    refresh_status = refresh_status || as_zmk_ble_active_profile_changed(eh);
+#endif
+    if (refresh_status) {
+        zmk_rgb_set_ext_power();
+        k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &underglow_tick_work);
+        return 0;
+    }
+#endif
+
     return -ENOTSUP;
 }
 
@@ -818,8 +1004,16 @@ ZMK_LISTENER(rgb_underglow, rgb_underglow_event_listener);
 ZMK_SUBSCRIPTION(rgb_underglow, zmk_activity_state_changed);
 #endif
 
-#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB)
+#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB) ||                                           \
+    (IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING) && CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL >= 0)
 ZMK_SUBSCRIPTION(rgb_underglow, zmk_usb_conn_state_changed);
+#endif
+
+#if IS_ENABLED(CONFIG_ZMK_HOST_LIGHTING) && CONFIG_ZMK_HOST_LIGHTING_STATUS_PIXEL >= 0
+ZMK_SUBSCRIPTION(rgb_underglow, zmk_endpoint_changed);
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+ZMK_SUBSCRIPTION(rgb_underglow, zmk_ble_active_profile_changed);
+#endif
 #endif
 
 SYS_INIT(zmk_rgb_underglow_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
