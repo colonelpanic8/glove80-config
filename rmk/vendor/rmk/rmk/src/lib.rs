@@ -76,6 +76,9 @@ pub mod helper_macro;
 pub mod hid;
 #[cfg(feature = "host")]
 pub mod host;
+// GLOVE80 PATCH: raw transport pipes for the Glove80 host protocol.
+#[cfg(feature = "host")]
+pub mod host_proto_pipe;
 pub mod input_device;
 pub mod keyboard;
 pub mod keyboard_macros;

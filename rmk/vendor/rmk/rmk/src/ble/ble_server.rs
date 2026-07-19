@@ -20,8 +20,33 @@ pub(crate) struct Server {
     pub(crate) battery_service: BatteryService,
     pub(crate) hid_service: HidService,
     pub(crate) host_service: VialService,
+    // GLOVE80 PATCH: custom (non-HID) GATT service for the Glove80 host protocol.
+    pub(crate) host_proto_service: HostProtoService,
     pub(crate) device_config_service: DeviceConfigurationService,
 }
+
+// ===== GLOVE80 PATCH (host protocol transport) =====
+/// Custom GATT service carrying the Glove80 host protocol
+/// (`protocol/glove80-host-protocol/PROTOCOL.md`). Deliberately NOT part of
+/// any HID service: Web Bluetooth blocks HID-over-GATT, and this service is
+/// the browser-reachable wireless path.
+///
+/// - `request`: host → keyboard protocol frames, write-without-response.
+///   Variable length, up to 257 bytes (2-byte frame header + 255 max payload).
+/// - `response`: keyboard → host protocol frames via notify (variable-length
+///   `notify_raw`, sized to the negotiated ATT payload).
+///
+/// Writes land in `host_proto_pipe::HOSTP_BLE_RX` (see `gatt_events_task`);
+/// responses are drained from `HOSTP_BLE_TX` by `run_ble_host_proto`.
+#[cfg(feature = "host")]
+#[gatt_service(uuid = "fc550001-f8e0-459f-b421-c254fc42b138")]
+pub(crate) struct HostProtoService {
+    #[characteristic(uuid = "fc550002-f8e0-459f-b421-c254fc42b138", write_without_response, value = [0; 257])]
+    pub(crate) request: [u8; 257],
+    #[characteristic(uuid = "fc550003-f8e0-459f-b421-c254fc42b138", notify, value = [0; 257])]
+    pub(crate) response: [u8; 257],
+}
+// ===== END GLOVE80 PATCH =====
 
 /// GATT service exposing the Vial-over-HID protocol. The keyboard writes replies via
 /// `input_data` notify; hosts push requests through `output_data`. `gatt_events_task`

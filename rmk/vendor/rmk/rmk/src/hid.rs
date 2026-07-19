@@ -58,6 +58,30 @@ pub struct ViaReport {
     pub(crate) output_data: [u8; 32],
 }
 
+// ===== GLOVE80 PATCH (host protocol transport) =====
+/// Raw-HID vendor interface for the Glove80 host protocol
+/// (`protocol/glove80-host-protocol/PROTOCOL.md`). 32-byte IN/OUT reports
+/// carry protocol frames; hosts match the interface by vendor usage page
+/// `0xFF88`, usage `0x01` (distinct from Via/Vial's `0xFF60`/`0x61` so the
+/// two raw-HID interfaces are unambiguous from hidraw/WebHID).
+#[cfg(feature = "host")]
+#[gen_hid_descriptor(
+    (collection = APPLICATION, usage_page = 0xFF88, usage = 0x01) = {
+        (usage = 0x02, logical_min = 0x0) = {
+            #[item_settings(data,variable,absolute)] input_data=input;
+        };
+        (usage = 0x03, logical_min = 0x0) = {
+            #[item_settings(data,variable,absolute)] output_data=output;
+        };
+    }
+)]
+#[derive(Default)]
+pub struct HostProtocolReport {
+    pub(crate) input_data: [u8; 32],
+    pub(crate) output_data: [u8; 32],
+}
+// ===== END GLOVE80 PATCH =====
+
 /// Predefined report ids for composite hid report.
 /// Should be same with `#[gen_hid_descriptor]` of `CompositeReport` and `BleCompositeReport`
 /// DO NOT EDIT
