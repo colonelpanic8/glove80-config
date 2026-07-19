@@ -61,36 +61,33 @@ Open the printed localhost URL in Chrome or Edge, connect the keyboard, select a
 color, and click or drag across keys. See [`ui/README.md`](./ui/README.md) for
 browser support, architecture, and connection details.
 
-For terminal control over USB, use the Rust CLI (no daemon required):
+For terminal control, use the Rust CLI (no daemon required). It speaks the
+RMK host protocol over USB raw HID or BLE — see
+[`tools/glove80-control/README.md`](./tools/glove80-control/README.md):
 
 ```sh
-cargo run --quiet -- capabilities
-cargo run --quiet -- all ff0066
-cargo run --quiet -- set 0=ff0000 1=00ff00 40=0000ff
-cargo run --quiet -- effect 0 blink ff0000 --period-ms 500
-cargo run --quiet -- effect 40 breathe 00aaff --period-ms 1500
-cargo run --quiet -- clear
+cargo run --quiet -- lighting caps
+cargo run --quiet -- lighting set 0-5,12 ff0066
+cargo run --quiet -- lighting clear
 cargo run --quiet -- config validate path/to/config.json --layer-capacity 8
+cargo run --quiet -- version
 ```
 
 Run `cargo install --path tools/glove80-control` if you prefer a normal
 `glove80-control` executable on your `PATH`.
 
-The login running the command must have read/write access to `/dev/ttyACM0`
-(normally through the `dialout` group).
-
-After this custom firmware has been installed once, either half can be put into
-its UF2 bootloader without using a key chord:
+With RMK firmware installed, either half can be put into its UF2 bootloader
+without using a key chord:
 
 ```sh
-cargo run --quiet -- bootloader right
-cargo run --quiet -- bootloader left
+cargo run --quiet -- bootloader --peripheral
+cargo run --quiet -- bootloader
 ```
 
-The command is USB-only and requires local permission to open the Studio serial
-device, but deliberately does not require a physical Studio unlock. Request the
-right bootloader before the left, since the left provides the split and USB RPC
-transports used to reach the right.
+Request the peripheral bootloader before the central, since the central
+provides the split and host-protocol transports used to reach the peripheral.
+(The legacy ZMK Studio serial commands were retired after the RMK cutover;
+the CLI no longer talks to the ZMK recovery firmware.)
 
 The left Magic/MoErgo key is reserved as a firmware status pixel: cyan means a
 host lighting frame is active, green means USB HID is ready, blue means the

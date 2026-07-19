@@ -37,9 +37,15 @@ final phase.
   keyboard could use), never as Glove80-specific logic inside RMK. Glove80
   specifics live in our crates on top. This keeps every patch a candidate
   upstream PR from the day it is written (see Phase 8).
-- **Old ZMK-era host code** (`protocol/proto`, `host-lighting/`, the
-  protobuf/Studio parts of `ui/`): kept for reference, replaced by the new
-  protocol; deleted at cutover.
+- **Old ZMK-era host code**: replaced by the new protocol; retired
+  incrementally. The CLI's ZMK Studio serial path (legacy
+  `capabilities`/`all`/`set`/`effect`/`clear` verbs and the
+  `bootloader left|right` serial routing) has been removed. `protocol/proto`
+  and `host-lighting/` cannot be deleted yet even though the live system no
+  longer uses them: the ZMK recovery build (`config/default.nix`) consumes
+  both (`studioMessagesOverlay` and `extraModules`). They go when the ZMK
+  recovery baseline is retired after Phase 7 qualification. The
+  protobuf/Studio parts of `ui/` are retired separately in the app.
 
 ## Phase 1 — Compositor core (firmware)
 
