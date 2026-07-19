@@ -27,6 +27,8 @@
 
 #![cfg_attr(not(test), no_std)]
 
+pub mod sync;
+
 /// Compile-time per-channel ceiling: 80% of full scale.
 ///
 /// SAFETY / WARRANTY: this is MoErgo's LED current limit for the Glove80.
@@ -372,6 +374,18 @@ impl<const N: usize> Compositor<N> {
 
     pub fn toggle(&self, id: u8) -> bool {
         id < 32 && self.toggles & (1 << id) != 0
+    }
+
+    /// The whole toggle bitmask (bit n ⇔ toggle id n). Used to mirror toggle
+    /// state across the split link in one message.
+    pub fn toggles_mask(&self) -> u32 {
+        self.toggles
+    }
+
+    /// Replace the whole toggle bitmask (the split-sync counterpart of
+    /// [`toggles_mask`](Self::toggles_mask)). Idempotent.
+    pub fn set_toggles_mask(&mut self, mask: u32) {
+        self.toggles = mask;
     }
 
     /// Global brightness scalar (255 = full). Applied to the composed
