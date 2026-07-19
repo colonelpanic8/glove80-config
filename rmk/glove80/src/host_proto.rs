@@ -132,7 +132,8 @@ fn capabilities() -> Capabilities {
             | feature::PARTIAL_APPLY
             | feature::PERSISTENT_CONFIG
             | feature::KEYMAP
-            | feature::VERSION_REPORT,
+            | feature::VERSION_REPORT
+            | feature::CONFIG_GATES,
         // The storage slots hold more (config_store::CONFIG_BLOB_MAX), so
         // the protocol's own maximum is the binding limit.
         max_config_blob_len: MAX_CONFIG_BLOB_LEN as u32,

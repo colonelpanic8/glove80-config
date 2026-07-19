@@ -38,7 +38,9 @@ use embassy_nrf::spim::{self, Spim};
 use embassy_nrf::{Peri, bind_interrupts, peripherals};
 use embassy_time::{Duration, Instant, Timer};
 pub use glove80_compositor::{Activation, CHANNEL_CEILING, Cell, Compositor, Record, Rgb};
-use rmk::event::{EventSubscriber, LayerChangeEvent, SubscribableEvent};
+use rmk::event::{
+    ConnectionStatusChangeEvent, EventSubscriber, LayerChangeEvent, SubscribableEvent,
+};
 use rmk::processor::Processor;
 
 bind_interrupts!(struct Irqs {
@@ -394,6 +396,34 @@ impl LightingProcessor {
         self.render_at(now_ms()).await;
     }
 
+    /// Apply the central's USB data-connection truth and mirror it to the
+    /// peripheral in the existing split State message.
+    async fn set_usb_connected(&mut self, connected: bool) {
+        if self.role.as_central().is_none() {
+            return;
+        }
+        self.compositor.set_usb_connected(connected);
+        let now = now_ms();
+        if let Some(split) = self.role.central_mut() {
+            split.notify_state(&self.compositor, now);
+        }
+        self.render_at(now).await;
+    }
+
+    /// Apply this half's local nRF POWER/VBUS state (the charging gate).
+    async fn set_charging(&mut self, charging: bool) {
+        self.compositor.set_charging(charging);
+        self.render_at(now_ms()).await;
+    }
+
+    /// Apply this half's existing split-app link state (the split-link gate).
+    async fn set_split_link(&mut self, up: bool) {
+        let now = now_ms();
+        self.compositor.set_split_link(up);
+        self.role.on_link_change(up, now);
+        self.render_at(now).await;
+    }
+
     /// The earliest self-driven wake: the compositor's next frame change or
     /// the split role's next deadline (right-half TTL expiry / resync retry
     /// on the central, link-loss overlay clear on the peripheral).
@@ -448,6 +478,10 @@ impl Processor for LightingProcessor {
             .expect("split link watch has a free receiver slot");
         let requests = crate::host_proto::HOST_REQUESTS.receiver();
         let app_rx = rmk::split_app_pipe::SPLIT_APP_RX.receiver();
+        let mut connection = ConnectionStatusChangeEvent::subscriber();
+        let mut vbus = rmk::usb::USB_VBUS_DETECTED
+            .receiver()
+            .expect("nRF VBUS watch has its application receiver slot");
         // Central: load the persisted lighting config before the first
         // frame (no-op on the peripheral). Interleaves with the chain
         // power-settle wait below, which usually dominates.
@@ -466,7 +500,10 @@ impl Processor for LightingProcessor {
                 deadline,
                 sub.next_event(),
                 requests.receive(),
-                select(link.changed(), app_rx.receive()),
+                select(
+                    select(link.changed(), app_rx.receive()),
+                    select(connection.next_event(), vbus.changed()),
+                ),
             )
             .await
             {
@@ -480,12 +517,12 @@ impl Processor for LightingProcessor {
                 }
                 Either4::Second(event) => self.process(event).await,
                 Either4::Third(req) => self.process_host_request(req).await,
-                Either4::Fourth(Either::First(up)) => {
+                Either4::Fourth(Either::First(Either::First(up))) => {
                     // Split-link edge; the next loop iteration re-arms the
                     // deadline this may have created (resync / grace clear).
-                    self.role.on_link_change(up, now_ms());
+                    self.set_split_link(up).await;
                 }
-                Either4::Fourth(Either::Second(msg)) => {
+                Either4::Fourth(Either::First(Either::Second(msg))) => {
                     let now = now_ms();
                     self.role.apply_message(&mut self.compositor, msg.payload(), now);
                     // Drain any burst (e.g. a resync) before rendering so a
@@ -494,6 +531,15 @@ impl Processor for LightingProcessor {
                         self.role.apply_message(&mut self.compositor, more.payload(), now);
                     }
                     self.render_at(now).await;
+                }
+                Either4::Fourth(Either::Second(Either::First(event))) => {
+                    use rmk::types::connection::UsbState;
+
+                    let connected = matches!(event.0.usb, UsbState::Configured | UsbState::Suspended);
+                    self.set_usb_connected(connected).await;
+                }
+                Either4::Fourth(Either::Second(Either::Second(charging))) => {
+                    self.set_charging(charging).await;
                 }
             }
         }

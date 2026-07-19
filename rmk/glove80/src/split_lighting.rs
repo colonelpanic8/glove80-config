@@ -291,6 +291,7 @@ impl CentralSplit {
             brightness: comp.brightness(),
             ceiling: comp.ceiling(),
             toggles: comp.toggles_mask(),
+            usb_connected: comp.usb_connected(),
         };
         if !try_queue(&msg) {
             self.mark_resync(now_ms + RESYNC_RETRY_MS);
@@ -419,6 +420,7 @@ impl CentralSplit {
                 brightness: comp.brightness(),
                 ceiling: comp.ceiling(),
                 toggles: comp.toggles_mask(),
+                usb_connected: comp.usb_connected(),
             });
         }
         if !ok {
@@ -518,6 +520,9 @@ impl PeripheralSplit {
             Ok(SyncMessage::ConfigRecord { index, activation, cell_count }) => {
                 self.stage.record(index, activation, cell_count);
             }
+            Ok(SyncMessage::ConfigGate { record_index, gate }) => {
+                self.stage.gate(record_index, gate);
+            }
             Ok(SyncMessage::ConfigCells { record_index, cells }) => {
                 self.stage.cells(record_index, cells.entries());
             }
@@ -541,11 +546,12 @@ impl PeripheralSplit {
                 defmt::warn!("split-lighting: entering bootloader by central request");
                 rmk::boot::jump_to_bootloader();
             }
-            Ok(SyncMessage::State { brightness, ceiling, toggles }) => {
+            Ok(SyncMessage::State { brightness, ceiling, toggles, usb_connected }) => {
                 comp.set_brightness(brightness);
                 // set_ceiling re-clamps to this half's compiled CHANNEL_CEILING.
                 comp.set_ceiling(ceiling);
                 comp.set_toggles_mask(toggles);
+                comp.set_usb_connected(usb_connected);
             }
             // Peripheral → central only; a central would never echo it back.
             Ok(SyncMessage::PeripheralVersion(_)) => {

@@ -34,8 +34,10 @@
 //! radio-safe `nrf_mpsl::Flash` with RMK's storage task under an async
 //! mutex — every operation yields, nothing ever blocks key scanning.
 //!
-//! This layer treats the blob as opaque bytes plus CRC; decoding/validating
-//! the lighting config inside it happens above (`lighting_config.rs`).
+//! This layer treats the blob as opaque bytes plus CRC — including the v1.4
+//! gate bytes in each record header — so store/read-back stays byte-stable.
+//! Decoding/validating the lighting config happens above
+//! (`lighting_config.rs`).
 
 use rmk::config_flash;
 use rmk::crc32::Crc32;

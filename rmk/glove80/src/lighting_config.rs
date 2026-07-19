@@ -22,9 +22,10 @@
 //!   implemented (a follow-up: it needs its own small flash record so a
 //!   toggle keypress does not rewrite the whole blob).
 
-use glove80_compositor::{Activation, Compositor, MAX_RECORDS, Record};
+use glove80_compositor::{Activation, Compositor, Condition, MAX_RECORDS, Record};
 use glove80_host_protocol::config::{
-    ConfigActivation, ConfigError as BlobError, LightingConfig, decode_lighting_config,
+    ConfigActivation, ConfigError as BlobError, ConfigGate, LightingConfig,
+    decode_lighting_config,
 };
 
 use crate::lighting::NUM_LEDS;
@@ -53,6 +54,18 @@ fn activation(a: ConfigActivation) -> Activation {
     }
 }
 
+/// Blob gate → compositor condition. The protocol validator has already
+/// range-checked every argument before this conversion runs.
+fn gate(g: ConfigGate) -> Condition {
+    match g {
+        ConfigGate::LayerActive(layer) => Condition::LayerActive(layer),
+        ConfigGate::Toggle(id) => Condition::Toggle(id),
+        ConfigGate::UsbConnected => Condition::UsbConnected,
+        ConfigGate::Charging => Condition::Charging,
+        ConfigGate::SplitLinkUp => Condition::SplitLinkUp,
+    }
+}
+
 /// Build one half's record set from a decoded config into `out` (reused
 /// scratch): for each blob record, the cells on this half (remapped to local
 /// keys), same activation, same order. Records keep their identity on both
@@ -65,6 +78,7 @@ fn build_half(
 ) -> Result<usize, ConfigError> {
     for (slot, rec) in out.iter_mut().zip(cfg.records.iter()) {
         let mut r = Record::new(activation(rec.activation));
+        r.set_gate(rec.gate.map(gate));
         for cell in rec.cells.iter() {
             let local = if right_half {
                 if cell.key < LEDS_PER_HALF {
