@@ -128,3 +128,19 @@ over BLE, which Vial cannot do on Linux).
 - Cut daily use over to RMK; keep ZMK recovery images archived; retire the
   ZMK-era host code.
 - Exit: checklist all green; ZMK tree no longer needed for daily use.
+
+## Phase 8 — Fork cleanup and upstreaming (final)
+
+Deliberately last: only after the system works the way we want it, so the
+hooks we upstream are the ones reality validated.
+
+- Write rmk/vendor/rmk/PATCHES.md: every `GLOVE80 PATCH` site, what/why,
+  upstreamability rating.
+- Prepare upstream RMK PRs for the generic pieces: split application
+  message hook, USB-interface and GATT-service extension points, shared
+  flash access, the link-down-on-cancellation fix.
+- As PRs merge, advance the subtree to a release containing them and drop
+  the corresponding local patches.
+- Exit: the vendored tree carries zero (or near-zero, documented) local
+  patches, or is replaced outright by a plain pinned dependency; the repo
+  reads like a standard RMK consumer with its own crates on top.
