@@ -88,6 +88,9 @@ pub mod input_device;
 pub mod keyboard;
 pub mod keyboard_macros;
 pub mod keymap;
+// GLOVE80 PATCH: keymap operation pipe for the Glove80 host protocol.
+#[cfg(feature = "vial")]
+pub mod keymap_ops_pipe;
 pub mod layout_macro;
 pub mod light;
 pub mod matrix;

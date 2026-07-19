@@ -239,16 +239,55 @@ impl<'a> VialService<'a> {
     }
 }
 
+impl VialService<'_> {
+    // ===== GLOVE80 PATCH (host-protocol keymap ops) =====
+    /// Service one keymap operation from the Glove80 host protocol
+    /// (`crate::keymap_ops_pipe`) through the exact conversion + persistence
+    /// path Vial's `DynamicKeymapGet/SetKeyCode` handlers use. Runs in this
+    /// task so Vial edits and host-protocol edits share one owner.
+    async fn process_keymap_op(&self, op: crate::keymap_ops_pipe::KeymapOp) -> u16 {
+        use crate::keymap_ops_pipe::KeymapOp;
+        match op {
+            KeymapOp::Get { layer, row, col } => to_via_keycode(self.ctx.get_action(layer, row, col)),
+            KeymapOp::Set {
+                layer,
+                row,
+                col,
+                keycode,
+            } => {
+                self.ctx.set_action(layer, row, col, from_via_keycode(keycode)).await;
+                // Canonical read-back: what the position now holds.
+                to_via_keycode(self.ctx.get_action(layer, row, col))
+            }
+        }
+    }
+    // ===== END GLOVE80 PATCH =====
+}
+
 impl Runnable for VialService<'_> {
     async fn run(&mut self) -> ! {
         loop {
-            let (transport, output_data) = HOST_REQUEST_CHANNEL.receive().await;
-            let mut report = ViaReport {
-                input_data: output_data,
-                output_data,
-            };
-            self.process_via_packet(&mut report).await;
-            try_send_host_reply(transport, report.input_data);
+            // GLOVE80 PATCH: also service host-protocol keymap operations,
+            // one at a time, interleaved with Vial packets.
+            match embassy_futures::select::select(
+                HOST_REQUEST_CHANNEL.receive(),
+                crate::keymap_ops_pipe::KEYMAP_OPS.receive(),
+            )
+            .await
+            {
+                embassy_futures::select::Either::First((transport, output_data)) => {
+                    let mut report = ViaReport {
+                        input_data: output_data,
+                        output_data,
+                    };
+                    self.process_via_packet(&mut report).await;
+                    try_send_host_reply(transport, report.input_data);
+                }
+                embassy_futures::select::Either::Second(op) => {
+                    let result = self.process_keymap_op(op).await;
+                    crate::keymap_ops_pipe::KEYMAP_OP_RESULTS.send(result).await;
+                }
+            }
         }
     }
 }
