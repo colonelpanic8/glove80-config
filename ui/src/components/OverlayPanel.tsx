@@ -16,6 +16,7 @@ import {
   type Effect,
 } from "../lib/host-protocol";
 import type { OverlayWriteResult, ProtocolClient } from "../lib/protocol-client";
+import { CHANNEL_CEILING } from "../lib/compositor-preview";
 import { Board, type BoardCell } from "./Board";
 import { BrushControls } from "./BrushControls";
 
@@ -302,6 +303,12 @@ export function OverlayPanel({ client, capabilities, brush, onBrushChange, onSta
               onPointerUp={(event) => void applyBrightness(Number((event.target as HTMLInputElement).value))}
             />
           </label>
+          <p className="ceiling-note">
+            Effective ceiling: <strong>{CHANNEL_CEILING}/255</strong> (80%) — the compile-time
+            safety cap (MoErgo's LED current limit). The firmware can lower it at runtime, but the
+            protocol exposes no ceiling command yet, so runtime ceiling control is pending protocol
+            support.
+          </p>
         </section>
 
         <section className="scene-tools">

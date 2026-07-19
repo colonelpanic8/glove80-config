@@ -146,7 +146,30 @@ feature bit 7).
   suite and demo mode.
 - `src/components/` — `Board` (the shared keyboard rendering, protocol key
   space = LED chain order), `BrushControls`, `OverlayPanel`, `ConfigPanel`,
-  `KeymapPanel`.
+  `KeymapPanel`, `TogglePanel`, `CellEditor`.
+
+## Advanced compositor UI
+
+- **Toggles tab**: probes all 32 toggle ids on connect (GET_TOGGLE) so
+  device-configured toggles appear automatically; live on/off switches
+  (SET_TOGGLE), boot-state and persist flags (config blob bits), and chips
+  listing the records each toggle activates (click to jump to the record).
+- **Toggle names** are host-side only — the blob cannot carry them. They
+  persist per keyboard identity in localStorage and travel in a
+  `.names.json` sidecar next to exported blobs; importing a blob looks for
+  its sidecar.
+- **Record depth** (config tab): per-cell effect parameter editing with
+  codec-range validation, drag or button reordering ("later records win
+  within a class"), duplicate/delete, and solo-preview of one record on
+  the board.
+- **Composed preview**: a client-side simulation
+  (`src/lib/compositor-preview.ts`, fixture-tested against the Rust
+  compositor's semantics) renders the full stack for any chosen layer,
+  toggle states, and sample host cells — animations included. It is a
+  simulation and labeled as such; the keyboard itself stays untouched.
+- **Effective ceiling**: shown read-only beside brightness. The protocol
+  currently has no ceiling command; runtime ceiling control awaits a
+  protocol addition.
 
 `npm test` covers the codec against the golden vectors, the frame layer, the
 mock device's protocol semantics (including the config session state

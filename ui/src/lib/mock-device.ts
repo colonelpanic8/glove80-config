@@ -520,11 +520,15 @@ export class MockTransport implements Transport {
   }
 }
 
-/** A demo keyboard preloaded with a small, presentable persistent config. */
+/** A demo keyboard preloaded with a small, presentable persistent config:
+ * a base scene, a layer accent, and two toggles (one persisted and on at
+ * boot, one neither) so the switchboard and the composed preview have real
+ * material to demonstrate. */
 export function createDemoKeyboard(): MockKeyboard {
   const teal = { kind: "solid" as const, r: 0x2b, g: 0xd4, b: 0xc0, periodMs: 0, phaseMs: 0, dutyPercent: 0 };
   const amber = { kind: "breathe" as const, r: 0xf5, g: 0xa5, b: 0x24, periodMs: 2400, phaseMs: 0, dutyPercent: 0 };
   const red = { kind: "blink" as const, r: 0xf0, g: 0x5d, b: 0x3e, periodMs: 900, phaseMs: 0, dutyPercent: 40 };
+  const violet = { kind: "breathe" as const, r: 0x9b, g: 0x6c, b: 0xff, periodMs: 1800, phaseMs: 0, dutyPercent: 0 };
   return new MockKeyboard({
     initialConfig: {
       togglePersistMask: 1 << 2,
@@ -541,6 +545,10 @@ export function createDemoKeyboard(): MockKeyboard {
         {
           activation: { kind: "toggle", id: 2 },
           cells: [34, 74].map((key) => ({ key, effect: red })),
+        },
+        {
+          activation: { kind: "toggle", id: 5 },
+          cells: [6, 7, 8, 9, 46, 47, 48, 49].map((key) => ({ key, effect: violet })),
         },
       ],
     },

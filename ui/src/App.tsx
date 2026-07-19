@@ -10,7 +10,10 @@ import { useEffect, useState } from "react";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { KeymapPanel } from "./components/KeymapPanel";
 import { OverlayPanel, type StatusUpdate } from "./components/OverlayPanel";
+import { TogglePanel } from "./components/TogglePanel";
 import { DEFAULT_BRUSH, type Brush } from "./lib/brush";
+import { useConfigDraft } from "./lib/config-draft";
+import { loadToggleMeta, OFFLINE_IDENTITY, saveToggleMeta, type ToggleMeta } from "./lib/toggle-meta";
 import {
   FEATURE_ATOMIC_REPLACE,
   FEATURE_BOOTLOADER_ENTRY,
@@ -32,7 +35,7 @@ import type { Transport, TransportKind } from "./lib/transport";
 import { connectWebBluetooth, webBluetoothSupported } from "./lib/webbluetooth-transport";
 import { connectWebHid, webHidSupported } from "./lib/webhid-transport";
 
-type PanelName = "overlay" | "config" | "keymap";
+type PanelName = "overlay" | "config" | "toggles" | "keymap";
 
 const FEATURE_NAMES: Array<[number, string]> = [
   [FEATURE_TTL, "TTL"],
@@ -121,6 +124,9 @@ export function App() {
   const [panel, setPanel] = useState<PanelName>("overlay");
   const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
   const [client, setClient] = useState<ProtocolClient | null>(null);
+  // The persistent-config draft is shared by the Persistent config and
+  // Toggles tabs (toggle boot/persist bits are blob fields).
+  const draft = useConfigDraft();
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [version, setVersion] = useState<VersionInfo | null>(null);
   const [connecting, setConnecting] = useState<TransportKind | null>(null);
@@ -128,6 +134,24 @@ export function App() {
     tone: "idle",
     message: "Connect a keyboard — or explore in demo mode",
   });
+
+  // Toggle names/added-ids live in this browser, keyed by keyboard identity
+  // (best available: transport kind + device label; "offline" otherwise).
+  const storageIdentity = client ? `${client.transport.kind}:${client.transport.label}` : OFFLINE_IDENTITY;
+  const [toggleMeta, setToggleMeta] = useState<ToggleMeta>(() => loadToggleMeta(OFFLINE_IDENTITY));
+  useEffect(() => {
+    setToggleMeta(loadToggleMeta(storageIdentity));
+  }, [storageIdentity]);
+  const updateToggleMeta = (update: (meta: ToggleMeta) => ToggleMeta) => {
+    setToggleMeta((current) => {
+      const next = update(current);
+      saveToggleMeta(storageIdentity, next);
+      return next;
+    });
+  };
+  const importToggleNames = (names: Record<number, string>) => {
+    updateToggleMeta((current) => ({ ...current, names: { ...current.names, ...names } }));
+  };
 
   useEffect(() => {
     return () => {
@@ -284,6 +308,15 @@ export function App() {
           </button>
           <button
             role="tab"
+            aria-selected={panel === "toggles"}
+            className={panel === "toggles" ? "selected" : ""}
+            onClick={() => setPanel("toggles")}
+            title="Named switches over toggle overlays: live control, boot state, persistence"
+          >
+            Toggles
+          </button>
+          <button
+            role="tab"
             aria-selected={panel === "keymap"}
             className={panel === "keymap" ? "selected" : ""}
             onClick={() => setPanel("keymap")}
@@ -316,6 +349,22 @@ export function App() {
           capabilities={capabilities}
           brush={brush}
           onBrushChange={setBrush}
+          onStatus={setStatus}
+          draft={draft}
+          toggleNames={toggleMeta.names}
+          onImportNames={importToggleNames}
+        />
+      ) : panel === "toggles" ? (
+        <TogglePanel
+          client={client}
+          capabilities={capabilities}
+          draft={draft}
+          meta={toggleMeta}
+          onMetaChange={updateToggleMeta}
+          onJumpToRecord={(index) => {
+            draft.setSelected(index);
+            setPanel("config");
+          }}
           onStatus={setStatus}
         />
       ) : (
