@@ -30,7 +30,7 @@
 //! encode time. Callers cannot bypass the clamp; the compositor's runtime
 //! ceiling can only lower the limit further, never raise it.
 
-use embassy_futures::select::{Either, Either3, select, select3};
+use embassy_futures::select::{Either, Either4, select, select4};
 use embassy_nrf::gpio::{Level, Output, OutputDrive, Pin};
 use embassy_nrf::peripherals::{PWM0, SPI3};
 use embassy_nrf::pwm::{DutyCycle, Prescaler, SimpleConfig, SimplePwm};
@@ -210,6 +210,10 @@ fn default_compositor() -> Compositor<NUM_LEDS> {
 pub struct LightingProcessor {
     chain: Ws2812Chain,
     compositor: Compositor<NUM_LEDS>,
+    /// Which split half this is, plus that half's lighting-sync state
+    /// (Phase 3): the central's authoritative right-half overlay store and
+    /// delta queue, or the peripheral's link-loss bookkeeping.
+    role: crate::split_lighting::SplitRole,
     /// Compositor-clock (embassy uptime, ms) deadline for the next
     /// self-driven frame change; `None` = fully static, no timer armed.
     next_wake_ms: Option<u64>,
@@ -231,14 +235,15 @@ fn now_ms() -> u64 {
 /// Bring up all lighting hardware for one half and return the processor that
 /// drives it.
 ///
-/// Left half: `init(p.SPI3, p.P0_27, p.P0_31, p.PWM0, p.P1_15)`.
-/// Right half: `init(p.SPI3, p.P0_13, p.P0_19, p.PWM0, p.P0_16)`.
+/// Left half: `init(p.SPI3, p.P0_27, p.P0_31, p.PWM0, p.P1_15, SplitRole::central())`.
+/// Right half: `init(p.SPI3, p.P0_13, p.P0_19, p.PWM0, p.P0_16, SplitRole::peripheral())`.
 pub fn init(
     spi: Peri<'static, SPI3>,
     data_pin: Peri<'static, impl Pin>,
     chain_power_pin: Peri<'static, impl Pin>,
     pwm: Peri<'static, PWM0>,
     status_led_pin: Peri<'static, impl Pin>,
+    role: crate::split_lighting::SplitRole,
 ) -> LightingProcessor {
     // Power up the LED chain rail immediately so it settles while the rest
     // of the firmware initializes; the first frame waits for
@@ -259,6 +264,7 @@ pub fn init(
     LightingProcessor {
         chain: Ws2812Chain::new(spi, data_pin),
         compositor: default_compositor(),
+        role,
         next_wake_ms: None,
         power_ready_at,
         _chain_power: chain_power,
@@ -277,16 +283,32 @@ impl LightingProcessor {
         }
     }
 
-    /// Apply one host-protocol request. This task owns the compositor, so
-    /// ALL host mutation funnels through here; the pure request semantics
-    /// live in [`crate::host_proto::apply`]. The response is routed back to
-    /// the requesting transport, then the frame re-renders immediately so a
-    /// host write is visible without waiting for another event.
+    /// Apply one host-protocol request. This task owns the compositor (and
+    /// the split-role state), so ALL host mutation funnels through here; the
+    /// request semantics live in [`crate::host_proto::apply`]. The response
+    /// is routed back to the requesting transport, then the frame re-renders
+    /// immediately so a host write is visible without waiting for another
+    /// event.
     async fn process_host_request(&mut self, req: crate::host_proto::HostRequest) {
-        let response =
-            crate::host_proto::apply(&mut self.compositor, req.request_id, &req.request, now_ms());
+        let response = crate::host_proto::apply(
+            &mut self.compositor,
+            &mut self.role,
+            req.request_id,
+            &req.request,
+            now_ms(),
+        );
         crate::host_proto::respond(req.transport, response).await;
         self.render_at(now_ms()).await;
+    }
+
+    /// The earliest self-driven wake: the compositor's next frame change or
+    /// the split role's next deadline (right-half TTL expiry / resync retry
+    /// on the central, link-loss overlay clear on the peripheral).
+    fn wake_deadline_ms(&self) -> Option<u64> {
+        match (self.next_wake_ms, self.role.next_deadline()) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
     }
 }
 
@@ -309,45 +331,73 @@ impl Processor for LightingProcessor {
     }
 
     /// Overrides the default loop: one initial frame after the chain rail
-    /// settles, then sleep on `select(next_wake deadline, next event, next
-    /// host request)`. The subscriber is created first so no early layer
-    /// change is lost; when the compositor reports nothing upcoming, no
-    /// timer is armed at all. Host requests arrive from the transport pumps
-    /// (`src/host_proto.rs`) and are the only path that mutates the host
-    /// overlay, brightness, or toggles — this task stays the compositor's
-    /// single owner. (On the peripheral no pump runs, so that select arm
-    /// simply never fires.)
+    /// settles, then sleep on `select(deadline, next event, next host
+    /// request, split-lighting traffic)`. The subscribers are created first
+    /// so no early layer change or link edge is lost; when neither the
+    /// compositor nor the split role reports anything upcoming, no timer is
+    /// armed at all (the no-ticker-when-static guarantee).
+    ///
+    /// Host requests arrive from the transport pumps (`src/host_pump.rs`)
+    /// and split messages from the vendored split pipe; both are applied
+    /// HERE, so this task stays the single owner of the compositor and the
+    /// split-role state. Per half:
+    ///
+    /// - Central: the host-request arm fires (pumps run), the app-message
+    ///   arm never does; link edges drive the reconnect resync.
+    /// - Peripheral: the host-request arm never fires (no pumps), the
+    ///   app-message arm applies forwarded overlay/state; link edges drive
+    ///   the link-loss grace clear.
     async fn process_loop(&mut self) -> ! {
         let mut sub = Self::subscriber();
+        // Watch capacity is 2; each binary takes exactly one receiver.
+        let mut link = rmk::split_app_pipe::SPLIT_APP_LINK
+            .receiver()
+            .expect("split link watch has a free receiver slot");
+        let requests = crate::host_proto::HOST_REQUESTS.receiver();
+        let app_rx = rmk::split_app_pipe::SPLIT_APP_RX.receiver();
         Timer::at(self.power_ready_at).await;
         self.render_at(now_ms()).await;
-        let requests = crate::host_proto::HOST_REQUESTS.receiver();
         loop {
-            match self.next_wake_ms {
-                Some(wake) => {
-                    match select3(
-                        Timer::at(Instant::from_millis(wake)),
-                        sub.next_event(),
-                        requests.receive(),
-                    )
-                    .await
-                    {
-                        Either3::First(()) => {
-                            // Tick-to-ms floor rounding can fire a hair
-                            // early; clamp so the compositor sees the
-                            // requested boundary as reached and always makes
-                            // progress.
-                            let now = now_ms().max(wake);
-                            self.render_at(now).await;
-                        }
-                        Either3::Second(event) => self.process(event).await,
-                        Either3::Third(req) => self.process_host_request(req).await,
-                    }
+            let wake = self.wake_deadline_ms();
+            let deadline = async {
+                match wake {
+                    Some(at) => Timer::at(Instant::from_millis(at)).await,
+                    None => core::future::pending::<()>().await,
                 }
-                None => match select(sub.next_event(), requests.receive()).await {
-                    Either::First(event) => self.process(event).await,
-                    Either::Second(req) => self.process_host_request(req).await,
-                },
+            };
+            match select4(
+                deadline,
+                sub.next_event(),
+                requests.receive(),
+                select(link.changed(), app_rx.receive()),
+            )
+            .await
+            {
+                Either4::First(()) => {
+                    // Tick-to-ms floor rounding can fire a hair early; clamp
+                    // so both the compositor and the role bookkeeping see the
+                    // requested boundary as reached and always make progress.
+                    let now = now_ms().max(wake.unwrap_or(0));
+                    self.role.service(&mut self.compositor, now);
+                    self.render_at(now).await;
+                }
+                Either4::Second(event) => self.process(event).await,
+                Either4::Third(req) => self.process_host_request(req).await,
+                Either4::Fourth(Either::First(up)) => {
+                    // Split-link edge; the next loop iteration re-arms the
+                    // deadline this may have created (resync / grace clear).
+                    self.role.on_link_change(up, now_ms());
+                }
+                Either4::Fourth(Either::Second(msg)) => {
+                    let now = now_ms();
+                    self.role.apply_message(&mut self.compositor, msg.payload(), now);
+                    // Drain any burst (e.g. a resync) before rendering so a
+                    // full overlay push costs one frame, not one per message.
+                    while let Ok(more) = app_rx.try_receive() {
+                        self.role.apply_message(&mut self.compositor, more.payload(), now);
+                    }
+                    self.render_at(now).await;
+                }
             }
         }
     }

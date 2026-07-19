@@ -16,11 +16,15 @@
 //!  BLE notifies  <──┘
 //! ```
 //!
-//! Split scope (Phase 2): overlay key space is `0..80` (left half `0..40`,
+//! Split scope (Phase 3): overlay key space is `0..80` (left half `0..40`,
 //! right half `40..80`). The central applies keys 0-39 locally; keys 40-79
-//! are accepted and reported per the protocol's `PARTIAL_APPLY` ack, but the
-//! cells themselves are dropped until Phase 3 adds split forwarding — they do
-//! not appear in `READ_OVERLAY` and nothing is queued for the peripheral.
+//! land in the central's authoritative right-half store
+//! ([`crate::split_lighting::CentralSplit`]) and are forwarded to the
+//! peripheral over the split application channel. Writes answer `OK` when
+//! the peripheral link is up and the deltas went out; `PARTIAL_APPLY`
+//! (listing the right-half keys) only when the peripheral is genuinely
+//! unavailable — the cells then land via the reconnect resync.
+//! `READ_OVERLAY` always reports all 80 keys from the central's stores.
 
 use embassy_sync::channel::Channel;
 use glove80_compositor::{Cell, Compositor, Rgb};
@@ -152,7 +156,8 @@ fn wire_ttl(ttl_ms: u32) -> Option<u32> {
 
 /// Split a batch's keys: `Err(())` if any key is outside `0..TOTAL_KEYS`
 /// (whole operation rejected, overlay untouched), otherwise the deduplicated
-/// right-half keys that Phase 2 must report as pending.
+/// right-half keys (protocol ids `40..80`) — reported as pending when the
+/// peripheral is unavailable.
 fn pending_right_half_keys<'a, I: Iterator<Item = &'a u8>>(
     keys: I,
 ) -> Result<heapless::Vec<u8, MAX_CELLS_PER_MESSAGE>, ()> {
@@ -172,20 +177,36 @@ fn pending_right_half_keys<'a, I: Iterator<Item = &'a u8>>(
 }
 
 /// Ack an overlay write: `OK` when fully applied, `PARTIAL_APPLY` listing the
-/// right-half keys accepted for (Phase 3) forwarding but not yet applied.
+/// right-half keys accepted on the central but not yet applied on the
+/// (unavailable) peripheral.
 fn overlay_ack(pending: heapless::Vec<u8, MAX_CELLS_PER_MESSAGE>) -> (Status, ResponsePayload) {
     let status = if pending.is_empty() { Status::Ok } else { Status::PartialApply };
     (status, ResponsePayload::OverlayAck { pending_keys: pending })
 }
 
+/// Right-half entries of a cell batch, remapped to the peripheral's LOCAL
+/// key space (protocol key − 40) with the wire effects converted.
+fn right_local_cells(
+    cells: &[glove80_host_protocol::CellWrite],
+) -> heapless::Vec<(u8, Cell), MAX_CELLS_PER_MESSAGE> {
+    let mut out = heapless::Vec::new();
+    for c in cells.iter().filter(|c| c.key >= LEDS_PER_HALF) {
+        // Capacity: right entries <= batch size <= the Vec's capacity.
+        let _ = out.push((c.key - LEDS_PER_HALF, effect_to_cell(&c.effect)));
+    }
+    out
+}
+
 /// Apply one decoded request to the compositor and produce its response.
 ///
-/// Pure with respect to everything but `comp`; MUST only be called by the
-/// compositor's single owner (the lighting task). A bootloader-entry OK sets
+/// Mutates only `comp` and `role` (the central's right-half store + split
+/// delta queue); MUST only be called by the compositor's single owner (the
+/// lighting task), which owns both. A bootloader-entry OK sets
 /// [`HostResponse::enter_bootloader`]; the transport pump reboots after the
 /// response is flushed.
 pub fn apply(
     comp: &mut Compositor<NUM_LEDS>,
+    role: &mut crate::split_lighting::SplitRole,
     request_id: u8,
     req: &Request,
     now_ms: u64,
@@ -204,7 +225,7 @@ pub fn apply(
         Request::SetCells { ttl_ms, cells } => {
             match pending_right_half_keys(cells.iter().map(|c| &c.key)) {
                 Err(()) => (Status::OutOfRange, ResponsePayload::Empty),
-                Ok(pending) => {
+                Ok(right_keys) => {
                     let mut ok = true;
                     for cell in cells.iter().filter(|c| c.key < LEDS_PER_HALF) {
                         // Cannot fail while keys < LEDS_PER_HALF <= overlay
@@ -217,42 +238,85 @@ pub fn apply(
                             break;
                         }
                     }
-                    if ok {
-                        overlay_ack(pending)
-                    } else {
+                    if !ok {
                         (Status::CapacityExceeded, ResponsePayload::Empty)
+                    } else {
+                        let delivered = if right_keys.is_empty() {
+                            true
+                        } else {
+                            match role.central_mut() {
+                                Some(split) => split.write_cells(
+                                    &right_local_cells(cells),
+                                    wire_ttl(*ttl_ms),
+                                    now_ms,
+                                ),
+                                None => false,
+                            }
+                        };
+                        overlay_ack(if delivered { heapless::Vec::new() } else { right_keys })
                     }
                 }
             }
         }
         Request::UnsetCells { keys } => match pending_right_half_keys(keys.iter()) {
             Err(()) => (Status::OutOfRange, ResponsePayload::Empty),
-            Ok(pending) => {
+            Ok(right_keys) => {
                 for &key in keys.iter().filter(|&&k| k < LEDS_PER_HALF) {
                     comp.host_unset(key);
                 }
-                overlay_ack(pending)
+                let delivered = if right_keys.is_empty() {
+                    true
+                } else {
+                    match role.central_mut() {
+                        Some(split) => {
+                            let mut local: heapless::Vec<u8, MAX_CELLS_PER_MESSAGE> =
+                                heapless::Vec::new();
+                            for &key in &right_keys {
+                                // Capacity: same length as right_keys.
+                                let _ = local.push(key - LEDS_PER_HALF);
+                            }
+                            split.unset_keys(&local, now_ms)
+                        }
+                        None => false,
+                    }
+                };
+                overlay_ack(if delivered { heapless::Vec::new() } else { right_keys })
             }
         },
         Request::ClearOverlay => {
-            // Phase 2: the right half can hold no host cells (nothing is ever
-            // forwarded), so a clear is fully effective -> plain OK.
             comp.host_clear();
-            overlay_ack(heapless::Vec::new())
+            // While the peripheral is unreachable its overlay state is
+            // unknowable (it self-clears only after the link-loss grace), so
+            // an offline clear is reported as PARTIAL_APPLY with an empty
+            // pending list, exactly as PROTOCOL.md specifies.
+            let delivered = match role.central_mut() {
+                Some(split) => split.clear(now_ms),
+                None => true,
+            };
+            let status = if delivered { Status::Ok } else { Status::PartialApply };
+            (status, ResponsePayload::OverlayAck { pending_keys: heapless::Vec::new() })
         }
         Request::ReadOverlay => {
             let mut cells: heapless::Vec<CellState, MAX_CELLS_PER_MESSAGE> = heapless::Vec::new();
-            for (key, cell, expires_at) in comp.host_cells() {
-                // Entries past their expiry linger until the next render;
-                // don't report them (their remaining TTL would be 0 = "no
-                // TTL" on the wire).
+            // Left half from the compositor, right half from the central's
+            // authoritative remote store — all 80 keys, TTLs included.
+            let left = comp.host_cells();
+            let right = role
+                .as_central()
+                .into_iter()
+                .flat_map(|split| split.remote_cells())
+                .map(|(key, cell, expires_at)| (key + LEDS_PER_HALF, cell, expires_at));
+            for (key, cell, expires_at) in left.chain(right) {
+                // Entries past their expiry linger until the next render /
+                // expiry sweep; don't report them (their remaining TTL would
+                // be 0 = "no TTL" on the wire).
                 let remaining_ttl_ms = match expires_at {
                     Some(at) if at <= now_ms => continue,
                     Some(at) => (at - now_ms).min(u32::MAX as u64) as u32,
                     None => 0,
                 };
                 if let Some(effect) = cell_to_effect(&cell) {
-                    // Capacity: at most 40 overlay cells << 80.
+                    // Capacity: at most 40 + 40 overlay cells == 80.
                     let _ = cells.push(CellState { key, effect, remaining_ttl_ms });
                 }
             }
@@ -261,16 +325,42 @@ pub fn apply(
         Request::ReplaceOverlay { ttl_ms, cells } => {
             match pending_right_half_keys(cells.iter().map(|c| &c.key)) {
                 Err(()) => (Status::OutOfRange, ResponsePayload::Empty),
-                Ok(pending) => {
+                Ok(right_keys) => {
                     let mut left: heapless::Vec<(u8, Cell, Option<u32>), MAX_CELLS_PER_MESSAGE> =
                         heapless::Vec::new();
                     for c in cells.iter().filter(|c| c.key < LEDS_PER_HALF) {
                         // Capacity: left cells <= batch size <= 80.
                         let _ = left.push((c.key, effect_to_cell(&c.effect), wire_ttl(*ttl_ms)));
                     }
-                    // Validate-first and atomic inside the compositor.
+                    // Validate-first and atomic inside the compositor; on
+                    // failure nothing (local or remote) has changed.
                     match comp.host_replace(&left, now_ms) {
-                        Ok(()) => overlay_ack(pending),
+                        Ok(()) => {
+                            // Replace covers the whole 80-key space: keys not
+                            // listed become transparent on the right half too,
+                            // so the remote store is always replaced (possibly
+                            // with nothing).
+                            let delivered = match role.central_mut() {
+                                Some(split) => split.replace_cells(
+                                    &right_local_cells(cells),
+                                    wire_ttl(*ttl_ms),
+                                    now_ms,
+                                ),
+                                None => right_keys.is_empty(),
+                            };
+                            if delivered {
+                                overlay_ack(heapless::Vec::new())
+                            } else {
+                                // Offline: listed right-half keys are pending;
+                                // an implicit right-half clear alone reports
+                                // PARTIAL_APPLY with an empty list, like
+                                // CLEAR_OVERLAY.
+                                (
+                                    Status::PartialApply,
+                                    ResponsePayload::OverlayAck { pending_keys: right_keys },
+                                )
+                            }
+                        }
                         Err(_) => (Status::CapacityExceeded, ResponsePayload::Empty),
                     }
                 }
@@ -281,6 +371,12 @@ pub fn apply(
         }
         Request::SetBrightness { level } => {
             comp.set_brightness(*level);
+            // Mirror shared state to the peripheral (best effort; the
+            // reconnect resync also carries it). Not an overlay write, so the
+            // ack is always plain OK with the value now in effect.
+            if let Some(split) = role.central_mut() {
+                split.notify_state(comp, now_ms);
+            }
             (Status::Ok, ResponsePayload::Brightness { level: comp.brightness() })
         }
         Request::GetToggle { id } => {
@@ -295,6 +391,10 @@ pub fn apply(
                 (Status::UnknownToggle, ResponsePayload::Empty)
             } else {
                 comp.set_toggle(*id, *state);
+                // See SetBrightness: shared state mirrors best-effort.
+                if let Some(split) = role.central_mut() {
+                    split.notify_state(comp, now_ms);
+                }
                 (Status::Ok, ResponsePayload::Toggle { id: *id, state: comp.toggle(*id) })
             }
         }
@@ -307,11 +407,15 @@ pub fn apply(
                         enter_bootloader = true;
                         (Status::Ok, ResponsePayload::Empty)
                     }
-                    // Peripheral bootloader entry needs the Phase 3 split
-                    // channel; unsupported for now. The protocol has no
-                    // dedicated "unsupported" status, so this reports the
-                    // target as out of range (documented in PROTOCOL.md's
-                    // transport addendum and the firmware README).
+                    // Still unsupported: RMK at our pinned revision has no
+                    // peripheral reboot-to-bootloader mechanism (dfu_split
+                    // only reboots into freshly flashed firmware, and is
+                    // disabled here). The protocol has no dedicated
+                    // "unsupported" status, so this reports the target as out
+                    // of range (documented in PROTOCOL.md's transport
+                    // addendum and the firmware README). The Phase 3 split
+                    // application channel would make this a one-message
+                    // addition when wanted.
                     BootTarget::Peripheral => (Status::OutOfRange, ResponsePayload::Empty),
                 }
             }

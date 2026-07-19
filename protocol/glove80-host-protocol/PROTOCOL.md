@@ -278,11 +278,15 @@ out).
 ### Phase 2 device status
 
 - Key indices `0..40` (left half) apply immediately on the central. Indices
-  `40..80` (right half) are accepted and acknowledged as pending via
-  `PARTIAL_APPLY`, but until split forwarding lands (Phase 3) the pending
-  cells are **dropped**: they never render, do not appear in `READ_OVERLAY`,
-  and `CLEAR_OVERLAY` answers plain `OK` (the right half can hold no host
-  cells yet, so a clear is trivially complete).
+  `40..80` (right half) are stored authoritatively on the central and
+  forwarded to the peripheral over the split link (Phase 3): overlay writes
+  answer `OK` when the peripheral is connected and the forward was
+  dispatched, and `PARTIAL_APPLY` (listing the right-half keys) only while
+  the peripheral is genuinely unavailable — the stored cells then apply via
+  the reconnect resync. `READ_OVERLAY` reports all 80 keys (TTLs included)
+  from the central's stores. `CLEAR_OVERLAY` / `REPLACE_OVERLAY` with the
+  peripheral offline answer `PARTIAL_APPLY` (for a bare right-half clear,
+  with `pending_count = 0` per the overlay-ack rules above).
 - `ENTER_BOOTLOADER` target 1 (peripheral) is not yet reachable and answers
   `OUT_OF_RANGE` (the protocol has no dedicated "unsupported" status);
   target 0 (central) works via the Adafruit bootloader.

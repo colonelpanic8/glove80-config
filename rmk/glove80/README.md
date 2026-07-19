@@ -161,22 +161,81 @@ both USB and BLE. Protocol work is split three ways:
   TTL/toggles/bootloader/atomic-replace/read-back/partial-apply — all backed
   by working code paths.
 
-Phase 2 split scope (documented in the PROTOCOL.md addendum): keys 0-39
-apply locally; keys 40-79 are accepted and reported pending via
-`PARTIAL_APPLY` but then dropped until Phase 3 forwards them (they never
-render and are absent from `READ_OVERLAY`; `CLEAR_OVERLAY` answers `OK`).
-Toggle ids 0-31 are accepted (the compositor's toggle bitmask; no default
-records reference them yet, so they have no visual effect until lighting
-config gains toggle records). `ENTER_BOOTLOADER` on target central answers
-OK, waits ~300 ms for the response to flush, then reboots via the Adafruit
-bootloader GPREGRET magic; target peripheral answers `OUT_OF_RANGE` until
-Phase 3.
+Split scope (upgraded by Phase 3, see "Split lighting transfer" below):
+keys 0-39 apply locally; keys 40-79 are stored authoritatively on the
+central and forwarded to the peripheral over the split link. Toggle ids
+0-31 are accepted (the compositor's toggle bitmask, now mirrored to the
+peripheral; no default records reference them yet, so they have no visual
+effect until lighting config gains toggle records). `ENTER_BOOTLOADER` on
+target central answers OK, waits ~300 ms for the response to flush, then
+reboots via the Adafruit bootloader GPREGRET magic; target peripheral still
+answers `OUT_OF_RANGE`: RMK at our pinned revision has no
+peripheral-reboot-to-bootloader mechanism (its `dfu_split` machinery only
+reboots into freshly flashed firmware and is disabled here). When wanted,
+the Phase 3 split application channel makes this a one-message addition.
 
 RMK is now consumed as a **vendored git subtree** at the previously pinned
 revision `1156f82` (`rmk/vendor/rmk`; implementation-plan.md expected this at
 Phase 3) because both the USB composite and the trouble-host GATT server are
 assembled inside RMK with no extension hook. `git log --grep=git-subtree-dir`
 shows the subtree provenance; keep patches minimal and marked.
+
+## Split lighting transfer (Phase 3)
+
+Host writes to keys 40-79 now light the right half. The central's
+compositor state stays authoritative for all 80 keys; the peripheral is a
+mirror that renders its 40. Three layers:
+
+- **Vendored split hook** (`GLOVE80 PATCH` sites): a bounded
+  application-message hook on the split protocol, written to be
+  upstreamable. `rmk/src/split_app_pipe.rs` (opaque `SplitAppData` payload
+  ≤ 26 bytes, bounded `SPLIT_APP_TX`/`SPLIT_APP_RX` channels, and a
+  state-based `SPLIT_APP_LINK` watch for link edges); a final
+  `SplitMessage::Application` variant (`rmk/src/split/mod.rs`, appended last
+  so existing discriminants are stable); the central's `PeripheralManager`
+  drains `SPLIT_APP_TX` as its lowest-priority outgoing arm and reports link
+  up/down (`rmk/src/split/driver.rs`); the peripheral forwards received
+  payloads into `SPLIT_APP_RX` with `try_send` and reports its link state
+  (`rmk/src/split/peripheral.rs`). The payload cap keeps
+  `SPLIT_MESSAGE_MAX_SIZE` at 32 (trouble's GATT arrays require ≤ 32, and
+  every split transfer — key events included — is that size on the wire).
+- **Sync codec + remote store** (`../glove80-compositor/src/sync.rs`,
+  host-tested): versioned messages `[version, tag, body]` — `SetCells`
+  (≤ 2 cells/message, LOCAL right-half keys 0-39, no TTL on the wire),
+  `UnsetKeys` (≤ 16), `Clear`, and `State` (brightness, effective ceiling,
+  toggle bitmap). Unknown versions/tags are ignored by receivers (new kinds
+  = new tags; breaking layouts bump the version). `RemoteOverlay` is the
+  central's authoritative right-half store with all TTL bookkeeping.
+- **Firmware glue** (`src/split_lighting.rs`): `CentralSplit` /
+  `PeripheralSplit`, owned by the lighting task on each half (the
+  compositor keeps exactly one owner). All queueing is `try_send` — split
+  lighting can never block key or event traffic, and the split driver
+  always polls its read arm first.
+
+Behavior:
+
+- **Forwarding**: right-half protocol writes update `RemoteOverlay` and go
+  out as deltas. `OK` means the peripheral was connected and the deltas
+  were dispatched; `PARTIAL_APPLY` (with the right-half keys) means the
+  peripheral is unavailable and the cells are stored pending. TTL authority
+  stays central-side: on expiry the central sends the unset (the peripheral
+  never sees TTLs).
+- **Reconnect resync**: on every link-up edge — and as the fallback
+  whenever the delta queue overflows — the central pushes the complete
+  right-half picture: `Clear`, every live cell, then `State`. Idempotent,
+  so replays and races with stale queued deltas are harmless (the leading
+  `Clear` wipes them).
+- **Link-loss policy**: the peripheral clears its host overlay 5 s after
+  losing the central (the TTL/authority for those cells is gone, so they
+  must not outlive it; the grace avoids flicker across routine reconnects,
+  which end in a resync anyway). Brightness/ceiling/toggles are kept across
+  link loss, like the synced layer state.
+- **Protocol semantics** (PROTOCOL.md addendum updated): writes to 40-79
+  answer `OK` when forwarded, `PARTIAL_APPLY` only when the peripheral is
+  genuinely unavailable; `READ_OVERLAY` reports all 80 keys with TTLs;
+  offline `CLEAR_OVERLAY`/`REPLACE_OVERLAY` answer `PARTIAL_APPLY` (empty
+  pending list for a bare clear). Peripheral bootloader entry remains
+  `OUT_OF_RANGE` (see "Host protocol transports" above).
 
 ## Building
 
@@ -247,6 +306,13 @@ uses the explicit `start_addr = 0xec000`. The warnings are cosmetic.
       placeholders are removed. RMK vendored as a subtree under
       `rmk/vendor/rmk` with marked patches. UF2 ranges after the change:
       left `0x26000`-`0x98da4`, right `0x26000`-`0x6f89c`.
+- [ ] Phase 3: split lighting transfer (built, awaiting hardware test).
+      Host writes to keys 40-79 forward to the right half over a bounded
+      split application channel; reconnects resync the full right-half
+      overlay + brightness/ceiling/toggles; the peripheral clears its host
+      overlay 5 s after losing the central (see "Split lighting transfer"
+      above). UF2 ranges after the change: left `0x26000`-`0x9ae24`, right
+      `0x26000`-`0x7109c`.
 
 ## Safety rules for flashing
 

@@ -4,6 +4,7 @@
 mod host_proto;
 mod host_pump;
 mod lighting;
+mod split_lighting;
 
 use rmk::macros::rmk_central;
 
@@ -13,10 +14,19 @@ mod keyboard_central {
     /// chain power enable on P0.31, rear power-button LED on PWM0 / P1.15.
     /// The body runs inside the generated `main` (where `p` holds the
     /// embassy-nrf peripherals); the returned processor's event loop is
-    /// joined with the other RMK tasks.
+    /// joined with the other RMK tasks. As the split central it also owns
+    /// the authoritative right-half overlay store and forwards lighting to
+    /// the peripheral (Phase 3, `split_lighting.rs`).
     #[register_processor(event)]
     fn lighting_processor() {
-        crate::lighting::init(p.SPI3, p.P0_27, p.P0_31, p.PWM0, p.P1_15)
+        crate::lighting::init(
+            p.SPI3,
+            p.P0_27,
+            p.P0_31,
+            p.PWM0,
+            p.P1_15,
+            crate::split_lighting::SplitRole::central(),
+        )
     }
 
     /// Host-protocol transport pumps (Phase 2, central only): reassemble and
