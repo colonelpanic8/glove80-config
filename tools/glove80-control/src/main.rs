@@ -116,6 +116,33 @@ enum ConfigCommand {
     /// Read the keyboard's active config and print a summary of both the
     /// keymap layers and the lighting records.
     Show,
+    /// Generate reusable canonical-config fragments.
+    Generate {
+        #[command(subcommand)]
+        command: ConfigGenerateCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigGenerateCommand {
+    /// Generate one colored indicator record per layer slot.
+    LayerIndicators {
+        /// Indicator LED keys, in comma/range syntax.
+        #[arg(long, default_value = "0-4")]
+        keys: String,
+        /// Gate indicators on the Magic layer (slot 2), or leave ungated.
+        #[arg(long, value_enum, default_value_t = IndicatorGate::Magic)]
+        gate: IndicatorGate,
+        /// Comma-separated colors, one per expanded key/layer.
+        #[arg(long, default_value = "blue,green,magenta,red,cyan")]
+        colors: String,
+    },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum IndicatorGate {
+    Magic,
+    None,
 }
 
 fn hostproto_selector(cli: &Cli) -> transport::Selector {
@@ -170,6 +197,19 @@ fn run(cli: Cli) -> Result<()> {
                 lightcfg::run_export(&hostproto_selector(&cli), file, *raw)
             }
             ConfigCommand::Show => lightcfg::run_show(&hostproto_selector(&cli)),
+            ConfigCommand::Generate { command } => match command {
+                ConfigGenerateCommand::LayerIndicators { keys, gate, colors } => {
+                    print!(
+                        "{}",
+                        lightcfg::generate_layer_indicators(
+                            keys,
+                            matches!(gate, IndicatorGate::Magic),
+                            colors,
+                        )?
+                    );
+                    Ok(())
+                }
+            },
         },
         Command::Lighting { command } => lighting::run(&hostproto_selector(&cli), command),
         Command::Keymap { command } => keymap::run(&hostproto_selector(&cli), command),

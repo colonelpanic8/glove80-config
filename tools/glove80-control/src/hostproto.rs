@@ -391,6 +391,11 @@ impl HostClient {
         Ok(capabilities)
     }
 
+    /// Require firmware support for nonzero config-record gate kinds.
+    pub fn config_gate_capabilities(&mut self) -> Result<Capabilities> {
+        self.require_feature(feature::CONFIG_GATES, "conditional lighting config gates")
+    }
+
     /// Largest CONFIG_DATA chunk that fits both the protocol bound and the
     /// device's advertised max message length.
     fn config_chunk_len(&mut self) -> Result<usize> {

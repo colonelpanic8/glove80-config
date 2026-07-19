@@ -32,8 +32,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 use glove80_host_protocol::{
-    decode_lighting_config, encode_lighting_config, ConfigActivation, ConfigRecord, EffectKind,
-    LightingConfig, CellWrite, Effect, CONFIG_MAGIC, CONFIG_TOGGLE_COUNT, MAX_CONFIG_BLOB_LEN,
+    decode_lighting_config, encode_lighting_config, CellWrite, ConfigActivation, ConfigGate,
+    ConfigRecord, Effect, EffectKind, LightingConfig, CONFIG_LAYER_COUNT, CONFIG_MAGIC,
+    CONFIG_TOGGLE_COUNT, MAX_CONFIG_BLOB_LEN,
 };
 
 use crate::hostproto::{ApplyStage, HostClient};
@@ -95,6 +96,11 @@ pub struct RecordEntry {
     /// `"always"`, `{ layer = N }` (N < 8), `{ layer = "id" }` (a stable
     /// `[[layer]]` id, resolved to its slot), or `{ toggle = N }` (N < 32).
     pub activation: ActivationSpec,
+    /// Optional second predicate ANDed with activation: `"usb"`,
+    /// `"charging"`, `"split-link"`, `{ layer = "id-or-n" }`, or
+    /// `{ toggle = n }`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<GateSpec>,
     /// Sparse key → effect entries; an unlisted key is transparent.
     #[serde(default, rename = "cells", skip_serializing_if = "Vec::is_empty")]
     pub cells: Vec<CellSpec>,
@@ -114,6 +120,24 @@ pub enum ActivationSpec {
 #[serde(rename_all = "lowercase")]
 pub enum NamedActivation {
     Always,
+}
+
+/// Optional conditional-lighting gate. Layer references use the same stable
+/// ID-or-slot form as layer activations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum GateSpec {
+    Named(NamedGate),
+    Layer { layer: LayerRef },
+    Toggle { toggle: u8 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NamedGate {
+    Usb,
+    Charging,
+    SplitLink,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -174,6 +198,40 @@ impl ActivationSpec {
     }
 }
 
+impl GateSpec {
+    fn to_config(&self, layers: &[LayerEntry]) -> Result<ConfigGate> {
+        Ok(match self {
+            GateSpec::Named(NamedGate::Usb) => ConfigGate::UsbConnected,
+            GateSpec::Named(NamedGate::Charging) => ConfigGate::Charging,
+            GateSpec::Named(NamedGate::SplitLink) => ConfigGate::SplitLinkUp,
+            GateSpec::Layer { layer } => {
+                ConfigGate::LayerActive(keymapcfg::resolve_layer_ref(layer, layers)?)
+            }
+            GateSpec::Toggle { toggle } => ConfigGate::Toggle(*toggle),
+        })
+    }
+
+    fn from_config(gate: ConfigGate) -> GateSpec {
+        match gate {
+            ConfigGate::LayerActive(layer) => GateSpec::Layer { layer: LayerRef::Index(layer) },
+            ConfigGate::Toggle(toggle) => GateSpec::Toggle { toggle },
+            ConfigGate::UsbConnected => GateSpec::Named(NamedGate::Usb),
+            ConfigGate::Charging => GateSpec::Named(NamedGate::Charging),
+            ConfigGate::SplitLinkUp => GateSpec::Named(NamedGate::SplitLink),
+        }
+    }
+
+    fn describe(&self) -> String {
+        match self {
+            GateSpec::Named(NamedGate::Usb) => "usb".into(),
+            GateSpec::Named(NamedGate::Charging) => "charging".into(),
+            GateSpec::Named(NamedGate::SplitLink) => "split-link".into(),
+            GateSpec::Layer { layer } => layer.describe(),
+            GateSpec::Toggle { toggle } => format!("toggle {toggle}"),
+        }
+    }
+}
+
 fn effect_kind(name: Option<&str>) -> Result<EffectKind> {
     match name.unwrap_or("solid") {
         "solid" => Ok(EffectKind::Solid),
@@ -230,9 +288,15 @@ pub fn file_to_config(file: &ConfigFile) -> Result<LightingConfig> {
             .activation
             .to_config(&file.layers)
             .with_context(|| format!("record {record_index} activation"))?;
+        let gate = record
+            .gate
+            .as_ref()
+            .map(|gate| gate.to_config(&file.layers))
+            .transpose()
+            .with_context(|| format!("record {record_index} gate"))?;
         config
             .records
-            .push(ConfigRecord { activation, cells })
+            .push(ConfigRecord { activation, gate, cells })
             .map_err(|_| anyhow!("too many [[record]] entries"))?;
     }
     Ok(config)
@@ -330,6 +394,7 @@ pub fn config_to_file(config: &LightingConfig) -> ConfigFile {
             }
             RecordEntry {
                 activation: ActivationSpec::from_config(record.activation),
+                gate: record.gate.map(GateSpec::from_config),
                 cells,
             }
         })
@@ -440,6 +505,7 @@ pub fn render_summary(config: &LightingConfig, blob_len: usize) -> String {
     let mut rows = vec![[
         "REC".to_string(),
         "ACTIVATION".into(),
+        "GATE".into(),
         "CELLS".into(),
         "KEYS".into(),
         "EFFECTS".into(),
@@ -456,12 +522,16 @@ pub fn render_summary(config: &LightingConfig, blob_len: usize) -> String {
         rows.push([
             index.to_string(),
             ActivationSpec::from_config(record.activation).describe(),
+            record
+                .gate
+                .map(GateSpec::from_config)
+                .map_or_else(|| "-".into(), |gate| gate.describe()),
             record.cells.len().to_string(),
             if keys.is_empty() { "-".into() } else { format_key_list(&keys) },
             if kinds.is_empty() { "-".into() } else { kinds.join(", ") },
         ]);
     }
-    let mut widths = [0usize; 5];
+    let mut widths = [0usize; 6];
     for row in &rows {
         for (width, column) in widths.iter_mut().zip(row) {
             *width = (*width).max(column.len());
@@ -591,6 +661,11 @@ pub fn apply_loaded(client: &mut HostClient, loaded: &Loaded) -> Result<()> {
 
 /// Transport-independent apply (unit-tested against the mock transport).
 pub fn apply_blob(client: &mut HostClient, blob: &[u8]) -> Result<()> {
+    let decoded = decode_lighting_config(blob)
+        .map_err(|error| anyhow!("config failed validation before apply: {error}"))?;
+    if decoded.records.iter().any(|record| record.gate.is_some()) {
+        client.config_gate_capabilities()?;
+    }
     let result = client.apply_config(blob, |stage| match stage {
         ApplyStage::Begun { total_len, blob_crc32 } => {
             println!("session opened: {total_len} bytes, crc32 {blob_crc32:08x}");
@@ -609,6 +684,59 @@ pub fn apply_blob(client: &mut HostClient, blob: &[u8]) -> Result<()> {
              any, remain in place)",
         )
     })
+}
+
+// ---------------------------------------------------------------------------
+// Generators
+// ---------------------------------------------------------------------------
+
+/// Build a canonical TOML fragment containing one layer-indicator record per
+/// key/color. Layer slots are assigned in order from 0; `gate_on_magic`
+/// attaches the conventional Magic-layer (slot 2) press-and-hold gate.
+pub fn generate_layer_indicators(
+    keys: &str,
+    gate_on_magic: bool,
+    colors: &str,
+) -> Result<String> {
+    let keys = parse_key_list(keys).context("invalid --keys list")?;
+    let colors: Vec<&str> = colors
+        .split(',')
+        .map(str::trim)
+        .filter(|color| !color.is_empty())
+        .collect();
+    if keys.is_empty() {
+        bail!("--keys must name at least one indicator key");
+    }
+    if keys.len() > CONFIG_LAYER_COUNT as usize {
+        bail!("layer indicators support at most {CONFIG_LAYER_COUNT} keys/layers");
+    }
+    if colors.len() != keys.len() {
+        bail!(
+            "--colors has {} entries but --keys expands to {} keys",
+            colors.len(),
+            keys.len()
+        );
+    }
+
+    let mut file = ConfigFile::default();
+    for (layer, (&key, color)) in keys.iter().zip(colors).enumerate() {
+        // Validate/color-normalize through the same parser used by ordinary
+        // records, but retain the friendly input spelling in generated TOML.
+        parse_color(color).with_context(|| format!("invalid --colors entry {layer}"))?;
+        file.records.push(RecordEntry {
+            activation: ActivationSpec::Layer { layer: LayerRef::Index(layer as u8) },
+            gate: gate_on_magic.then_some(GateSpec::Layer { layer: LayerRef::Index(2) }),
+            cells: vec![CellSpec {
+                keys: key.to_string(),
+                color: color.to_string(),
+                ..CellSpec::default()
+            }],
+        });
+    }
+    // Exercise full blob validation before emitting a fragment users may
+    // paste/apply.
+    file_to_blob(&file)?;
+    to_toml_file(&file)
 }
 
 /// `config export FILE [--raw]` and `config show` share this read path.
@@ -749,6 +877,14 @@ mod tests {
         }
     }
 
+    fn gated_capabilities() -> Capabilities {
+        Capabilities {
+            protocol_minor: glove80_host_protocol::PROTOCOL_VERSION_MINOR,
+            feature_bits: test_capabilities().feature_bits | feature::CONFIG_GATES,
+            ..test_capabilities()
+        }
+    }
+
     fn caps_handler(
         capabilities: Capabilities,
     ) -> impl FnMut(u8, &Request) -> Vec<Response> + Send + 'static {
@@ -798,6 +934,35 @@ cells = [
 activation = { toggle = 31 }
 "##;
 
+    const GATED_TOML: &str = r##"
+[[layer]]
+id = "base"
+
+[[layer]]
+id = "magic"
+
+[[record]]
+activation = "always"
+gate = "usb"
+cells = [{ keys = "0", color = "red" }]
+
+[[record]]
+activation = "always"
+gate = "charging"
+
+[[record]]
+activation = "always"
+gate = "split-link"
+
+[[record]]
+activation = "always"
+gate = { layer = "magic" }
+
+[[record]]
+activation = "always"
+gate = { toggle = 7 }
+"##;
+
     fn sample_config() -> LightingConfig {
         file_to_config(&parse_toml(SAMPLE_TOML).unwrap()).unwrap()
     }
@@ -830,7 +995,7 @@ activation = { toggle = 31 }
     /// and the two blob generations are byte-identical.
     #[test]
     fn toml_round_trip_is_stable() {
-        for toml_text in [SAMPLE_TOML, "", "[[record]]\nactivation = \"always\"\n"] {
+        for toml_text in [SAMPLE_TOML, GATED_TOML, "", "[[record]]\nactivation = \"always\"\n"] {
             let config = file_to_config(&parse_toml(toml_text).unwrap()).unwrap();
             let blob = file_to_blob(&parse_toml(toml_text).unwrap()).unwrap();
             let decoded = decode_lighting_config(&blob).unwrap();
@@ -841,6 +1006,31 @@ activation = { toggle = 31 }
             let blob2 = file_to_blob(&config_to_file(&config2)).unwrap();
             assert_eq!(blob2, blob, "blob-level round trip not byte-stable");
         }
+    }
+
+    #[test]
+    fn gate_syntax_maps_and_exports_all_wire_conditions() {
+        let file = parse_toml(GATED_TOML).unwrap();
+        let config = file_to_config(&file).unwrap();
+        let gates: Vec<Option<ConfigGate>> =
+            config.records.iter().map(|record| record.gate).collect();
+        assert_eq!(
+            gates,
+            vec![
+                Some(ConfigGate::UsbConnected),
+                Some(ConfigGate::Charging),
+                Some(ConfigGate::SplitLinkUp),
+                Some(ConfigGate::LayerActive(1)),
+                Some(ConfigGate::Toggle(7)),
+            ]
+        );
+
+        let exported = to_toml(&config).unwrap();
+        assert!(exported.contains("gate = \"usb\""), "{exported}");
+        assert!(exported.contains("gate = \"charging\""), "{exported}");
+        assert!(exported.contains("gate = \"split-link\""), "{exported}");
+        assert!(exported.contains("[record.gate]\nlayer = 1"), "{exported}");
+        assert!(exported.contains("[record.gate]\ntoggle = 7"), "{exported}");
     }
 
     #[test]
@@ -908,6 +1098,16 @@ activation = { toggle = 31 }
         let toml_text = "[[record]]\nactivation = { layer = 8 }\n";
         let error = file_to_blob(&parse_toml(toml_text).unwrap()).unwrap_err();
         assert!(error.to_string().contains("layer 8 out of range"), "{error}");
+
+        // Gate arguments use the same protocol bounds.
+        let toml_text =
+            "[[record]]\nactivation = \"always\"\ngate = { layer = 8 }\n";
+        let error = file_to_blob(&parse_toml(toml_text).unwrap()).unwrap_err();
+        assert!(error.to_string().contains("gate layer 8 out of range"), "{error}");
+        let toml_text =
+            "[[record]]\nactivation = \"always\"\ngate = { toggle = 32 }\n";
+        let error = file_to_blob(&parse_toml(toml_text).unwrap()).unwrap_err();
+        assert!(error.to_string().contains("gate toggle 32 out of range"), "{error}");
 
         // Toggle id out of range (checked while building the masks).
         let toml_text = "[[toggle]]\nid = 32\npersist = true\n";
@@ -1011,6 +1211,74 @@ activation = { toggle = 31 }
         let requests = requests.lock().unwrap();
         let Request::ConfigData { data, .. } = &requests[2] else { panic!() };
         assert_eq!(data.as_slice(), blob.as_slice());
+    }
+
+    #[test]
+    fn gated_apply_and_read_back_preserve_the_gate() {
+        let blob = file_to_blob(&parse_toml(
+            "[[record]]\nactivation = \"always\"\ngate = { toggle = 7 }\n\
+             cells = [{ keys = \"0\", color = \"red\" }]\n",
+        )
+        .unwrap())
+        .unwrap();
+        let returned = blob.clone();
+        let total_len = returned.len() as u32;
+        let mock = MockTransport::new()
+            .expect(caps_handler(gated_capabilities()))
+            .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigBegin)])
+            .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigData)])
+            .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigCommit)])
+            .expect(move |request_id, request| {
+                assert!(matches!(request, Request::ConfigRead { offset: 0, .. }));
+                vec![Response {
+                    request_id,
+                    command: Command::ConfigRead,
+                    status: Status::Ok,
+                    payload: ResponsePayload::ConfigData {
+                        total_len,
+                        data: heapless::Vec::from_slice(&returned).unwrap(),
+                    },
+                }]
+            });
+        let mut client = HostClient::new(Box::new(mock));
+        apply_blob(&mut client, &blob).unwrap();
+        let read_back = client.read_config().unwrap();
+        let decoded = decode_lighting_config(&read_back).unwrap();
+        assert_eq!(decoded.records[0].gate, Some(ConfigGate::Toggle(7)));
+    }
+
+    #[test]
+    fn gated_apply_requires_the_config_gates_feature() {
+        let blob = file_to_blob(&parse_toml(
+            "[[record]]\nactivation = \"always\"\ngate = \"usb\"\n",
+        )
+        .unwrap())
+        .unwrap();
+        let mock = MockTransport::new().expect(caps_handler(test_capabilities()));
+        let mut client = HostClient::new(Box::new(mock));
+        let error = apply_blob(&mut client, &blob).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("conditional lighting config gates"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    fn layer_indicator_generator_validates_and_honors_gate_selection() {
+        let text = generate_layer_indicators("10-12", true, "red,green,blue").unwrap();
+        let config = file_to_config(&parse_toml(&text).unwrap()).unwrap();
+        assert_eq!(config.records.len(), 3);
+        for (layer, record) in config.records.iter().enumerate() {
+            assert_eq!(record.activation, ConfigActivation::LayerActive(layer as u8));
+            assert_eq!(record.gate, Some(ConfigGate::LayerActive(2)));
+            assert_eq!(record.cells[0].key, 10 + layer as u8);
+        }
+
+        let text = generate_layer_indicators("4", false, "cyan").unwrap();
+        let config = file_to_config(&parse_toml(&text).unwrap()).unwrap();
+        assert_eq!(config.records[0].gate, None);
+        assert!(generate_layer_indicators("0-1", true, "red").is_err());
+        assert!(generate_layer_indicators("0", true, "not-a-color").is_err());
     }
 
     /// A blob larger than one chunk is split into strictly sequential
@@ -1263,6 +1531,7 @@ activation = { toggle = 31 }
             toggles: Vec::new(),
             records: vec![RecordEntry {
                 activation: ActivationSpec::Layer { layer: LayerRef::Id("lower".into()) },
+                gate: None,
                 cells: vec![CellSpec {
                     keys: "0-3".into(),
                     color: "#112233".into(),
