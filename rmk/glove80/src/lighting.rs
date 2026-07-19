@@ -1,4 +1,6 @@
-//! Minimum viable lighting engine for the Glove80 RMK port (spike stage 5).
+//! Lighting engine for the Glove80 RMK port: WS2812 driver (frame sink) plus
+//! the sparse lighting compositor (frame source, Phase 1 of
+//! docs/implementation-plan.md).
 //!
 //! This module owns all LED hardware on a half:
 //!
@@ -9,30 +11,33 @@
 //! - the rear power-button LED, a plain PWM output run at the same settings
 //!   ZMK uses (20 us period, ~5% duty).
 //!
-//! The design is a seed for the future sparse lighting compositor
-//! (docs/lighting-design.md): rendering is split into a
-//! *frame source* (today: a trivial "layer color on chain index 0" rule fed
-//! by RMK `LayerChangeEvent`s) and a *frame sink* ([`Ws2812Chain`], which
-//! encodes and DMAs a full 40-cell RGB frame). The compositor replaces the
-//! frame source; the driver, frame type, and task wiring stay.
+//! The frame source is the [`glove80_compositor`] crate: pure `no_std` logic
+//! (host-tested in its own workspace) that composes sparse records — base,
+//! layer, toggle, host overlay, status — into a [`Frame`], and reports when
+//! that frame can next change. [`LightingProcessor`] is the glue: it feeds
+//! the compositor RMK `LayerChangeEvent`s and the embassy clock, arms a
+//! deadline timer only when the compositor asks for one (static state keeps
+//! the no-ticker guarantee), skips the SPI write when the frame is
+//! unchanged, and pushes changed frames through [`Ws2812Chain`].
 //!
-//! Rendering is strictly event-driven: no ticker exists, frames are only
-//! encoded and transferred when an event arrives (plus one initial frame at
-//! boot). The WS2812 transfer is EasyDMA-timed in hardware, so BLE radio
-//! interrupts cannot stretch bit timings; a full 40-LED frame is ~1 KiB of
-//! SPI traffic (~2 ms at 4 MHz) with the CPU free during the transfer.
+//! The WS2812 transfer is EasyDMA-timed in hardware, so BLE radio interrupts
+//! cannot stretch bit timings; a full 40-LED frame is ~1 KiB of SPI traffic
+//! (~2 ms at 4 MHz) with the CPU free during the transfer.
 //!
 //! SAFETY / WARRANTY NOTE: [`Ws2812Chain`] hard-clamps every color channel to
-//! [`MAX_CHANNEL`] (80% of full scale) at encode time, per MoErgo's current
-//! limit. Callers cannot bypass the clamp; do not "fix" brightness by raising
-//! values above it elsewhere.
+//! [`CHANNEL_CEILING`] (80% of full scale, MoErgo's current limit — see the
+//! constant's definition in `glove80-compositor` for the full warning) at
+//! encode time. Callers cannot bypass the clamp; the compositor's runtime
+//! ceiling can only lower the limit further, never raise it.
 
+use embassy_futures::select::{Either, select};
 use embassy_nrf::gpio::{Level, Output, OutputDrive, Pin};
 use embassy_nrf::peripherals::{PWM0, SPI3};
 use embassy_nrf::pwm::{DutyCycle, Prescaler, SimpleConfig, SimplePwm};
 use embassy_nrf::spim::{self, Spim};
 use embassy_nrf::{Peri, bind_interrupts, peripherals};
 use embassy_time::{Duration, Instant, Timer};
+pub use glove80_compositor::{Activation, CHANNEL_CEILING, Cell, Compositor, Record, Rgb};
 use rmk::event::{EventSubscriber, LayerChangeEvent, SubscribableEvent};
 use rmk::processor::Processor;
 
@@ -59,34 +64,13 @@ bind_interrupts!(struct Irqs {
 ///
 /// i.e. chain indices 0-5 are the six thumb keys (top row 0 1 2, bottom row
 /// 3 4 5), 6-39 cover the main grid column by column, inner column first.
+/// The right half is the mirror image; the same chain indices land on the
+/// mirrored physical positions.
 pub const NUM_LEDS: usize = 40;
 
-/// One RGB cell of a lighting frame. Values are pre-clamp; the driver clamps
-/// each channel to [`MAX_CHANNEL`] when encoding.
-#[derive(Copy, Clone, Default, PartialEq, Eq)]
-pub struct Rgb {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-}
-
-impl Rgb {
-    pub const OFF: Self = Self::new(0, 0, 0);
-
-    pub const fn new(r: u8, g: u8, b: u8) -> Self {
-        Self { r, g, b }
-    }
-}
-
-/// A full frame for the per-key chain: one RGB cell per chain index.
-///
-/// This is the interface the future compositor renders into; anything that
-/// can produce a `Frame` can drive [`Ws2812Chain::write`].
+/// A full frame for the per-key chain: one RGB cell per chain index. This is
+/// what the compositor renders into and what [`Ws2812Chain::write`] encodes.
 pub type Frame = [Rgb; NUM_LEDS];
-
-/// Hard per-channel ceiling: 80% of full scale (MoErgo current/warranty
-/// limit). Enforced inside the driver at encode time.
-pub const MAX_CHANNEL: u8 = 204;
 
 /// SPI byte encoding a WS2812 "1" bit at 4 MHz (matches ZMK's
 /// `spi-one-frame`).
@@ -115,8 +99,8 @@ const STATUS_PWM_TOP: u16 = 320;
 const STATUS_PWM_DUTY: u16 = 16;
 
 /// Frame sink: owns SPIM3 and the EasyDMA-visible encode buffer, and applies
-/// the [`MAX_CHANNEL`] clamp. This is the driver layer the compositor will
-/// keep using unchanged.
+/// the [`CHANNEL_CEILING`] clamp. This driver layer is the hard safety
+/// backstop below the compositor.
 pub struct Ws2812Chain {
     spim: Spim<'static>,
     /// EasyDMA transmit buffer. Lives inside the (statically allocated) main
@@ -138,16 +122,16 @@ impl Ws2812Chain {
         }
     }
 
-    /// Encode `frame` (clamping every channel to [`MAX_CHANNEL`]) and DMA it
-    /// out. Returns after the transfer completes; the latch tail is part of
-    /// the transfer.
+    /// Encode `frame` (clamping every channel to [`CHANNEL_CEILING`]) and DMA
+    /// it out. Returns after the transfer completes; the latch tail is part
+    /// of the transfer.
     pub async fn write(&mut self, frame: &Frame) {
         let mut i = 0;
         for cell in frame {
             // Wire order is GRB.
             for channel in [cell.g, cell.r, cell.b] {
                 // Hard current clamp -- keep this in the driver.
-                let clamped = channel.min(MAX_CHANNEL);
+                let clamped = channel.min(CHANNEL_CEILING);
                 for bit in (0..8).rev() {
                     self.buf[i] = if clamped & (1 << bit) != 0 { ONE_FRAME } else { ZERO_FRAME };
                     i += 1;
@@ -161,8 +145,8 @@ impl Ws2812Chain {
     }
 }
 
-/// Per-layer colors for chain index 0, at full scale (the driver clamps each
-/// channel to [`MAX_CHANNEL`], so these render at the 80% safety ceiling).
+/// Per-layer accent colors, at full scale (the driver clamps each channel to
+/// [`CHANNEL_CEILING`], so these render at the 80% safety ceiling).
 /// Layer order matches keyboard.toml: Base, Lower, Magic, Games, Mac Hyper,
 /// then the three unassigned layers.
 const LAYER_COLORS: [Rgb; 8] = [
@@ -176,13 +160,79 @@ const LAYER_COLORS: [Rgb; 8] = [
     Rgb::new(255, 255, 255), // 7: white
 ];
 
-/// Event-driven lighting task. Registered with RMK via
+/// Dim white for the always-on base record on the thumb cluster.
+const BASE_THUMB_COLOR: Rgb = Rgb::new(24, 24, 24);
+
+/// Chain indices accented per layer: the top thumb row (0 1 2) and the inner
+/// main-grid column (6-9), i.e. the keys nearest the thumbs.
+const LAYER_ACCENT_KEYS: [u8; 7] = [0, 1, 2, 6, 7, 8, 9];
+
+/// Default lighting configuration for both halves.
+///
+/// - Base (always on): all six thumb keys dim white.
+/// - Per-layer accents: [`LAYER_ACCENT_KEYS`] in the active layer's color,
+///   replacing the base on keys 0-2 while the bottom thumb row (3-5) keeps
+///   showing the base through — composition and reveal are both visible on
+///   hardware.
+/// - Two host-overlay cells exercising animation and TTL before the host
+///   protocol exists (see below).
+fn default_compositor(now_ms: u64) -> Compositor<NUM_LEDS> {
+    let mut c = Compositor::new();
+
+    let mut base = Record::new(Activation::Always);
+    for key in 0..6u8 {
+        // Static counts within fixed capacities; unwrap is unreachable.
+        base.set(key, Cell::Solid { color: BASE_THUMB_COLOR }).unwrap();
+    }
+    c.add_record(base).unwrap();
+
+    for (layer, &color) in LAYER_COLORS.iter().enumerate() {
+        let mut accents = Record::new(Activation::LayerActive(layer as u8));
+        for &key in &LAYER_ACCENT_KEYS {
+            accents.set(key, Cell::Solid { color }).unwrap();
+        }
+        c.add_record(accents).unwrap();
+    }
+
+    // PHASE 2 PLACEHOLDERS -- delete when the host protocol feeds the
+    // overlay. Hardcoded host-overlay cells so hardware testing exercises
+    // composition, animation, and TTL expiry before any host exists:
+    // - chain index 10 (innermost top-row grid key): amber 1 Hz blink at 50%
+    //   duty, no TTL (survives until reboot).
+    // - chain index 34 (outermost top-row grid key): purple 3 s breathe that
+    //   expires -- and goes dark -- 30 s after boot.
+    c.host_set(
+        10,
+        Cell::Blink { color: Rgb::new(255, 128, 0), period_ms: 1000, phase_ms: 0, duty_pct: 50 },
+        None,
+        now_ms,
+    )
+    .unwrap();
+    c.host_set(
+        34,
+        Cell::Breathe { color: Rgb::new(128, 0, 255), period_ms: 3000, phase_ms: 0 },
+        Some(30_000),
+        now_ms,
+    )
+    .unwrap();
+
+    c
+}
+
+/// Event- and deadline-driven lighting task. Registered with RMK via
 /// `#[register_processor(event)]`; RMK joins its `process_loop` with the
-/// other firmware tasks. Today's frame source is "layer color on chain
-/// index 0"; the compositor later replaces exactly that part.
+/// other firmware tasks.
+///
+/// The loop sleeps until either a `LayerChangeEvent` arrives or the
+/// compositor's reported `next_wake` elapses; in both cases it re-renders
+/// and writes the frame only if it changed. When the compositor reports no
+/// upcoming change (`None`), no timer exists at all.
 pub struct LightingProcessor {
     chain: Ws2812Chain,
-    frame: Frame,
+    compositor: Compositor<NUM_LEDS>,
+    /// Compositor-clock (embassy uptime, ms) deadline for the next
+    /// self-driven frame change; `None` = fully static, no timer armed.
+    next_wake_ms: Option<u64>,
     /// First moment the chain's 5 V rail is considered stable.
     power_ready_at: Instant,
     /// Chain power enable (active high). Held for the lifetime of the
@@ -191,6 +241,11 @@ pub struct LightingProcessor {
     /// Rear power-button LED. The PWM peripheral free-runs in hardware; kept
     /// alive here so the pin is not released.
     _status_pwm: SimplePwm<'static>,
+}
+
+/// The compositor's abstract clock: embassy uptime in milliseconds.
+fn now_ms() -> u64 {
+    Instant::now().as_millis()
 }
 
 /// Bring up all lighting hardware for one half and return the processor that
@@ -223,7 +278,8 @@ pub fn init(
 
     LightingProcessor {
         chain: Ws2812Chain::new(spi, data_pin),
-        frame: [Rgb::OFF; NUM_LEDS],
+        compositor: default_compositor(now_ms()),
+        next_wake_ms: None,
         power_ready_at,
         _chain_power: chain_power,
         _status_pwm: status_pwm,
@@ -231,12 +287,14 @@ pub fn init(
 }
 
 impl LightingProcessor {
-    fn apply_layer(&mut self, layer: u8) {
-        self.frame[0] = LAYER_COLORS[layer as usize % LAYER_COLORS.len()];
-    }
-
-    async fn render(&mut self) {
-        self.chain.write(&self.frame).await;
+    /// Render at `now`, remember the next self-driven deadline, and write
+    /// the frame out only if it differs from the last one on the wire.
+    async fn render_at(&mut self, now: u64) {
+        let out = self.compositor.render(now);
+        self.next_wake_ms = out.next_wake_ms;
+        if out.changed {
+            self.chain.write(&out.frame).await;
+        }
     }
 }
 
@@ -254,21 +312,38 @@ impl Processor for LightingProcessor {
     }
 
     async fn process(&mut self, event: LayerChangeEvent) {
-        self.apply_layer(event.0);
-        self.render().await;
+        self.compositor.set_active_layer(event.0);
+        self.render_at(now_ms()).await;
     }
 
-    /// Overrides the default loop to draw one initial frame (after the chain
-    /// rail settles) before going fully event-driven. The subscriber is
-    /// created first so no early layer change is lost.
+    /// Overrides the default loop: one initial frame after the chain rail
+    /// settles, then sleep on `select(next_wake deadline, next event)`. The
+    /// subscriber is created first so no early layer change is lost; when
+    /// the compositor reports nothing upcoming, no timer is armed at all.
     async fn process_loop(&mut self) -> ! {
         let mut sub = Self::subscriber();
         Timer::at(self.power_ready_at).await;
-        self.apply_layer(0);
-        self.render().await;
+        self.render_at(now_ms()).await;
         loop {
-            let event = sub.next_event().await;
-            self.process(event).await;
+            match self.next_wake_ms {
+                Some(wake) => {
+                    match select(Timer::at(Instant::from_millis(wake)), sub.next_event()).await {
+                        Either::First(()) => {
+                            // Tick-to-ms floor rounding can fire a hair
+                            // early; clamp so the compositor sees the
+                            // requested boundary as reached and always makes
+                            // progress.
+                            let now = now_ms().max(wake);
+                            self.render_at(now).await;
+                        }
+                        Either::Second(event) => self.process(event).await,
+                    }
+                }
+                None => {
+                    let event = sub.next_event().await;
+                    self.process(event).await;
+                }
+            }
         }
     }
 }

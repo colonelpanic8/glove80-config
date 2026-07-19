@@ -10,6 +10,9 @@ description = "RMK firmware spike for the MoErgo Glove80 (see docs/rmk-evaluatio
 [workspace]
 
 [dependencies]
+# The sparse lighting compositor (docs/lighting-design.md): pure no_std
+# logic, unit-tested on the host in its own workspace.
+glove80-compositor = { path = "../glove80-compositor" }
 rmk = { git = "https://github.com/haobogu/rmk", rev = "1156f82bddecda6d3bcfce60adb7a6504083b9e8", features = [
     "nrf52840_ble",
     "split",
@@ -31,6 +34,7 @@ bt-hci = { version = "0.9", features = ["defmt"] }
 
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
+embassy-futures = "0.1"
 embassy-time = { version = "0.5", features = ["tick-hz-32_768", "defmt", "defmt-timestamp-uptime"] }
 embassy-nrf = { version = "0.11", features = [
     "defmt",

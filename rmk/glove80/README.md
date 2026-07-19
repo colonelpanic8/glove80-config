@@ -26,11 +26,13 @@ right data `P0.13`, enable `P0.19`; GRB, 40 LEDs per half, SPIM3 at 4 MHz)
 and the power-button PWM LED (left `P1.15`, right `P0.16`, 20 us period at
 ~5% duty). Still not ported: the Glove80-ext connector.
 
-## Lighting (Stage 5)
+## Lighting (Stage 5 driver + Phase 1 compositor)
 
-All lighting lives in `src/lighting.rs`; both binaries register it as a
-custom RMK processor from inside the `#[rmk_central]` / `#[rmk_peripheral]`
-module.
+Lighting is split between `src/lighting.rs` (hardware driver + RMK task
+glue) and the host-testable compositor crate in
+[`../glove80-compositor/`](../glove80-compositor/); both binaries register
+the lighting task as a custom RMK processor from inside the
+`#[rmk_central]` / `#[rmk_peripheral]` module.
 
 Integration decision: **stay on the macro flow**. Reading rmk-macro at our
 pinned revision showed the annotated mod supports exactly the extension
@@ -52,22 +54,49 @@ macro flow gives us:
   need to restructure `main` itself, `#[Overwritten(entry)]` and
   `add_interrupt!` exist as escape hatches before a full conversion.
 
-Design (compositor seed): `lighting.rs` splits into a frame sink
-(`Ws2812Chain`: SPIM3 + EasyDMA buffer, encodes a `Frame = [Rgb; 40]` in
-chain order) and a trivial frame source (`LightingProcessor` subscribed to
-RMK `LayerChangeEvent`s: the active layer picks the color of chain index 0,
-the thumb-cluster top-inner key). The compositor replaces the frame source
-and renders into the same `Frame`; driver and task wiring stay. Rendering is
-strictly event-driven -- one initial frame after the ~120 ms chain-power
-settle, then a frame per layer change; no periodic tick, nothing in the
-key-scan path. The right half renders locally but still tracks the active
-layer because RMK's split peripheral republishes the synced layer state as a
-local `LayerChangeEvent` (no split-protocol changes).
+Design: `lighting.rs` splits into a frame sink (`Ws2812Chain`: SPIM3 +
+EasyDMA buffer, encodes a `Frame = [Rgb; 40]` in chain order) and a frame
+source — the sparse lighting compositor (Phase 1 of
+`docs/implementation-plan.md`, contract in `docs/lighting-design.md`). The
+right half renders locally but still tracks the active layer because RMK's
+split peripheral republishes the synced layer state as a local
+`LayerChangeEvent` (no split-protocol changes).
+
+### Compositor (Phase 1)
+
+- `../glove80-compositor/`: pure-logic `no_std` crate, zero dependencies,
+  own workspace; `cargo test` runs the whole contract on the host. Time is
+  an abstract `now_ms: u64` input, the LED count a const generic.
+- Cell = `Transparent | Solid | Blink{period, phase, duty} |
+  Breathe{period, phase}`. A blinking cell's dark phase renders black — it
+  occludes, it does not become see-through.
+- Record = sparse `key -> Cell` map plus an activation predicate: `Always /
+  LayerActive(n) / Toggle(id) / HostOverlay / Status`. Fixed capacities:
+  16 records, 40 cells per record, 40 live host cells.
+- Composition is bottom-to-top by class (base, layer, toggle, host,
+  status), insertion order within a class; defined cells replace,
+  transparent reveals.
+- Host overlay slot: `host_set` / `host_unset` / `host_clear` /
+  `host_replace` (atomic, the force-sync primitive) / `host_cells`
+  (read-back), each cell with an optional TTL; on expiry the cell reverts
+  to transparent, enforced compositor-side against the passed-in clock.
+- Global brightness scalar plus a runtime *effective ceiling* applied at
+  composition output. `CHANNEL_CEILING` (204 = 80%, the MoErgo
+  current/warranty limit — full warning at its definition in the compositor
+  crate) is the compile-time value; `set_ceiling` can lower the effective
+  ceiling at runtime but can never raise it above the compiled constant,
+  and the driver clamp below remains the hard backstop either way.
+- `render(now)` returns the frame, a `changed` flag (unchanged frames skip
+  the SPI write), and `next_wake` — the next instant the frame can change
+  by itself (blink edge, 32 ms breathe tick, TTL expiry of a *visible*
+  cell). `None` means fully static: `LightingProcessor` arms no timer at
+  all, preserving the no-ticker-when-static guarantee. The processor loop
+  is `select(deadline, LayerChangeEvent)`; nothing runs in the key-scan
+  path.
 
 Current clamp: the driver (`Ws2812Chain::write`) hard-clamps every color
-channel to 204/255 (80%) at encode time, per MoErgo's current/warranty
-limit. Calling code cannot bypass it; the stock colors are far dimmer than
-the clamp anyway.
+channel to `CHANNEL_CEILING` at encode time. Calling code cannot bypass it;
+the compositor's effective ceiling only ever lowers the limit further.
 
 SPIM3/BLE coexistence: transfers are short (~1 KiB encoded, ~2 ms at 4 MHz)
 and EasyDMA-timed, so radio interrupts cannot stretch WS2812 bit timings;
@@ -81,18 +110,26 @@ What to observe when flashing (per half, in order):
 
 1. Immediately at boot: the rear power-button LED comes on dim (~5%) --
    this restores the ZMK "rear LED" behavior on both halves.
-2. ~120 ms after boot: the top-inner thumb key LED (chain index 0) lights
-   dim blue (layer 0) on the left half; same LED on the right half once it
-   has a synced layer state (also blue at boot).
-3. Holding the layer-1 key (left thumb Escape/LT or right-hand semicolon
-   LT) turns that LED green on the left half, and on the right half too
-   once the layer sync arrives; releasing returns it to blue. Layer colors:
-   0 blue, 1 green, 2 (Magic held) magenta, 3 (Games toggle) red, 4 (Mac
-   Hyper toggle) cyan.
-4. All other 39 key LEDs stay dark (the frame drives them to off
-   explicitly, so no stale bootloader colors should persist).
-5. Typing latency/split behavior should be unchanged; lighting only runs on
-   layer events.
+2. ~120 ms after boot: all six thumb keys light dim white (base record),
+   then the top thumb row (3 keys) plus the four keys of the inner
+   main-grid column show the layer color — blue at layer 0. The bottom
+   thumb row (3 keys) stays dim white: the base showing through where the
+   layer record is transparent.
+3. Layer changes recolor exactly those seven accent keys on both halves
+   (right half after the layer sync): 1 Lower green, 2 Magic (held)
+   magenta, 3 Games (toggle) red, 4 Mac Hyper (toggle) cyan; returning to
+   base restores blue and the bottom thumb row never changes.
+4. Host-overlay placeholders (hardcoded Phase 2 stand-ins, marked in
+   `default_compositor`): the innermost top-row grid key blinks amber at
+   1 Hz / 50% duty for as long as the half is powered, and the outermost
+   top-row grid key breathes purple on a 3 s period until it expires — goes
+   dark — 30 s after boot (per-cell TTL). Together they prove composition,
+   animation timing, and firmware-side TTL expiry with no host attached.
+5. All other key LEDs stay dark (the frame drives them off explicitly, so
+   no stale bootloader colors persist).
+6. Typing latency/split behavior should be unchanged; lighting renders only
+   on layer events and self-scheduled animation deadlines, and unchanged
+   frames are not even written to the chain.
 
 ## Building
 
@@ -103,6 +140,12 @@ What to observe when flashing (per half, in order):
 produces `glove80_lh_rmk.uf2` and `glove80_rh_rmk.uf2`. The toolchain is
 pinned in `rust-toolchain.toml`; RMK and nrf-sdc are pinned to exact revisions
 in `Cargo.toml`.
+
+The compositor's contract tests run on the host:
+
+```sh
+cd ../glove80-compositor && cargo test
+```
 
 Note: the RMK chip defaults for nrf52840 inject a `[dfu]` section, which makes
 config resolution print warnings that our `[storage]` addresses are ignored.
@@ -141,6 +184,12 @@ uses the explicit `start_addr = 0xec000`. The warnings are cosmetic.
       over SPIM3 with the layer color on chain index 0 (see "Lighting"
       above). UF2 ranges after the change: left `0x26000`-`0x94f94`,
       right `0x26000`-`0x6dde4`.
+- [ ] Phase 1: sparse lighting compositor (built, awaiting hardware test).
+      Pure-logic compositor crate (28 host tests passing) replaces the
+      stage-5 frame source on both halves: base + layer accents + hardcoded
+      host-overlay blink/breathe/TTL placeholders (see "Lighting" above).
+      UF2 ranges after the change: left `0x26000`-`0x959f4`, right
+      `0x26000`-`0x6ea7c`.
 
 ## Safety rules for flashing
 
