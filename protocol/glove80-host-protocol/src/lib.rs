@@ -20,9 +20,10 @@ mod message;
 
 pub use config::{
     crc32, decode_lighting_config, encode_lighting_config, ConfigActivation, ConfigError,
-    ConfigRecord, LightingConfig, CONFIG_BODY_HEADER_LEN, CONFIG_HEADER_LEN, CONFIG_KEY_COUNT,
-    CONFIG_LAYER_COUNT, CONFIG_MAGIC, CONFIG_RECORD_HEADER_LEN, CONFIG_TOGGLE_COUNT,
-    CONFIG_VERSION, MAX_CELLS_PER_RECORD, MAX_CONFIG_BLOB_LEN, MAX_CONFIG_RECORDS,
+    ConfigGate, ConfigRecord, LightingConfig, CONFIG_BODY_HEADER_LEN, CONFIG_HEADER_LEN,
+    CONFIG_KEY_COUNT, CONFIG_LAYER_COUNT, CONFIG_MAGIC, CONFIG_RECORD_HEADER_LEN,
+    CONFIG_TOGGLE_COUNT, CONFIG_VERSION, MAX_CELLS_PER_RECORD, MAX_CONFIG_BLOB_LEN,
+    MAX_CONFIG_RECORDS,
 };
 pub use error::{DecodeError, EncodeError, FrameError};
 pub use message::{
@@ -36,8 +37,9 @@ pub const PROTOCOL_VERSION_MAJOR: u8 = 1;
 /// Protocol minor version. Minor bumps are additive. 1.1 adds persistent
 /// lighting configuration (CONFIG_* commands, the config blob format); 1.2
 /// adds keymap editing (KEYMAP_* commands, VIA 16-bit keycodes); 1.3 adds
-/// build-identity reporting (GET_VERSION).
-pub const PROTOCOL_VERSION_MINOR: u8 = 3;
+/// build-identity reporting (GET_VERSION); 1.4 adds per-record gates to the
+/// config blob (conditional lighting, `CONFIG_GATES` feature bit).
+pub const PROTOCOL_VERSION_MINOR: u8 = 4;
 
 /// Bit 7 of the opcode byte marks a response.
 pub const RESPONSE_FLAG: u8 = 0x80;

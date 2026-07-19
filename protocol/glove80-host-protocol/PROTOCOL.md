@@ -1,4 +1,4 @@
-# Glove80 host protocol v1.3
+# Glove80 host protocol v1.4
 
 Wire format for the host ↔ keyboard control channel (Phase 2). One message
 codec, transport-independent; a thin frame layer adapts it to USB raw HID
@@ -9,7 +9,8 @@ Rust test suite and consumed by both codecs:
 `protocol/vectors/host-protocol-v1.json` (v1.0, frozen — bytes never change),
 `protocol/vectors/host-protocol-v1.1.json` (the v1.1 additions, frozen),
 `protocol/vectors/host-protocol-v1.2.json` (the v1.2 additions, frozen) and
-`protocol/vectors/host-protocol-v1.3.json` (the v1.3 additions).
+`protocol/vectors/host-protocol-v1.3.json` (the v1.3 additions, frozen) and
+`protocol/vectors/host-protocol-v1.4.json` (conditional-lighting gates).
 
 ## Conventions
 
@@ -19,7 +20,7 @@ Rust test suite and consumed by both codecs:
 
 ## Versioning
 
-- `PROTOCOL_VERSION_MAJOR = 1`, `PROTOCOL_VERSION_MINOR = 3`.
+- `PROTOCOL_VERSION_MAJOR = 1`, `PROTOCOL_VERSION_MINOR = 4`.
 - v1.1 is purely additive over v1.0: the CONFIG_* commands (0x40–0x44), five
   config statuses (0x0A–0x0E), feature bit 6, the capability extension, and
   the config blob format. Every v1.0 message is byte-identical under v1.1.
@@ -29,6 +30,10 @@ Rust test suite and consumed by both codecs:
 - v1.3 is purely additive over v1.2: the GET_VERSION command (0x03) and
   feature bit 8. No new statuses, no capability extension. Every
   v1.0/v1.1/v1.2 message is byte-identical under v1.3.
+- v1.4 is a backward-compatible extension of the v1 config blob: feature bit
+  9 advertises per-record gates encoded in the record header's former
+  reserved `u16`. Ungated records retain the all-zero bytes, so every frozen
+  v1.0–v1.3 message and every ungated v1.1 blob remains byte-identical.
 - Major bump: breaking change. Minor bump: additive (new commands, new
   effect kinds, new feature bits).
 - Clients MUST send `GET_CAPABILITIES` first and MUST NOT assume any
@@ -149,6 +154,7 @@ Feature bits:
 | 6 | persistent config (CONFIG_* commands, v1.1) |
 | 7 | keymap editing (KEYMAP_* commands, v1.2) |
 | 8 | build-identity reporting (GET_VERSION, v1.3; no capability extension) |
+| 9 | conditional-lighting gates in config records (v1.4; no capability extension) |
 
 - The payload is extended strictly by appending, gated by feature bits:
   `max_config_blob_len` (the largest blob CONFIG_BEGIN accepts) is on the
@@ -334,12 +340,20 @@ Each record:
 | --- | --- | --- |
 | 0 | 1 | `activation` — 0 Always, 1 LayerActive, 2 Toggle |
 | 1 | 1 | `activation_arg` — layer (< 8) / toggle id (< 32); 0 for Always |
-| 2 | 2 | reserved — encode 0 |
+| 2 | 1 | `gate_kind` — 0 None, 1 LayerActive, 2 Toggle, 3 UsbConnected, 4 Charging, 5 SplitLinkUp (v1.4; formerly reserved) |
+| 3 | 1 | `gate_arg` — layer (< 8) / toggle id (< 32); 0 for None and state conditions (v1.4; formerly reserved) |
 | 4 | 1 | `cell_count` (≤ 40) |
 | 5 | 11·n | cells: `key u8` (< 80) + effect record (10 bytes, unchanged from v1) |
 
 - Host-overlay and status records are runtime state and **not persistable**;
   only activations 0–2 exist in a blob.
+- A gate is an optional second predicate ANDed with the record activation.
+  `gate_kind = 0, gate_arg = 0` means no gate and is exactly the encoding all
+  pre-v1.4 blobs already used for the reserved `u16`. Kinds 1 and 2 use the
+  same layer/toggle ranges as activations; kinds 3–5 require `gate_arg = 0`.
+- Hosts MUST only send nonzero gate kinds when capability feature bit 9 is
+  advertised. Firmware that does not recognize a gate kind rejects the blob
+  at CONFIG_COMMIT with `INVALID_CONFIG`; it does not partially apply it.
 - Record order in the blob = composition order within each activation class.
 - Records are sparse maps: an unlisted key is transparent. A key MUST NOT
   appear twice in one record (validation rejects duplicates).
@@ -351,8 +365,9 @@ Each record:
 - Validation (all enforced by both codecs and by firmware before commit):
   magic, version, `body_len` = actual body length, body CRC, `record_count`
   ≤ 16, `cell_count` ≤ 40, activation kind known, layer arg < 8, toggle arg
-  < 32, key < 80, no duplicate key per record, effect kind known, no
-  trailing bytes.
+  < 32, gate kind known, gate layer arg < 8, gate toggle arg < 32,
+  firmware-state gate args = 0, key < 80, no duplicate key per record,
+  effect kind known, no trailing bytes.
 
 ### Transfer session (apply direction)
 

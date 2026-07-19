@@ -35,6 +35,11 @@ pub mod feature {
     /// Build-identity reporting (GET_VERSION, v1.3). Adds no capability
     /// extension — the bit only gates the command.
     pub const VERSION_REPORT: u32 = 1 << 8;
+    /// Per-record gates in the config blob (conditional lighting, v1.4). Adds
+    /// no capability extension — the bit tells a host the firmware validates
+    /// and honors record gates. Older firmware accepts the all-zero reserved
+    /// value and rejects nonzero unknown gate kinds as an invalid config.
+    pub const CONFIG_GATES: u32 = 1 << 9;
 }
 
 /// Command opcodes (always < 0x80; responses set [`RESPONSE_FLAG`]).

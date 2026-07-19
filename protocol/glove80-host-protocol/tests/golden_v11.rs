@@ -34,6 +34,7 @@ fn sample_config() -> LightingConfig {
     records
         .push(ConfigRecord {
             activation: ConfigActivation::Always,
+            gate: None,
             cells: heapless::Vec::from_slice(&[
                 CellWrite { key: 0, effect: Effect::solid(10, 20, 30) },
                 CellWrite { key: 79, effect: Effect::blink(255, 0, 64, 1000, 250, 50) },
@@ -44,6 +45,7 @@ fn sample_config() -> LightingConfig {
     records
         .push(ConfigRecord {
             activation: ConfigActivation::LayerActive(3),
+            gate: None,
             cells: heapless::Vec::from_slice(&[CellWrite {
                 key: 40,
                 effect: Effect::breathe(16, 32, 48, 3000, 0),
@@ -52,7 +54,11 @@ fn sample_config() -> LightingConfig {
         })
         .unwrap();
     records
-        .push(ConfigRecord { activation: ConfigActivation::Toggle(7), cells: heapless::Vec::new() })
+        .push(ConfigRecord {
+            activation: ConfigActivation::Toggle(7),
+            gate: None,
+            cells: heapless::Vec::new(),
+        })
         .unwrap();
     LightingConfig {
         toggle_persist_mask: 0x0000_0080,
@@ -78,7 +84,7 @@ fn max_config() -> LightingConfig {
                 })
                 .unwrap();
         }
-        records.push(ConfigRecord { activation, cells }).unwrap();
+        records.push(ConfigRecord { activation, gate: None, cells }).unwrap();
     }
     LightingConfig { toggle_persist_mask: u32::MAX, toggle_initial_state: 0x5555_5555, records }
 }
@@ -146,6 +152,10 @@ fn error_name(e: ConfigError) -> &'static str {
         ConfigError::KeyOutOfRange(_) => "keyOutOfRange",
         ConfigError::DuplicateKey(_) => "duplicateKey",
         ConfigError::UnknownEffectKind(_) => "unknownEffectKind",
+        ConfigError::UnknownGate(_) => "unknownGate",
+        ConfigError::GateLayerOutOfRange(_) => "gateLayerOutOfRange",
+        ConfigError::GateToggleOutOfRange(_) => "gateToggleOutOfRange",
+        ConfigError::GateArgNonZero(_) => "gateArgNonZero",
     }
 }
 

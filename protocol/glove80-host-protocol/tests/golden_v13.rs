@@ -6,16 +6,17 @@
 //! `GLOVE80_WRITE_VECTORS=1 cargo test --test golden_v13`. The v1.0/v1.1/v1.2
 //! vectors are frozen and never change.
 //!
-//! Unlike the older suites this one uses the live crate version constants:
-//! it IS the current-version suite. When v1.4 lands, freeze the literals
-//! here the same way `golden_v12.rs` froze its own.
+//! These vectors are **frozen at v1.3**: the version numbers and feature bits
+//! below are literals (not the crate constants) so a later minor bump can
+//! never change a v1.3 byte. v1.4 vectors live in `golden_v14.rs` /
+//! `host-protocol-v1.4.json`.
 
 mod common;
 
 use common::{message_vectors, Message};
 use glove80_host_protocol::{
     Capabilities, Command, HalfVersion, Request, Response, ResponsePayload, Status, VersionInfo,
-    MAX_CONFIG_BLOB_LEN, MAX_MESSAGE_LEN, PROTOCOL_VERSION_MAJOR, PROTOCOL_VERSION_MINOR,
+    MAX_CONFIG_BLOB_LEN, MAX_MESSAGE_LEN,
 };
 use serde_json::{json, Value};
 
@@ -27,8 +28,9 @@ const FILE_NAME: &str = "host-protocol-v1.3.json";
 /// and the feature bits.
 fn glove80_caps() -> Capabilities {
     Capabilities {
-        protocol_major: PROTOCOL_VERSION_MAJOR,
-        protocol_minor: PROTOCOL_VERSION_MINOR,
+        // Frozen v1.3 stamp; see the module comment.
+        protocol_major: 1,
+        protocol_minor: 3,
         led_count_left: 40,
         led_count_right: 40,
         layer_capacity: 8,
@@ -145,7 +147,8 @@ fn messages() -> Vec<(&'static str, Message)> {
 
 fn golden_doc() -> Value {
     json!({
-        "protocol": { "major": PROTOCOL_VERSION_MAJOR, "minor": PROTOCOL_VERSION_MINOR },
+        // Frozen v1.3 stamp; see the module comment.
+        "protocol": { "major": 1, "minor": 3 },
         "generatedBy": "protocol/glove80-host-protocol tests/golden_v13.rs (GLOVE80_WRITE_VECTORS=1 cargo test --test golden_v13)",
         "messages": message_vectors(&messages()),
     })

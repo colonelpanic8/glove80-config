@@ -22,7 +22,8 @@
 //!   records: record_count x {
 //!     activation     u8   (0 always, 1 layer-active, 2 toggle)
 //!     activation_arg u8   (layer < 8 / toggle id < 32; 0 for always)
-//!     reserved       u16  (encode 0)
+//!     gate_kind      u8   (0 no gate, else a condition kind; was reserved)
+//!     gate_arg       u8   (layer/toggle id, or 0; was reserved)
 //!     cell_count     u8   (<= 40)
 //!     cells: cell_count x { key u8 (< 80), effect (10-byte v1 record) }
 //!   }
@@ -32,6 +33,24 @@
 //! class. Sparse maps: a key absent from a record is transparent; a key may
 //! appear at most once per record. Host-overlay and status records are not
 //! persistable.
+//!
+//! ## Gates (conditional lighting)
+//!
+//! The per-record `gate_kind`/`gate_arg` bytes occupy what was a reserved
+//! `u16` (the low byte is `gate_kind`, the high byte `gate_arg`, matching the
+//! little-endian `u16`). An optional **gate** is a second condition that must
+//! also hold for the record to compose (a logical AND with the activation).
+//! `gate_kind == 0` is "no gate" — every pre-gate blob wrote 0 into these
+//! bytes, so old blobs decode unchanged and re-encode byte-identically, and
+//! the blob format version is NOT bumped. Old firmware accepts the all-zero
+//! reserved value but rejects a nonzero (unknown) gate kind as
+//! `INVALID_CONFIG`; firmware that advertises gates validates and honors the
+//! mapping below. Hosts learn whether a keyboard understands gates from the
+//! `CONFIG_GATES` capability feature bit.
+//!
+//! Gate kinds mirror the compositor's condition wire mapping:
+//! `1` layer-active(arg `< 8`), `2` toggle(arg `< 32`), `3` usb-connected,
+//! `4` charging, `5` split-link-up (kinds 3–5 require `gate_arg == 0`).
 
 use heapless::Vec;
 
@@ -100,11 +119,74 @@ impl ConfigActivation {
     }
 }
 
-/// One persistable lighting record: an activation predicate plus a sparse
-/// key → effect map.
+/// An optional per-record gate: a second condition that must also hold for
+/// the record to compose (a logical AND with the activation). The wire
+/// `(kind, arg)` mapping mirrors the compositor's `Condition` so the same
+/// gate survives config transfer and split forwarding unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigGate {
+    /// Holds while this keymap layer (`< 8`) is active.
+    LayerActive(u8),
+    /// Holds while this toggle (`< 32`) is on.
+    Toggle(u8),
+    /// Holds while the central reports an active USB data connection.
+    UsbConnected,
+    /// Holds while this half sees USB bus power.
+    Charging,
+    /// Holds while this half's split link is up.
+    SplitLinkUp,
+}
+
+impl ConfigGate {
+    /// Wire `(gate_kind, gate_arg)` pair. `kind == 0` is reserved for
+    /// "no gate" (see [`gate_to_wire`](ConfigGate::gate_to_wire)).
+    pub fn to_wire(self) -> (u8, u8) {
+        match self {
+            ConfigGate::LayerActive(layer) => (1, layer),
+            ConfigGate::Toggle(id) => (2, id),
+            ConfigGate::UsbConnected => (3, 0),
+            ConfigGate::Charging => (4, 0),
+            ConfigGate::SplitLinkUp => (5, 0),
+        }
+    }
+
+    /// Wire `(gate_kind, gate_arg)` for an optional gate; `None` is `(0, 0)`,
+    /// the all-zero bytes every ungated (and pre-gate) record writes.
+    pub fn gate_to_wire(gate: Option<ConfigGate>) -> (u8, u8) {
+        match gate {
+            None => (0, 0),
+            Some(g) => g.to_wire(),
+        }
+    }
+
+    /// Parse and range-check a wire `(gate_kind, gate_arg)` pair. `kind == 0`
+    /// is no gate (`Ok(None)`); a known kind with an in-range arg is
+    /// `Ok(Some(_))`; anything else is a [`ConfigError`] so the whole blob is
+    /// rejected before it can be applied.
+    pub fn from_wire(kind: u8, arg: u8) -> Result<Option<ConfigGate>, ConfigError> {
+        Ok(match kind {
+            0 => None,
+            1 if arg < CONFIG_LAYER_COUNT => Some(ConfigGate::LayerActive(arg)),
+            1 => return Err(ConfigError::GateLayerOutOfRange(arg)),
+            2 if arg < CONFIG_TOGGLE_COUNT => Some(ConfigGate::Toggle(arg)),
+            2 => return Err(ConfigError::GateToggleOutOfRange(arg)),
+            3..=5 if arg != 0 => return Err(ConfigError::GateArgNonZero(arg)),
+            3 => Some(ConfigGate::UsbConnected),
+            4 => Some(ConfigGate::Charging),
+            5 => Some(ConfigGate::SplitLinkUp),
+            k => return Err(ConfigError::UnknownGate(k)),
+        })
+    }
+}
+
+/// One persistable lighting record: an activation predicate, an optional
+/// [`gate`](Self::gate), and a sparse key → effect map.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigRecord {
     pub activation: ConfigActivation,
+    /// Optional gate condition (conditional lighting); `None` = ungated, the
+    /// default and the byte-compatible pre-gate case.
+    pub gate: Option<ConfigGate>,
     pub cells: Vec<CellWrite, MAX_CELLS_PER_RECORD>,
 }
 
@@ -157,6 +239,15 @@ pub enum ConfigError {
     DuplicateKey(u8),
     /// A cell's effect kind byte is unknown.
     UnknownEffectKind(u8),
+    /// A record's `gate_kind` is not a known condition kind (old firmware
+    /// rejects a future gate this way).
+    UnknownGate(u8),
+    /// Layer arg of a layer-active gate is `>= 8`.
+    GateLayerOutOfRange(u8),
+    /// Toggle arg of a toggle gate is `>= 32`.
+    GateToggleOutOfRange(u8),
+    /// A firmware-state gate (usb/charging/split-link) carried a nonzero arg.
+    GateArgNonZero(u8),
 }
 
 impl core::fmt::Display for ConfigError {
@@ -187,6 +278,16 @@ impl core::fmt::Display for ConfigError {
             }
             ConfigError::DuplicateKey(k) => write!(f, "key {k} appears twice in one record"),
             ConfigError::UnknownEffectKind(k) => write!(f, "unknown effect kind {k}"),
+            ConfigError::UnknownGate(k) => write!(f, "unknown gate kind {k}"),
+            ConfigError::GateLayerOutOfRange(a) => {
+                write!(f, "gate layer {a} out of range (< {CONFIG_LAYER_COUNT})")
+            }
+            ConfigError::GateToggleOutOfRange(a) => {
+                write!(f, "gate toggle {a} out of range (< {CONFIG_TOGGLE_COUNT})")
+            }
+            ConfigError::GateArgNonZero(a) => {
+                write!(f, "firmware-state gate carried nonzero arg {a}")
+            }
         }
     }
 }
@@ -252,7 +353,9 @@ pub fn encode_lighting_config(
         let (kind, arg) = record.activation.to_wire();
         w.u8(kind)?;
         w.u8(arg)?;
-        w.u16(0)?; // reserved
+        let (gate_kind, gate_arg) = ConfigGate::gate_to_wire(record.gate);
+        w.u8(gate_kind)?; // was reserved (low byte)
+        w.u8(gate_arg)?; // was reserved (high byte)
         w.u8(record.cells.len() as u8)?;
         for cell in &record.cells {
             w.u8(cell.key)?;
@@ -303,7 +406,9 @@ pub fn decode_lighting_config(bytes: &[u8]) -> Result<LightingConfig, ConfigErro
         let kind = r.u8()?;
         let arg = r.u8()?;
         let activation = ConfigActivation::from_wire(kind, arg)?;
-        let _reserved = r.u16()?;
+        let gate_kind = r.u8()?;
+        let gate_arg = r.u8()?;
+        let gate = ConfigGate::from_wire(gate_kind, gate_arg)?;
         let cell_count = r.u8()?;
         if cell_count as usize > MAX_CELLS_PER_RECORD {
             return Err(ConfigError::TooManyCells(cell_count));
@@ -324,7 +429,7 @@ pub fn decode_lighting_config(bytes: &[u8]) -> Result<LightingConfig, ConfigErro
             let _ = cells.push(CellWrite { key, effect });
         }
         // record_count <= MAX_CONFIG_RECORDS, so this cannot overflow.
-        let _ = records.push(ConfigRecord { activation, cells });
+        let _ = records.push(ConfigRecord { activation, gate, cells });
     }
     if r.remaining() != 0 {
         return Err(ConfigError::LengthMismatch);
@@ -347,6 +452,7 @@ mod tests {
         records
             .push(ConfigRecord {
                 activation: ConfigActivation::Always,
+                gate: None,
                 cells: Vec::from_slice(&[
                     CellWrite { key: 0, effect: Effect::solid(10, 20, 30) },
                     CellWrite { key: 79, effect: Effect::blink(255, 0, 64, 1000, 250, 50) },
@@ -357,6 +463,7 @@ mod tests {
         records
             .push(ConfigRecord {
                 activation: ConfigActivation::LayerActive(3),
+                gate: None,
                 cells: Vec::from_slice(&[CellWrite {
                     key: 40,
                     effect: Effect::breathe(16, 32, 48, 3000, 0),
@@ -367,6 +474,7 @@ mod tests {
         records
             .push(ConfigRecord {
                 activation: ConfigActivation::Toggle(31),
+                gate: None,
                 cells: Vec::new(),
             })
             .unwrap();
@@ -414,7 +522,13 @@ mod tests {
                     })
                     .unwrap();
             }
-            records.push(ConfigRecord { activation: ConfigActivation::Always, cells }).unwrap();
+            records
+                .push(ConfigRecord {
+                    activation: ConfigActivation::Always,
+                    gate: None,
+                    cells,
+                })
+                .unwrap();
         }
         let config = LightingConfig {
             toggle_persist_mask: u32::MAX,
@@ -524,6 +638,103 @@ mod tests {
         assert_eq!(decode_lighting_config(&bad), Err(ConfigError::UnknownEffectKind(9)));
     }
 
+    fn gated_config() -> LightingConfig {
+        let mut records = Vec::new();
+        // Layer-indicator gated on the Magic layer (press-and-hold status).
+        records
+            .push(ConfigRecord {
+                activation: ConfigActivation::LayerActive(2),
+                gate: Some(ConfigGate::LayerActive(2)),
+                cells: Vec::from_slice(&[CellWrite { key: 3, effect: Effect::solid(0, 0, 255) }])
+                    .unwrap(),
+            })
+            .unwrap();
+        // One record per firmware-state gate.
+        for (i, gate) in [
+            ConfigGate::UsbConnected,
+            ConfigGate::Charging,
+            ConfigGate::SplitLinkUp,
+            ConfigGate::Toggle(31),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            records
+                .push(ConfigRecord {
+                    activation: ConfigActivation::Always,
+                    gate: Some(gate),
+                    cells: Vec::from_slice(&[CellWrite {
+                        key: i as u8,
+                        effect: Effect::solid(10, 10, 10),
+                    }])
+                    .unwrap(),
+                })
+                .unwrap();
+        }
+        LightingConfig { toggle_persist_mask: 0, toggle_initial_state: 0, records }
+    }
+
+    #[test]
+    fn gated_config_roundtrips() {
+        let config = gated_config();
+        let bytes = encode(&config);
+        assert_eq!(decode_lighting_config(&bytes).unwrap(), config);
+        assert_eq!(encode(&decode_lighting_config(&bytes).unwrap()), bytes);
+    }
+
+    #[test]
+    fn ungated_blob_is_byte_identical_to_pre_gate() {
+        // The gate bytes are the old reserved u16: an ungated record still
+        // writes (0, 0) there, so a no-gate config is unchanged by this
+        // feature. Record 0 header starts at CONFIG_HEADER_LEN + 12.
+        let bytes = encode(&sample_config());
+        let rec0 = CONFIG_HEADER_LEN + CONFIG_BODY_HEADER_LEN;
+        assert_eq!(bytes[rec0 + 2], 0, "gate_kind byte is 0 for an ungated record");
+        assert_eq!(bytes[rec0 + 3], 0, "gate_arg byte is 0 for an ungated record");
+    }
+
+    #[test]
+    fn rejects_invalid_gates() {
+        // Record 0 header at body offset 12: activation(12), arg(13),
+        // gate_kind(14), gate_arg(15), cell_count(16).
+        let bad = mutated_body(|b| b[14] = 9);
+        assert_eq!(decode_lighting_config(&bad), Err(ConfigError::UnknownGate(9)));
+
+        let bad = mutated_body(|b| {
+            b[14] = 1; // layer gate
+            b[15] = 8; // >= CONFIG_LAYER_COUNT
+        });
+        assert_eq!(decode_lighting_config(&bad), Err(ConfigError::GateLayerOutOfRange(8)));
+
+        let bad = mutated_body(|b| {
+            b[14] = 2; // toggle gate
+            b[15] = 32; // >= CONFIG_TOGGLE_COUNT
+        });
+        assert_eq!(decode_lighting_config(&bad), Err(ConfigError::GateToggleOutOfRange(32)));
+
+        let bad = mutated_body(|b| {
+            b[14] = 3; // usb-connected gate
+            b[15] = 1; // must be 0
+        });
+        assert_eq!(decode_lighting_config(&bad), Err(ConfigError::GateArgNonZero(1)));
+    }
+
+    #[test]
+    fn gate_wire_maps_all_kinds() {
+        for gate in [
+            ConfigGate::LayerActive(7),
+            ConfigGate::Toggle(31),
+            ConfigGate::UsbConnected,
+            ConfigGate::Charging,
+            ConfigGate::SplitLinkUp,
+        ] {
+            let (k, a) = gate.to_wire();
+            assert_eq!(ConfigGate::from_wire(k, a), Ok(Some(gate)));
+        }
+        assert_eq!(ConfigGate::gate_to_wire(None), (0, 0));
+        assert_eq!(ConfigGate::from_wire(0, 0), Ok(None));
+    }
+
     #[test]
     fn effect_fields_roundtrip_verbatim() {
         // Ignored effect fields keep their bytes (byte-stable export).
@@ -531,6 +742,7 @@ mod tests {
         records
             .push(ConfigRecord {
                 activation: ConfigActivation::Always,
+                gate: None,
                 cells: Vec::from_slice(&[CellWrite {
                     key: 5,
                     effect: Effect {
