@@ -32,6 +32,11 @@ final phase.
   link-down-on-cancellation fix) so the patch set shrinks toward zero and
   the dependency returns to a plain pinned crate. A PATCHES.md inventory
   in the vendor directory keeps the fork surface reviewable.
+- **Patch style rule**: any new vendored-RMK patch is written as a generic
+  RMK extension point (a hook, channel, or registration mechanism any
+  keyboard could use), never as Glove80-specific logic inside RMK. Glove80
+  specifics live in our crates on top. This keeps every patch a candidate
+  upstream PR from the day it is written (see Phase 8).
 - **Old ZMK-era host code** (`protocol/proto`, `host-lighting/`, the
   protobuf/Studio parts of `ui/`): kept for reference, replaced by the new
   protocol; deleted at cutover.
