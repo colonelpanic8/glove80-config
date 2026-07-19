@@ -27,15 +27,16 @@ pub use config::{
 pub use error::{DecodeError, EncodeError, FrameError};
 pub use message::{
     decode_request, decode_response, encode_request, encode_response, feature, BootTarget,
-    Capabilities, CellState, CellWrite, Command, Effect, EffectKind, Request, Response,
-    ResponsePayload, Status,
+    Capabilities, CellState, CellWrite, Command, Effect, EffectKind, KeymapEntry, Request,
+    Response, ResponsePayload, Status,
 };
 
 /// Protocol major version. A major bump is a breaking change.
 pub const PROTOCOL_VERSION_MAJOR: u8 = 1;
 /// Protocol minor version. Minor bumps are additive. 1.1 adds persistent
-/// lighting configuration (CONFIG_* commands, the config blob format).
-pub const PROTOCOL_VERSION_MINOR: u8 = 1;
+/// lighting configuration (CONFIG_* commands, the config blob format); 1.2
+/// adds keymap editing (KEYMAP_* commands, VIA 16-bit keycodes).
+pub const PROTOCOL_VERSION_MINOR: u8 = 2;
 
 /// Bit 7 of the opcode byte marks a response.
 pub const RESPONSE_FLAG: u8 = 0x80;
@@ -55,6 +56,10 @@ pub const MAX_PING_LEN: usize = 64;
 /// Maximum config bytes carried by one CONFIG_DATA request or one
 /// CONFIG_READ response (fits comfortably under [`MAX_MESSAGE_LEN`]).
 pub const MAX_CONFIG_DATA_PER_MESSAGE: usize = 1024;
+/// Codec-side bound on keymap entries per KEYMAP_READ/KEYMAP_WRITE message
+/// (v1.2). Devices advertise their own (possibly smaller)
+/// `max_keymap_entries_per_op` in the capability response.
+pub const MAX_KEYMAP_ENTRIES_PER_MESSAGE: usize = 128;
 
 /// Required magic for `ENTER_BOOTLOADER`.
 pub const BOOTLOADER_MAGIC: u32 = 0xB007_10AD;

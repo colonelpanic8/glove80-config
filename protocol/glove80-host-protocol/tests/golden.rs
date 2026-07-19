@@ -46,8 +46,12 @@ fn messages() -> Vec<(&'static str, Message)> {
         overlay_cell_capacity: 80,
         max_message_len: MAX_MESSAGE_LEN as u16,
         feature_bits: 0x3F,
-        // Not on the wire: the persistent-config feature bit is clear.
+        // Not on the wire: the persistent-config and keymap feature bits are
+        // clear.
         max_config_blob_len: 0,
+        keymap_rows: 0,
+        keymap_cols: 0,
+        max_keymap_entries_per_op: 0,
     };
 
     vec![

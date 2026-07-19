@@ -7,8 +7,8 @@ use heapless::Vec;
 use crate::error::{DecodeError, EncodeError};
 use crate::io::{Reader, Writer};
 use crate::{
-    MAX_CELLS_PER_MESSAGE, MAX_CONFIG_DATA_PER_MESSAGE, MAX_PING_LEN, REQUEST_HEADER_LEN,
-    RESPONSE_FLAG, RESPONSE_HEADER_LEN,
+    MAX_CELLS_PER_MESSAGE, MAX_CONFIG_DATA_PER_MESSAGE, MAX_KEYMAP_ENTRIES_PER_MESSAGE,
+    MAX_PING_LEN, REQUEST_HEADER_LEN, RESPONSE_FLAG, RESPONSE_HEADER_LEN,
 };
 
 /// Feature bits advertised in [`Capabilities::feature_bits`].
@@ -28,6 +28,10 @@ pub mod feature {
     /// Persistent lighting configuration (CONFIG_* commands, v1.1). When set,
     /// the capability payload carries the `max_config_blob_len` extension.
     pub const PERSISTENT_CONFIG: u32 = 1 << 6;
+    /// Keymap editing (KEYMAP_* commands, v1.2). When set, the capability
+    /// payload carries the keymap extension (`keymap_rows`, `keymap_cols`,
+    /// `max_keymap_entries_per_op`).
+    pub const KEYMAP: u32 = 1 << 7;
 }
 
 /// Command opcodes (always < 0x80; responses set [`RESPONSE_FLAG`]).
@@ -50,6 +54,8 @@ pub enum Command {
     ConfigCommit = 0x42,
     ConfigAbort = 0x43,
     ConfigRead = 0x44,
+    KeymapRead = 0x50,
+    KeymapWrite = 0x51,
     EnterBootloader = 0x7F,
 }
 
@@ -76,6 +82,8 @@ impl Command {
             0x42 => Command::ConfigCommit,
             0x43 => Command::ConfigAbort,
             0x44 => Command::ConfigRead,
+            0x50 => Command::KeymapRead,
+            0x51 => Command::KeymapWrite,
             0x7F => Command::EnterBootloader,
             _ => return None,
         })
@@ -231,9 +239,21 @@ pub struct CellState {
     pub remaining_ttl_ms: u32,
 }
 
-/// Capability response payload (16 bytes; 20 with the v1.1 persistent-config
-/// extension). Tools must never assume capacities; everything they rely on is
-/// advertised here.
+/// One entry in a KEYMAP_WRITE batch: 4 bytes on the wire (v1.2). `keycode`
+/// is the VIA/Vial 16-bit keycode encoding — the same values Vial reads and
+/// writes over its own protocol.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeymapEntry {
+    pub layer: u8,
+    /// Grid position: `row * keymap_cols + col` in the advertised keymap
+    /// grid (independent of the LED key space).
+    pub key: u8,
+    pub keycode: u16,
+}
+
+/// Capability response payload (16 bytes; +4 with the v1.1 persistent-config
+/// extension, +4 more with the v1.2 keymap extension). Tools must never
+/// assume capacities; everything they rely on is advertised here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Capabilities {
     pub protocol_major: u8,
@@ -251,6 +271,14 @@ pub struct Capabilities {
     /// present **iff** `feature_bits` has [`feature::PERSISTENT_CONFIG`] set;
     /// otherwise it is absent and decodes as 0.
     pub max_config_blob_len: u32,
+    /// Keymap grid rows (v1.2). With `keymap_cols` and the trailing reserved
+    /// byte this 4-byte extension is on the wire **iff** `feature_bits` has
+    /// [`feature::KEYMAP`] set; otherwise absent and decodes as 0.
+    pub keymap_rows: u8,
+    /// Keymap grid columns (v1.2; see `keymap_rows`).
+    pub keymap_cols: u8,
+    /// Max entries per KEYMAP_READ/KEYMAP_WRITE (v1.2; see `keymap_rows`).
+    pub max_keymap_entries_per_op: u8,
 }
 
 /// Bootloader entry target half.
@@ -297,6 +325,13 @@ pub enum Request {
     ConfigAbort,
     /// Read `max_len` bytes of the active config blob starting at `offset`.
     ConfigRead { offset: u32, max_len: u16 },
+    /// Read up to `max_count` key actions on `layer`, starting at grid
+    /// position `start_key` (v1.2). The device answers with consecutive
+    /// positions; iterate to walk the whole grid.
+    KeymapRead { layer: u8, start_key: u8, max_count: u8 },
+    /// Write a batch of key actions (v1.2). Validated as a whole
+    /// (all-or-nothing): any out-of-range entry rejects the batch.
+    KeymapWrite { entries: Vec<KeymapEntry, MAX_KEYMAP_ENTRIES_PER_MESSAGE> },
     EnterBootloader { magic: u32, target: BootTarget },
 }
 
@@ -319,6 +354,8 @@ impl Request {
             Request::ConfigCommit => Command::ConfigCommit,
             Request::ConfigAbort => Command::ConfigAbort,
             Request::ConfigRead { .. } => Command::ConfigRead,
+            Request::KeymapRead { .. } => Command::KeymapRead,
+            Request::KeymapWrite { .. } => Command::KeymapWrite,
             Request::EnterBootloader { .. } => Command::EnterBootloader,
         }
     }
@@ -340,6 +377,13 @@ pub enum ResponsePayload {
     /// CONFIG_READ ok: `total_len` is the full blob length; `data` is the
     /// slice at the requested offset (empty at end of blob).
     ConfigData { total_len: u32, data: Vec<u8, MAX_CONFIG_DATA_PER_MESSAGE> },
+    /// KEYMAP_READ ok (v1.2): VIA 16-bit keycodes at consecutive grid
+    /// positions `start_key..start_key + keycodes.len()` on `layer`.
+    KeymapActions { layer: u8, start_key: u8, keycodes: Vec<u16, MAX_KEYMAP_ENTRIES_PER_MESSAGE> },
+    /// KEYMAP_WRITE ok (v1.2): per-entry canonical read-back — the keycode
+    /// now stored at each written position, in request order (differs from
+    /// the request when the encoding is not exactly representable).
+    KeymapWritten { keycodes: Vec<u16, MAX_KEYMAP_ENTRIES_PER_MESSAGE> },
 }
 
 /// A full response message.
@@ -417,6 +461,19 @@ pub fn encode_request(request_id: u8, req: &Request, out: &mut [u8]) -> Result<u
         Request::ConfigRead { offset, max_len } => {
             w.u32(*offset)?;
             w.u16(*max_len)?;
+        }
+        Request::KeymapRead { layer, start_key, max_count } => {
+            w.u8(*layer)?;
+            w.u8(*start_key)?;
+            w.u8(*max_count)?;
+        }
+        Request::KeymapWrite { entries } => {
+            w.u8(entries.len() as u8)?;
+            for e in entries {
+                w.u8(e.layer)?;
+                w.u8(e.key)?;
+                w.u16(e.keycode)?;
+            }
         }
         Request::EnterBootloader { magic, target } => {
             w.u32(*magic)?;
@@ -507,6 +564,28 @@ pub fn decode_request(bytes: &[u8]) -> Result<(u8, Request), DecodeError> {
             let max_len = r.u16()?;
             Request::ConfigRead { offset, max_len }
         }
+        Command::KeymapRead => {
+            let layer = r.u8()?;
+            let start_key = r.u8()?;
+            let max_count = r.u8()?;
+            Request::KeymapRead { layer, start_key, max_count }
+        }
+        Command::KeymapWrite => {
+            let count = r.u8()? as usize;
+            if count > MAX_KEYMAP_ENTRIES_PER_MESSAGE {
+                return Err(DecodeError::CapacityExceeded);
+            }
+            let mut entries = Vec::new();
+            for _ in 0..count {
+                let layer = r.u8()?;
+                let key = r.u8()?;
+                let keycode = r.u16()?;
+                entries
+                    .push(KeymapEntry { layer, key, keycode })
+                    .map_err(|_| DecodeError::CapacityExceeded)?;
+            }
+            Request::KeymapWrite { entries }
+        }
         Command::EnterBootloader => {
             let magic = r.u32()?;
             let target_byte = r.u8()?;
@@ -538,6 +617,8 @@ fn payload_matches(command: Command, status: Status, payload: &ResponsePayload) 
                 ResponsePayload::Empty,
             ) => true,
             (Command::ConfigRead, ResponsePayload::ConfigData { .. }) => true,
+            (Command::KeymapRead, ResponsePayload::KeymapActions { .. }) => true,
+            (Command::KeymapWrite, ResponsePayload::KeymapWritten { .. }) => true,
             (Command::EnterBootloader, ResponsePayload::Empty) => true,
             _ => false,
         },
@@ -574,6 +655,12 @@ pub fn encode_response(resp: &Response, out: &mut [u8]) -> Result<usize, EncodeE
             if c.feature_bits & feature::PERSISTENT_CONFIG != 0 {
                 w.u32(c.max_config_blob_len)?;
             }
+            if c.feature_bits & feature::KEYMAP != 0 {
+                w.u8(c.keymap_rows)?;
+                w.u8(c.keymap_cols)?;
+                w.u8(c.max_keymap_entries_per_op)?;
+                w.u8(0)?; // reserved
+            }
         }
         ResponsePayload::Echo { data } => w.bytes(data)?,
         ResponsePayload::OverlayAck { pending_keys } => {
@@ -596,6 +683,20 @@ pub fn encode_response(resp: &Response, out: &mut [u8]) -> Result<usize, EncodeE
         ResponsePayload::ConfigData { total_len, data } => {
             w.u32(*total_len)?;
             w.bytes(data)?;
+        }
+        ResponsePayload::KeymapActions { layer, start_key, keycodes } => {
+            w.u8(*layer)?;
+            w.u8(*start_key)?;
+            w.u8(keycodes.len() as u8)?;
+            for kc in keycodes {
+                w.u16(*kc)?;
+            }
+        }
+        ResponsePayload::KeymapWritten { keycodes } => {
+            w.u8(keycodes.len() as u8)?;
+            for kc in keycodes {
+                w.u16(*kc)?;
+            }
         }
     }
     let len = w.pos();
@@ -634,9 +735,18 @@ pub fn decode_response(bytes: &[u8]) -> Result<Response, DecodeError> {
                     max_message_len: r.u16()?,
                     feature_bits: r.u32()?,
                     max_config_blob_len: 0,
+                    keymap_rows: 0,
+                    keymap_cols: 0,
+                    max_keymap_entries_per_op: 0,
                 };
                 if caps.feature_bits & feature::PERSISTENT_CONFIG != 0 {
                     caps.max_config_blob_len = r.u32()?;
+                }
+                if caps.feature_bits & feature::KEYMAP != 0 {
+                    caps.keymap_rows = r.u8()?;
+                    caps.keymap_cols = r.u8()?;
+                    caps.max_keymap_entries_per_op = r.u8()?;
+                    let _reserved = r.u8()?;
                 }
                 ResponsePayload::Capabilities(caps)
             }
@@ -689,6 +799,30 @@ pub fn decode_response(bytes: &[u8]) -> Result<Response, DecodeError> {
                 data.extend_from_slice(r.bytes(len)?)
                     .map_err(|_| DecodeError::CapacityExceeded)?;
                 ResponsePayload::ConfigData { total_len, data }
+            }
+            Command::KeymapRead => {
+                let layer = r.u8()?;
+                let start_key = r.u8()?;
+                let count = r.u8()? as usize;
+                if count > MAX_KEYMAP_ENTRIES_PER_MESSAGE {
+                    return Err(DecodeError::CapacityExceeded);
+                }
+                let mut keycodes = Vec::new();
+                for _ in 0..count {
+                    keycodes.push(r.u16()?).map_err(|_| DecodeError::CapacityExceeded)?;
+                }
+                ResponsePayload::KeymapActions { layer, start_key, keycodes }
+            }
+            Command::KeymapWrite => {
+                let count = r.u8()? as usize;
+                if count > MAX_KEYMAP_ENTRIES_PER_MESSAGE {
+                    return Err(DecodeError::CapacityExceeded);
+                }
+                let mut keycodes = Vec::new();
+                for _ in 0..count {
+                    keycodes.push(r.u16()?).map_err(|_| DecodeError::CapacityExceeded)?;
+                }
+                ResponsePayload::KeymapWritten { keycodes }
             }
             Command::EnterBootloader => ResponsePayload::Empty,
             // All commands are covered above; this arm is unreachable.
@@ -778,6 +912,92 @@ mod tests {
         roundtrip_request(Request::ConfigCommit);
         roundtrip_request(Request::ConfigAbort);
         roundtrip_request(Request::ConfigRead { offset: 4096, max_len: 1024 });
+        roundtrip_request(Request::KeymapRead { layer: 3, start_key: 42, max_count: 84 });
+        roundtrip_request(Request::KeymapWrite {
+            entries: Vec::from_slice(&[
+                KeymapEntry { layer: 0, key: 0, keycode: 0x0004 },
+                KeymapEntry { layer: 7, key: 83, keycode: 0x5220 },
+            ])
+            .unwrap(),
+        });
+        roundtrip_request(Request::KeymapWrite { entries: Vec::new() });
+    }
+
+    #[test]
+    fn keymap_responses_roundtrip() {
+        roundtrip_response(Response {
+            request_id: 50,
+            command: Command::KeymapRead,
+            status: Status::Ok,
+            payload: ResponsePayload::KeymapActions {
+                layer: 2,
+                start_key: 10,
+                keycodes: Vec::from_slice(&[0x0000, 0x0001, 0x7C00, 0x0F00 | 0x04]).unwrap(),
+            },
+        });
+        roundtrip_response(Response {
+            request_id: 51,
+            command: Command::KeymapWrite,
+            status: Status::Ok,
+            payload: ResponsePayload::KeymapWritten {
+                keycodes: Vec::from_slice(&[0x0004, 0x5220]).unwrap(),
+            },
+        });
+        for status in [Status::OutOfRange, Status::CapacityExceeded] {
+            roundtrip_response(Response {
+                request_id: 52,
+                command: Command::KeymapWrite,
+                status,
+                payload: ResponsePayload::Empty,
+            });
+        }
+        // Keymap payloads only pair with their own commands.
+        let resp = Response {
+            request_id: 53,
+            command: Command::KeymapRead,
+            status: Status::Ok,
+            payload: ResponsePayload::KeymapWritten { keycodes: Vec::new() },
+        };
+        let mut buf = [0u8; 64];
+        assert_eq!(encode_response(&resp, &mut buf), Err(EncodeError::PayloadMismatch));
+    }
+
+    #[test]
+    fn max_keymap_batches_fit_in_max_message_len() {
+        let mut buf = [0u8; MAX_MESSAGE_LEN];
+        let mut entries = Vec::new();
+        for i in 0..MAX_KEYMAP_ENTRIES_PER_MESSAGE {
+            entries
+                .push(KeymapEntry { layer: (i % 8) as u8, key: (i % 84) as u8, keycode: i as u16 })
+                .unwrap();
+        }
+        let len = encode_request(1, &Request::KeymapWrite { entries }, &mut buf).unwrap();
+        assert!(len <= MAX_MESSAGE_LEN);
+        let mut keycodes = Vec::new();
+        for i in 0..MAX_KEYMAP_ENTRIES_PER_MESSAGE {
+            keycodes.push(i as u16).unwrap();
+        }
+        let len = encode_response(
+            &Response {
+                request_id: 1,
+                command: Command::KeymapRead,
+                status: Status::Ok,
+                payload: ResponsePayload::KeymapActions { layer: 0, start_key: 0, keycodes },
+            },
+            &mut buf,
+        )
+        .unwrap();
+        assert!(len <= MAX_MESSAGE_LEN);
+    }
+
+    #[test]
+    fn keymap_write_count_mismatch_rejected() {
+        // Says 2 entries, carries 1 (payload_len covers only one entry).
+        let mut buf = [0u8; 64];
+        let entries = Vec::from_slice(&[KeymapEntry { layer: 0, key: 1, keycode: 0x0004 }]).unwrap();
+        let len = encode_request(9, &Request::KeymapWrite { entries }, &mut buf).unwrap();
+        buf[4] = 2; // entry_count
+        assert_eq!(decode_request(&buf[..len]), Err(DecodeError::Truncated));
     }
 
     #[test]
@@ -870,6 +1090,9 @@ mod tests {
                 max_message_len: 1536,
                 feature_bits: 0x3F,
                 max_config_blob_len: 0,
+                keymap_rows: 0,
+                keymap_cols: 0,
+                max_keymap_entries_per_op: 0,
             }),
         });
         // v1.1: the persistent-config bit gates the blob-length extension.
@@ -889,6 +1112,32 @@ mod tests {
                 max_message_len: 1536,
                 feature_bits: 0x7F,
                 max_config_blob_len: 7148,
+                keymap_rows: 0,
+                keymap_cols: 0,
+                max_keymap_entries_per_op: 0,
+            }),
+        });
+        // v1.2: the keymap bit gates the keymap extension (here together
+        // with the persistent-config extension, in feature-bit order).
+        roundtrip_response(Response {
+            request_id: 1,
+            command: Command::GetCapabilities,
+            status: Status::Ok,
+            payload: ResponsePayload::Capabilities(Capabilities {
+                protocol_major: 1,
+                protocol_minor: 2,
+                led_count_left: 40,
+                led_count_right: 40,
+                layer_capacity: 8,
+                max_cells_per_op: 80,
+                effect_mask: 0b111,
+                overlay_cell_capacity: 80,
+                max_message_len: 1536,
+                feature_bits: 0xFF,
+                max_config_blob_len: 7148,
+                keymap_rows: 6,
+                keymap_cols: 14,
+                max_keymap_entries_per_op: 84,
             }),
         });
         roundtrip_response(Response {

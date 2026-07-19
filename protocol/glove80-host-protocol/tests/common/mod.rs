@@ -48,6 +48,8 @@ pub fn command_name(c: Command) -> &'static str {
         Command::ConfigCommit => "configCommit",
         Command::ConfigAbort => "configAbort",
         Command::ConfigRead => "configRead",
+        Command::KeymapRead => "keymapRead",
+        Command::KeymapWrite => "keymapWrite",
         Command::EnterBootloader => "enterBootloader",
     }
 }
@@ -140,6 +142,22 @@ pub fn request_json(req: &Request) -> Value {
             obj.insert("offset".into(), (*offset).into());
             obj.insert("maxLen".into(), (*max_len).into());
         }
+        Request::KeymapRead { layer, start_key, max_count } => {
+            obj.insert("layer".into(), (*layer).into());
+            obj.insert("startKey".into(), (*start_key).into());
+            obj.insert("maxCount".into(), (*max_count).into());
+        }
+        Request::KeymapWrite { entries } => {
+            obj.insert(
+                "entries".into(),
+                Value::Array(
+                    entries
+                        .iter()
+                        .map(|e| json!({ "layer": e.layer, "key": e.key, "keycode": e.keycode }))
+                        .collect(),
+                ),
+            );
+        }
         Request::EnterBootloader { magic, target } => {
             obj.insert("magic".into(), (*magic).into());
             obj.insert(
@@ -175,6 +193,12 @@ pub fn payload_json(p: &ResponsePayload) -> Value {
             if c.feature_bits & feature::PERSISTENT_CONFIG != 0 {
                 obj.insert("maxConfigBlobLen".into(), c.max_config_blob_len.into());
             }
+            // Mirrors the wire: present iff the keymap bit is set (v1.2).
+            if c.feature_bits & feature::KEYMAP != 0 {
+                obj.insert("keymapRows".into(), c.keymap_rows.into());
+                obj.insert("keymapCols".into(), c.keymap_cols.into());
+                obj.insert("maxKeymapEntriesPerOp".into(), c.max_keymap_entries_per_op.into());
+            }
             Value::Object(obj)
         }
         ResponsePayload::Echo { data } => json!({ "type": "echo", "dataHex": hex(data) }),
@@ -201,6 +225,16 @@ pub fn payload_json(p: &ResponsePayload) -> Value {
             "type": "configData",
             "totalLen": total_len,
             "dataHex": hex(data),
+        }),
+        ResponsePayload::KeymapActions { layer, start_key, keycodes } => json!({
+            "type": "keymapActions",
+            "layer": layer,
+            "startKey": start_key,
+            "keycodes": keycodes.iter().copied().collect::<Vec<u16>>(),
+        }),
+        ResponsePayload::KeymapWritten { keycodes } => json!({
+            "type": "keymapWritten",
+            "keycodes": keycodes.iter().copied().collect::<Vec<u16>>(),
         }),
     }
 }

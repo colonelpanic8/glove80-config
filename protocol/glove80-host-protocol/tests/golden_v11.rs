@@ -4,6 +4,11 @@
 //! this suite and the TypeScript suite. Regenerate with
 //! `GLOVE80_WRITE_VECTORS=1 cargo test --test golden_v11`. The v1.0 vectors
 //! (`host-protocol-v1.json`, `golden.rs`) are frozen and never change.
+//!
+//! These vectors are **frozen at v1.1**: version numbers and feature bits
+//! below are literals (not the crate constants) so that later minor bumps
+//! can never change a v1.1 byte. v1.2 vectors live in `golden_v12.rs` /
+//! `host-protocol-v1.2.json`.
 
 mod common;
 
@@ -13,7 +18,6 @@ use glove80_host_protocol::{
     ConfigActivation, ConfigError, ConfigRecord, Effect, LightingConfig, Request, Response,
     ResponsePayload, Status, CONFIG_HEADER_LEN, CONFIG_MAGIC, CONFIG_VERSION,
     MAX_CELLS_PER_RECORD, MAX_CONFIG_BLOB_LEN, MAX_CONFIG_RECORDS, MAX_MESSAGE_LEN,
-    PROTOCOL_VERSION_MAJOR, PROTOCOL_VERSION_MINOR,
 };
 use serde_json::{json, Value};
 
@@ -256,8 +260,9 @@ fn messages() -> Vec<(&'static str, Message)> {
 
     let blob = encode_config(&sample_config());
     let caps = Capabilities {
-        protocol_major: PROTOCOL_VERSION_MAJOR,
-        protocol_minor: PROTOCOL_VERSION_MINOR,
+        // Frozen v1.1 stamp; see the module comment.
+        protocol_major: 1,
+        protocol_minor: 1,
         led_count_left: 40,
         led_count_right: 40,
         layer_capacity: 8,
@@ -267,6 +272,10 @@ fn messages() -> Vec<(&'static str, Message)> {
         max_message_len: MAX_MESSAGE_LEN as u16,
         feature_bits: 0x7F,
         max_config_blob_len: MAX_CONFIG_BLOB_LEN as u32,
+        // Not on the wire: the keymap feature bit is clear at v1.1.
+        keymap_rows: 0,
+        keymap_cols: 0,
+        max_keymap_entries_per_op: 0,
     };
     let empty_ok = |id: u8, command: Command| {
         Resp(Response { request_id: id, command, status: Status::Ok, payload: ResponsePayload::Empty })
@@ -366,7 +375,8 @@ fn messages() -> Vec<(&'static str, Message)> {
 
 fn golden_doc() -> Value {
     json!({
-        "protocol": { "major": PROTOCOL_VERSION_MAJOR, "minor": PROTOCOL_VERSION_MINOR },
+        // Frozen v1.1 stamp; see the module comment.
+        "protocol": { "major": 1, "minor": 1 },
         "generatedBy": "protocol/glove80-host-protocol tests/golden_v11.rs (GLOVE80_WRITE_VECTORS=1 cargo test --test golden_v11)",
         "messages": message_vectors(&messages()),
         "configs": config_vectors(),
