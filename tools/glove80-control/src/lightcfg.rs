@@ -1,14 +1,28 @@
-//! Persistent lighting configuration: the canonical human-editable TOML
-//! representation of a [`LightingConfig`], and the `config
-//! apply/export/show/validate` subcommands that move it over the v1.1
-//! host-protocol session (CONFIG_BEGIN/DATA/COMMIT/READ).
+//! The canonical configuration file — the keyboard's whole personality in
+//! one TOML: `[[layer]]` keymap entries (see [`crate::keymapcfg`]) plus the
+//! persistent lighting config, and the `config apply/export/show/validate`
+//! subcommands that move both over the host protocol.
 //!
-//! The TOML file is the editing surface; the config **blob** (encoded and
+//! The two sections travel differently, and the CLI is explicit about it:
+//!
+//! - **lighting** is one blob applied through the v1.1 CONFIG session —
+//!   atomic: the keyboard ends up with the whole new lighting config or
+//!   keeps the old one;
+//! - **keymap** goes through batched v1.2 KEYMAP_WRITE calls — best-effort
+//!   per batch with read-back verification; a failed batch aborts the rest
+//!   and the CLI reports exactly what was written.
+//!
+//! Either section may be omitted: no `[[layer]]` keys = lighting-only
+//! (today's behavior), no `[[toggle]]`/`[[record]]` = keymap-only (the
+//! stored lighting config is left untouched).
+//!
+//! The TOML file is the editing surface; the lighting **blob** (encoded and
 //! validated exclusively by the `glove80-host-protocol` crate) is the unit
 //! of transfer and persistence. Round-trip guarantees:
 //!
-//! - text → config → blob → config → text is semantically stable (comments
-//!   and toggle names, which never enter the blob, are lost on export);
+//! - text → config → blob → config → text is semantically stable (comments,
+//!   toggle names, and layer IDs/names, which never enter the blob or the
+//!   firmware, are lost on export — layer IDs are re-synthesized);
 //! - blob → config → blob is byte-stable (protocol-crate guarantee, tested
 //!   end to end here).
 
@@ -23,6 +37,7 @@ use glove80_host_protocol::{
 };
 
 use crate::hostproto::{ApplyStage, HostClient};
+use crate::keymapcfg::{self, LayerEntry, LayerPlan, LayerRef};
 use crate::lighting::{build_effect, parse_color, parse_key_list};
 use crate::transport::{self, Selector};
 
@@ -30,10 +45,14 @@ use crate::transport::{self, Selector};
 // TOML schema
 // ---------------------------------------------------------------------------
 
-/// Top-level canonical lighting file.
+/// Top-level canonical configuration file: keymap layers + lighting.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigFile {
+    /// Keymap layers; position in the file = firmware layer slot. Layer
+    /// IDs/names are host-side only. Optional: omit for lighting-only.
+    #[serde(default, rename = "layer", skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<LayerEntry>,
     /// Per-toggle persistence/boot-state entries; unlisted toggles neither
     /// persist nor start on.
     #[serde(default, rename = "toggle", skip_serializing_if = "Vec::is_empty")]
@@ -42,6 +61,15 @@ pub struct ConfigFile {
     /// class.
     #[serde(default, rename = "record", skip_serializing_if = "Vec::is_empty")]
     pub records: Vec<RecordEntry>,
+}
+
+impl ConfigFile {
+    /// Does the file carry a lighting section? Only then does apply run
+    /// the (atomic) lighting session; a keymap-only file leaves the stored
+    /// lighting config untouched.
+    pub fn has_lighting(&self) -> bool {
+        !self.toggles.is_empty() || !self.records.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -64,19 +92,21 @@ pub struct ToggleEntry {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecordEntry {
-    /// `"always"`, `{ layer = N }` (N < 8), or `{ toggle = N }` (N < 32).
+    /// `"always"`, `{ layer = N }` (N < 8), `{ layer = "id" }` (a stable
+    /// `[[layer]]` id, resolved to its slot), or `{ toggle = N }` (N < 32).
     pub activation: ActivationSpec,
     /// Sparse key → effect entries; an unlisted key is transparent.
     #[serde(default, rename = "cells", skip_serializing_if = "Vec::is_empty")]
     pub cells: Vec<CellSpec>,
 }
 
-/// Activation predicate, `"always"` or a one-key table.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+/// Activation predicate, `"always"` or a one-key table. Layer references
+/// may be literal slot numbers (back-compat) or stable layer IDs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ActivationSpec {
     Named(NamedActivation),
-    Layer { layer: u8 },
+    Layer { layer: LayerRef },
     Toggle { toggle: u8 },
 }
 
@@ -113,26 +143,32 @@ pub struct CellSpec {
 // ---------------------------------------------------------------------------
 
 impl ActivationSpec {
-    fn to_config(self) -> ConfigActivation {
-        match self {
+    /// Resolve to the wire representation; layer IDs become slot numbers
+    /// via the file's `[[layer]]` list.
+    fn to_config(&self, layers: &[LayerEntry]) -> Result<ConfigActivation> {
+        Ok(match self {
             ActivationSpec::Named(NamedActivation::Always) => ConfigActivation::Always,
-            ActivationSpec::Layer { layer } => ConfigActivation::LayerActive(layer),
-            ActivationSpec::Toggle { toggle } => ConfigActivation::Toggle(toggle),
-        }
+            ActivationSpec::Layer { layer } => {
+                ConfigActivation::LayerActive(keymapcfg::resolve_layer_ref(layer, layers)?)
+            }
+            ActivationSpec::Toggle { toggle } => ConfigActivation::Toggle(*toggle),
+        })
     }
 
     fn from_config(activation: ConfigActivation) -> ActivationSpec {
         match activation {
             ConfigActivation::Always => ActivationSpec::Named(NamedActivation::Always),
-            ConfigActivation::LayerActive(layer) => ActivationSpec::Layer { layer },
+            ConfigActivation::LayerActive(layer) => {
+                ActivationSpec::Layer { layer: LayerRef::Index(layer) }
+            }
             ConfigActivation::Toggle(toggle) => ActivationSpec::Toggle { toggle },
         }
     }
 
-    fn describe(self) -> String {
+    fn describe(&self) -> String {
         match self {
             ActivationSpec::Named(NamedActivation::Always) => "always".into(),
-            ActivationSpec::Layer { layer } => format!("layer {layer}"),
+            ActivationSpec::Layer { layer } => layer.describe(),
             ActivationSpec::Toggle { toggle } => format!("toggle {toggle}"),
         }
     }
@@ -190,12 +226,13 @@ pub fn file_to_config(file: &ConfigFile) -> Result<LightingConfig> {
                     .map_err(|_| anyhow!("record {record_index}: too many cells"))?;
             }
         }
+        let activation = record
+            .activation
+            .to_config(&file.layers)
+            .with_context(|| format!("record {record_index} activation"))?;
         config
             .records
-            .push(ConfigRecord {
-                activation: record.activation.to_config(),
-                cells,
-            })
+            .push(ConfigRecord { activation, cells })
             .map_err(|_| anyhow!("too many [[record]] entries"))?;
     }
     Ok(config)
@@ -297,7 +334,7 @@ pub fn config_to_file(config: &LightingConfig) -> ConfigFile {
             }
         })
         .collect();
-    ConfigFile { toggles, records }
+    ConfigFile { layers: Vec::new(), toggles, records }
 }
 
 // ---------------------------------------------------------------------------
@@ -318,28 +355,48 @@ pub fn file_to_blob(file: &ConfigFile) -> Result<Vec<u8>> {
 }
 
 pub fn parse_toml(text: &str) -> Result<ConfigFile> {
-    toml::from_str(text).context("could not parse the lighting config TOML")
+    toml::from_str(text).context("could not parse the canonical config TOML")
 }
 
-pub fn to_toml(config: &LightingConfig) -> Result<String> {
-    let file = config_to_file(config);
-    let body = toml::to_string_pretty(&file)
-        .context("could not serialize the lighting config as TOML")?;
+/// Serialize a canonical file with the export header.
+pub fn to_toml_file(file: &ConfigFile) -> Result<String> {
+    let body = toml::to_string_pretty(file)
+        .context("could not serialize the canonical config as TOML")?;
     Ok(format!(
-        "# Glove80 persistent lighting configuration (canonical TOML form).\n\
-         # Exported from a config blob; comments and toggle names do not\n\
-         # survive a round trip through the device.\n\n{body}"
+        "# Glove80 canonical configuration (keymap + lighting), exported from\n\
+         # the device. Comments, toggle names, and layer IDs/names are host-side\n\
+         # only and do not survive a round trip through the keyboard: layer IDs\n\
+         # below are synthesized as layer0..layerN (position = firmware slot).\n\
+         # Keep your hand-edited file in version control; the device round-trips\n\
+         # the semantics, not the prose.\n\n{body}"
     ))
+}
+
+#[cfg(test)]
+pub fn to_toml(config: &LightingConfig) -> Result<String> {
+    to_toml_file(&config_to_file(config))
 }
 
 fn blob_magic_bytes() -> [u8; 4] {
     CONFIG_MAGIC.to_le_bytes()
 }
 
-/// Load `path` as a validated config blob. Raw blobs are detected by
-/// content (the "G80L" magic) or a `.bin` extension; anything else is
-/// parsed as canonical TOML.
-pub fn load_blob(path: &Path) -> Result<(Vec<u8>, &'static str)> {
+/// A canonical config loaded from disk, both sections validated offline.
+pub struct Loaded {
+    /// The encoded + validated lighting blob (possibly of an empty config).
+    pub blob: Vec<u8>,
+    /// Keymap layers with keys, resolved to firmware slots.
+    pub plans: Vec<LayerPlan>,
+    /// Whether the file carries a lighting section (raw blobs always do).
+    /// When false, apply leaves the stored lighting config untouched.
+    pub apply_lighting: bool,
+    pub source: &'static str,
+}
+
+/// Load `path` as a validated canonical config. Raw lighting blobs are
+/// detected by content (the "G80L" magic) or a `.bin` extension; anything
+/// else is parsed as canonical TOML (keymap + lighting).
+pub fn load_config(path: &Path) -> Result<Loaded> {
     let bytes = std::fs::read(path)
         .with_context(|| format!("could not read {}", path.display()))?;
     let is_bin_ext = path
@@ -348,12 +405,30 @@ pub fn load_blob(path: &Path) -> Result<(Vec<u8>, &'static str)> {
     if bytes.starts_with(&blob_magic_bytes()) || is_bin_ext {
         decode_lighting_config(&bytes)
             .map_err(|error| anyhow!("raw config blob failed validation: {error}"))?;
-        return Ok((bytes, "raw blob"));
+        return Ok(Loaded {
+            blob: bytes,
+            plans: Vec::new(),
+            apply_lighting: true,
+            source: "raw blob",
+        });
     }
     let text = String::from_utf8(bytes)
         .context("file is neither a config blob (no G80L magic) nor UTF-8 TOML")?;
     let file = parse_toml(&text)?;
-    Ok((file_to_blob(&file)?, "TOML"))
+    let plans = keymapcfg::build_layer_plans(&file.layers)?;
+    Ok(Loaded {
+        blob: file_to_blob(&file)?,
+        plans,
+        apply_lighting: file.has_lighting(),
+        source: "TOML",
+    })
+}
+
+/// Load `path` as a validated lighting blob (raw or TOML).
+#[cfg(test)]
+pub fn load_blob(path: &Path) -> Result<(Vec<u8>, &'static str)> {
+    let loaded = load_config(path)?;
+    Ok((loaded.blob, loaded.source))
 }
 
 // ---------------------------------------------------------------------------
@@ -423,28 +498,95 @@ pub fn render_summary(config: &LightingConfig, blob_len: usize) -> String {
 // Command runners
 // ---------------------------------------------------------------------------
 
+/// Print the offline summary of a loaded config: which sections it has
+/// and what they contain.
+fn print_loaded_summary(loaded: &Loaded) {
+    if loaded.plans.is_empty() {
+        println!("keymap: no [[layer]] keys — apply leaves the keymap untouched");
+    } else {
+        println!("keymap: {} layer grid(s) to write", loaded.plans.len());
+        println!("{}", keymapcfg::render_keymap_summary(&loaded.plans));
+    }
+    if loaded.apply_lighting {
+        let config = decode_lighting_config(&loaded.blob).expect("load_config validated");
+        println!("lighting:");
+        println!("{}", render_summary(&config, loaded.blob.len()));
+    } else {
+        println!(
+            "lighting: no [[toggle]]/[[record]] section — apply leaves the stored \
+             lighting config untouched"
+        );
+    }
+}
+
 /// `config validate FILE`: offline parse + full protocol-crate validation.
 pub fn run_validate(path: &Path) -> Result<()> {
-    let (blob, source) = load_blob(path)?;
-    let config = decode_lighting_config(&blob).expect("load_blob validated");
-    println!("valid lighting config ({source})");
-    println!("{}", render_summary(&config, blob.len()));
+    let loaded = load_config(path)?;
+    println!("valid canonical config ({})", loaded.source);
+    print_loaded_summary(&loaded);
     Ok(())
 }
 
 /// `config apply FILE [--dry-run]`.
 pub fn run_apply(selector: &Selector, path: &Path, dry_run: bool) -> Result<()> {
-    let (blob, source) = load_blob(path)?;
-    let config = decode_lighting_config(&blob).expect("load_blob validated");
-    println!("parsed {} ({source}); client-side validation passed", path.display());
-    println!("{}", render_summary(&config, blob.len()));
+    let loaded = load_config(path)?;
+    println!("parsed {} ({}); client-side validation passed", path.display(), loaded.source);
+    print_loaded_summary(&loaded);
     if dry_run {
         println!("dry run: not touching the device");
         return Ok(());
     }
     let transport = transport::connect(selector)?;
     let mut client = HostClient::new(transport);
-    apply_blob(&mut client, &blob)
+    apply_loaded(&mut client, &loaded)
+}
+
+/// Transport-independent unified apply (unit-tested on the mock transport).
+///
+/// Keymap first (best-effort per batch, read-back verified), then lighting
+/// (one atomic session). Ordering is deliberate: if a keymap batch fails,
+/// the apply stops before touching the lighting config, so the error
+/// describes the only thing that changed.
+pub fn apply_loaded(client: &mut HostClient, loaded: &Loaded) -> Result<()> {
+    if !loaded.plans.is_empty() {
+        println!(
+            "applying the keymap ({} layer(s)) — batched writes, verified by \
+             read-back, NOT atomic across batches",
+            loaded.plans.len()
+        );
+        let report = keymapcfg::apply_keymap(client, &loaded.plans, |stage| match stage {
+            keymapcfg::KeymapStage::LayerBegun { slot, id } => {
+                println!("  layer {slot} \"{id}\":");
+            }
+            keymapcfg::KeymapStage::Batch { written, total, .. } => {
+                println!("    wrote {written}/{total} positions");
+            }
+            keymapcfg::KeymapStage::LayerDone { lossy, .. } => {
+                if lossy > 0 {
+                    println!("    {lossy} position(s) stored differently than requested");
+                }
+            }
+        })?;
+        println!(
+            "keymap applied: {} positions written across {} layer(s); changes are \
+             live and persisted",
+            report.entries_written,
+            loaded.plans.len()
+        );
+        for (layer, key, requested, stored) in &report.lossy {
+            println!(
+                "  LOSSY: layer {layer} key {key}: wrote {} (0x{requested:04X}) but the \
+                 firmware stored {} (0x{stored:04X})",
+                crate::keycodes::format_keycode(*requested),
+                crate::keycodes::format_keycode(*stored),
+            );
+        }
+    }
+    if loaded.apply_lighting {
+        println!("applying the lighting config (one atomic session)");
+        apply_blob(client, &loaded.blob)?;
+    }
+    Ok(())
 }
 
 /// Transport-independent apply (unit-tested against the mock transport).
@@ -462,7 +604,9 @@ pub fn apply_blob(client: &mut HostClient, blob: &[u8]) -> Result<()> {
     });
     result.map_err(|error| {
         error.context(
-            "the apply failed; the keyboard keeps its previous configuration untouched",
+            "the lighting apply failed; the keyboard keeps its previous lighting \
+             configuration untouched (keymap writes already made in this run, if \
+             any, remain in place)",
         )
     })
 }
@@ -483,23 +627,69 @@ fn read_active_config(client: &mut HostClient) -> Result<Vec<u8>> {
     Ok(blob)
 }
 
+/// Read both sections from the device into one canonical [`ConfigFile`].
+/// Layer IDs are synthesized as `layer0..layerN` (the firmware stores no
+/// IDs or names). Either section degrades gracefully:
+///
+/// - no keymap capability → lighting-only export (with a note);
+/// - no stored lighting config (compiled-in defaults) → keymap-only export
+///   (with a note), so applying the file leaves lighting untouched.
+pub fn export_file(client: &mut HostClient) -> Result<ConfigFile> {
+    let layers = match keymapcfg::read_all_layers(client) {
+        Ok(layers) => keymapcfg::layers_to_entries(&layers),
+        Err(error) if client.lacks_feature(glove80_host_protocol::feature::KEYMAP) => {
+            println!("note: {error:#}; exporting the lighting config only");
+            Vec::new()
+        }
+        Err(error) => return Err(error),
+    };
+    let mut file = match client.read_config() {
+        Ok(blob) if blob.is_empty() => {
+            if layers.is_empty() {
+                bail!(
+                    "nothing to export: the keyboard advertises no keymap editing and \
+                     has no stored lighting config (compiled-in defaults)"
+                );
+            }
+            println!(
+                "note: no stored lighting config (compiled-in defaults); exporting \
+                 the keymap only"
+            );
+            ConfigFile::default()
+        }
+        Ok(blob) => {
+            let config = decode_lighting_config(&blob)
+                .map_err(|error| anyhow!("device returned an invalid config blob: {error}"))?;
+            config_to_file(&config)
+        }
+        Err(error) => return Err(error.context("could not read the active lighting config")),
+    };
+    file.layers = layers;
+    Ok(file)
+}
+
 pub fn run_export(selector: &Selector, path: &Path, raw: bool) -> Result<()> {
     let transport = transport::connect(selector)?;
     let mut client = HostClient::new(transport);
-    let blob = read_active_config(&mut client)?;
     if raw {
+        let blob = read_active_config(&mut client)?;
         std::fs::write(path, &blob)
             .with_context(|| format!("could not write {}", path.display()))?;
-        println!("exported the active config blob ({} bytes) to {}", blob.len(), path.display());
+        println!(
+            "exported the active lighting config blob ({} bytes) to {} \
+             (--raw is lighting-only; the keymap has no blob form)",
+            blob.len(),
+            path.display()
+        );
         return Ok(());
     }
-    let config = decode_lighting_config(&blob).expect("validated in read_active_config");
-    std::fs::write(path, to_toml(&config)?)
+    let file = export_file(&mut client)?;
+    std::fs::write(path, to_toml_file(&file)?)
         .with_context(|| format!("could not write {}", path.display()))?;
     println!(
-        "exported the active config ({} record(s), {}-byte blob) to {}",
-        config.records.len(),
-        blob.len(),
+        "exported the active config ({} layer(s), {} record(s)) to {}",
+        file.layers.len(),
+        file.records.len(),
         path.display()
     );
     Ok(())
@@ -508,6 +698,21 @@ pub fn run_export(selector: &Selector, path: &Path, raw: bool) -> Result<()> {
 pub fn run_show(selector: &Selector) -> Result<()> {
     let transport = transport::connect(selector)?;
     let mut client = HostClient::new(transport);
+    match keymapcfg::read_all_layers(&mut client) {
+        Ok(layers) => {
+            let entries = keymapcfg::layers_to_entries(&layers);
+            let plans = keymapcfg::build_layer_plans(&entries)?;
+            println!("keymap ({} populated layer(s)):", plans.len());
+            if !plans.is_empty() {
+                println!("{}", keymapcfg::render_keymap_summary(&plans));
+            }
+        }
+        Err(error) if client.lacks_feature(glove80_host_protocol::feature::KEYMAP) => {
+            println!("keymap: not readable ({error:#})");
+        }
+        Err(error) => return Err(error),
+    }
+    println!("lighting:");
     let blob = read_active_config(&mut client)?;
     let config = decode_lighting_config(&blob).expect("validated in read_active_config");
     println!("{}", render_summary(&config, blob.len()));
@@ -861,7 +1066,7 @@ activation = { toggle = 31 }
         let error = apply_blob(&mut client, &blob).unwrap_err();
         let chain = format!("{error:#}");
         assert!(chain.contains("CRC_MISMATCH"), "{chain}");
-        assert!(chain.contains("previous configuration untouched"), "{chain}");
+        assert!(chain.contains("previous lighting configuration untouched"), "{chain}");
     }
 
     #[test]
@@ -878,7 +1083,7 @@ activation = { toggle = 31 }
         let error = apply_blob(&mut client, &blob).unwrap_err();
         let chain = format!("{error:#}");
         assert!(chain.contains("INVALID_CONFIG"), "{chain}");
-        assert!(chain.contains("previous configuration untouched"), "{chain}");
+        assert!(chain.contains("previous lighting configuration untouched"), "{chain}");
     }
 
     /// Session interrupted mid-transfer: the device answers BAD_OFFSET, the
@@ -912,7 +1117,7 @@ activation = { toggle = 31 }
         let error = apply_blob(&mut client, &blob).unwrap_err();
         let chain = format!("{error:#}");
         assert!(chain.contains("BAD_OFFSET"), "{chain}");
-        assert!(chain.contains("previous configuration untouched"), "{chain}");
+        assert!(chain.contains("previous lighting configuration untouched"), "{chain}");
         // No COMMIT was ever sent; the last request is the ABORT.
         let requests = requests.lock().unwrap();
         assert!(matches!(requests.last(), Some(Request::ConfigAbort)));
@@ -1017,5 +1222,347 @@ activation = { toggle = 31 }
         let error = read_active_config(&mut client).unwrap_err();
         let text = format!("{error:#}");
         assert!(text.contains("compiled-in defaults"), "{text}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Unified (keymap + lighting) canonical config
+    // -----------------------------------------------------------------------
+
+    use glove80_host_protocol::feature;
+
+    use crate::keymapcfg::{self, LayerEntry, LayerRef, GRID_SIZE};
+
+    /// Capabilities advertising both persistent config (bit 6) and keymap
+    /// editing (bit 7) with the Glove80 grid.
+    fn unified_capabilities() -> Capabilities {
+        Capabilities {
+            feature_bits: 0x7F | feature::KEYMAP,
+            keymap_rows: 6,
+            keymap_cols: 14,
+            max_keymap_entries_per_op: 32,
+            ..test_capabilities()
+        }
+    }
+
+    fn grid_of(token: &str) -> String {
+        vec![token; GRID_SIZE].join(" ")
+    }
+
+    fn layer(id: &str, keys: Option<String>) -> LayerEntry {
+        LayerEntry { id: id.into(), name: None, keys }
+    }
+
+    /// A small unified file: two keymap layers plus a lighting record that
+    /// references the second layer by stable id.
+    fn unified_file() -> ConfigFile {
+        ConfigFile {
+            layers: vec![
+                layer("base", Some(grid_of("KC_A"))),
+                layer("lower", Some(grid_of("KC_B"))),
+            ],
+            toggles: Vec::new(),
+            records: vec![RecordEntry {
+                activation: ActivationSpec::Layer { layer: LayerRef::Id("lower".into()) },
+                cells: vec![CellSpec {
+                    keys: "0-3".into(),
+                    color: "#112233".into(),
+                    ..CellSpec::default()
+                }],
+            }],
+        }
+    }
+
+    fn load_file(file: &ConfigFile) -> Loaded {
+        Loaded {
+            blob: file_to_blob(file).unwrap(),
+            plans: keymapcfg::build_layer_plans(&file.layers).unwrap(),
+            apply_lighting: file.has_lighting(),
+            source: "TOML",
+        }
+    }
+
+    /// Mock handler answering one KEYMAP_WRITE by echoing the request
+    /// (faithful storage).
+    fn keymap_write_ok(request_id: u8, request: &Request) -> Vec<Response> {
+        let Request::KeymapWrite { entries } = request else {
+            panic!("expected KeymapWrite, got {request:?}");
+        };
+        vec![Response {
+            request_id,
+            command: Command::KeymapWrite,
+            status: Status::Ok,
+            payload: ResponsePayload::KeymapWritten {
+                keycodes: entries.iter().map(|entry| entry.keycode).collect(),
+            },
+        }]
+    }
+
+    /// Stable-id resolution: `{ layer = "lower" }` becomes slot 1 on the
+    /// wire; bare integers pass through; unknown ids are an error naming
+    /// the record.
+    #[test]
+    fn layer_ids_resolve_to_slots_in_the_lighting_blob() {
+        let config = file_to_config(&unified_file()).unwrap();
+        assert_eq!(config.records[0].activation, ConfigActivation::LayerActive(1));
+
+        let toml_text = r#"
+[[layer]]
+id = "base"
+
+[[layer]]
+id = "lower"
+
+[[record]]
+activation = { layer = "lower" }
+cells = [{ keys = "0", color = "red" }]
+
+[[record]]
+activation = { layer = 7 }
+"#;
+        let config = file_to_config(&parse_toml(toml_text).unwrap()).unwrap();
+        assert_eq!(config.records[0].activation, ConfigActivation::LayerActive(1));
+        assert_eq!(config.records[1].activation, ConfigActivation::LayerActive(7));
+
+        let mut file = unified_file();
+        file.records[0].activation =
+            ActivationSpec::Layer { layer: LayerRef::Id("upper".into()) };
+        let error = file_to_config(&file).unwrap_err();
+        let chain = format!("{error:#}");
+        assert!(chain.contains("record 0 activation"), "{chain}");
+        assert!(chain.contains("unknown layer id \"upper\""), "{chain}");
+    }
+
+    /// The full unified apply: keymap batches (with read-back) first, then
+    /// the atomic lighting session.
+    #[test]
+    fn unified_apply_writes_keymap_then_lighting() {
+        let loaded = load_file(&unified_file());
+        let mock = MockTransport::new();
+        let requests = mock.requests_handle();
+        // 84 positions per layer at 32/op = 3 batches per layer.
+        let mut mock = mock.expect(caps_handler(unified_capabilities()));
+        for _ in 0..6 {
+            mock = mock.expect(keymap_write_ok);
+        }
+        let mock = mock
+            .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigBegin)])
+            .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigData)])
+            .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigCommit)]);
+        let mut client = HostClient::new(Box::new(mock));
+        apply_loaded(&mut client, &loaded).unwrap();
+
+        let requests = requests.lock().unwrap();
+        // Order: caps, 6 keymap batches, then the lighting session.
+        assert_eq!(requests.len(), 10);
+        let mut layer0 = Vec::new();
+        let mut layer1 = Vec::new();
+        for request in &requests[1..7] {
+            let Request::KeymapWrite { entries } = request else {
+                panic!("expected KeymapWrite, got {request:?}");
+            };
+            for entry in entries {
+                match entry.layer {
+                    0 => layer0.push((entry.key, entry.keycode)),
+                    1 => layer1.push((entry.key, entry.keycode)),
+                    other => panic!("unexpected layer {other}"),
+                }
+            }
+        }
+        // Every grid position of both layers written, in order.
+        assert_eq!(layer0.len(), GRID_SIZE);
+        assert_eq!(layer1.len(), GRID_SIZE);
+        assert!(layer0.iter().enumerate().all(|(i, &(k, c))| k as usize == i && c == 0x0004));
+        assert!(layer1.iter().enumerate().all(|(i, &(k, c))| k as usize == i && c == 0x0005));
+        assert!(matches!(requests[7], Request::ConfigBegin { .. }));
+        assert!(matches!(requests[9], Request::ConfigCommit));
+    }
+
+    /// A failed keymap batch aborts everything after it — the remaining
+    /// batches AND the lighting session — and the error says exactly what
+    /// was written and that nothing is rolled back.
+    #[test]
+    fn unified_apply_stops_on_keymap_batch_failure() {
+        let loaded = load_file(&unified_file());
+        let mock = MockTransport::new();
+        let requests = mock.requests_handle();
+        let mock = mock
+            .expect(caps_handler(unified_capabilities()))
+            .expect(keymap_write_ok) // layer 0, keys 0-31
+            .expect(keymap_write_ok) // layer 0, keys 32-63
+            .expect(keymap_write_ok) // layer 0, keys 64-83
+            .expect(keymap_write_ok) // layer 1, keys 0-31
+            .expect(|request_id, _| {
+                vec![empty_err(request_id, Command::KeymapWrite, Status::Busy)]
+            });
+        let mut client = HostClient::new(Box::new(mock));
+        let error = apply_loaded(&mut client, &loaded).unwrap_err();
+        let chain = format!("{error:#}");
+        assert!(chain.contains("keymap apply interrupted"), "{chain}");
+        assert!(chain.contains("layer \"lower\" (slot 1)"), "{chain}");
+        assert!(chain.contains("keys 0..32 written"), "{chain}");
+        assert!(chain.contains("keys 32..84 untouched"), "{chain}");
+        assert!(chain.contains("layer(s) base"), "{chain}");
+        assert!(chain.contains("NOT rolled back"), "{chain}");
+        assert!(chain.contains("BUSY"), "{chain}");
+        // No lighting request was ever sent.
+        let requests = requests.lock().unwrap();
+        assert!(!requests.iter().any(|request| matches!(
+            request,
+            Request::ConfigBegin { .. } | Request::ConfigData { .. } | Request::ConfigCommit
+        )));
+    }
+
+    /// Keymap-only file: no lighting session at all. Lighting-only file:
+    /// no keymap writes (today's behavior unchanged).
+    #[test]
+    fn apply_skips_omitted_sections() {
+        // Keymap-only: one layer, no toggles/records.
+        let file = ConfigFile {
+            layers: vec![layer("base", Some(grid_of("KC_C")))],
+            ..ConfigFile::default()
+        };
+        let loaded = load_file(&file);
+        assert!(!loaded.apply_lighting);
+        let mock = MockTransport::new()
+            .expect(caps_handler(unified_capabilities()))
+            .expect(keymap_write_ok)
+            .expect(keymap_write_ok)
+            .expect(keymap_write_ok);
+        // No CONFIG_* handlers queued: any lighting request would panic.
+        let mut client = HostClient::new(Box::new(mock));
+        apply_loaded(&mut client, &loaded).unwrap();
+
+        // Lighting-only (the long-standing sample file): no keymap writes.
+        let loaded = load_file(&parse_toml(SAMPLE_TOML).unwrap());
+        assert!(loaded.plans.is_empty());
+        assert!(loaded.apply_lighting);
+        let mock = MockTransport::new()
+            .expect(caps_handler(unified_capabilities()))
+            .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigBegin)])
+            .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigData)])
+            .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigCommit)]);
+        let mut client = HostClient::new(Box::new(mock));
+        apply_loaded(&mut client, &loaded).unwrap();
+    }
+
+    /// Export reads every layer + the lighting blob, synthesizes layer ids,
+    /// and the result round-trips: parse(export) applies identically and a
+    /// second export is textually identical.
+    #[test]
+    fn unified_export_round_trips() {
+        let lighting_blob = file_to_blob(&parse_toml(SAMPLE_TOML).unwrap()).unwrap();
+
+        // Device state: layer 0 all KC_A, layer 1 with one MO(2), layers
+        // 2..7 empty (trailing layers must be dropped from the export).
+        let device_layer = |layer: u8| -> Vec<u16> {
+            match layer {
+                0 => vec![0x0004; GRID_SIZE],
+                1 => {
+                    let mut codes = vec![0u16; GRID_SIZE];
+                    codes[14] = 0x5222;
+                    codes
+                }
+                _ => vec![0u16; GRID_SIZE],
+            }
+        };
+        let mock_device = |lighting_blob: Vec<u8>| {
+            let mut mock = MockTransport::new().expect(caps_handler(unified_capabilities()));
+            for layer in 0u8..8 {
+                // 84 positions at 32/op = 3 KEYMAP_READ chunks per layer.
+                for _ in 0..3 {
+                    let codes = device_layer(layer);
+                    mock = mock.expect(move |request_id, request: &Request| {
+                        let Request::KeymapRead { layer, start_key, max_count } = request
+                        else {
+                            panic!("expected KeymapRead, got {request:?}");
+                        };
+                        let start = usize::from(*start_key);
+                        let end = (start + usize::from(*max_count)).min(GRID_SIZE);
+                        vec![Response {
+                            request_id,
+                            command: Command::KeymapRead,
+                            status: Status::Ok,
+                            payload: ResponsePayload::KeymapActions {
+                                layer: *layer,
+                                start_key: *start_key,
+                                keycodes: heapless::Vec::from_slice(&codes[start..end])
+                                    .unwrap(),
+                            },
+                        }]
+                    });
+                }
+            }
+            mock.expect(move |request_id, request: &Request| {
+                assert!(matches!(request, Request::ConfigRead { offset: 0, .. }));
+                vec![Response {
+                    request_id,
+                    command: Command::ConfigRead,
+                    status: Status::Ok,
+                    payload: ResponsePayload::ConfigData {
+                        total_len: lighting_blob.len() as u32,
+                        data: heapless::Vec::from_slice(&lighting_blob).unwrap(),
+                    },
+                }]
+            })
+        };
+
+        let mut client = HostClient::new(Box::new(mock_device(lighting_blob.clone())));
+        let exported = export_file(&mut client).unwrap();
+        assert_eq!(exported.layers.len(), 2, "trailing empty layers must be dropped");
+        assert_eq!(exported.layers[0].id, "layer0");
+        assert_eq!(exported.layers[1].id, "layer1");
+
+        let text = to_toml_file(&exported).unwrap();
+        let reparsed = parse_toml(&text).unwrap();
+        // Parsed keymap plans reproduce the device grids exactly.
+        let plans = keymapcfg::build_layer_plans(&reparsed.layers).unwrap();
+        assert_eq!(plans.len(), 2);
+        assert_eq!(plans[0].codes, device_layer(0));
+        assert_eq!(plans[1].codes, device_layer(1));
+        // The lighting blob is byte-stable through the text form.
+        assert_eq!(file_to_blob(&reparsed).unwrap(), lighting_blob);
+        // A second export of the same device state is textually identical.
+        let mut client = HostClient::new(Box::new(mock_device(lighting_blob)));
+        let text2 = to_toml_file(&export_file(&mut client).unwrap()).unwrap();
+        assert_eq!(text2, text);
+    }
+
+    /// The shipped example files parse, validate, and (for the unified
+    /// one) resolve their layer ids.
+    #[test]
+    fn shipped_examples_are_valid() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+
+        // Lighting-only back-compat: the existing example keeps loading.
+        let loaded = load_config(&dir.join("lighting-default.toml")).unwrap();
+        assert!(loaded.plans.is_empty());
+        assert!(loaded.apply_lighting);
+        assert!(!loaded.blob.is_empty());
+
+        // Full-keyboard example: five layers, lighting referencing ids.
+        let loaded = load_config(&dir.join("glove80.toml")).unwrap();
+        assert_eq!(loaded.plans.len(), 5);
+        assert!(loaded.apply_lighting);
+        let file = parse_toml(
+            &std::fs::read_to_string(dir.join("glove80.toml")).unwrap(),
+        )
+        .unwrap();
+        let config = file_to_config(&file).unwrap();
+        // "base".."mac_hyper" resolved to slots 0..4; slots 5-7 literal.
+        let layers: Vec<u8> = config
+            .records
+            .iter()
+            .filter_map(|record| match record.activation {
+                ConfigActivation::LayerActive(layer) => Some(layer),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(layers, vec![0, 1, 2, 3, 4, 5, 6, 7]);
+        // Spot-check ported bindings: Base r3c0 = KC_LCTL, r0c6 layer-tap,
+        // Magic bootloader keys, Mac Hyper's modifier chord.
+        assert_eq!(loaded.plans[0].codes[42], 0x00E0);
+        assert_eq!(loaded.plans[0].codes[6], 0x4129);
+        assert_eq!(loaded.plans[2].codes[42], 0x7C00);
+        assert_eq!(loaded.plans[4].codes[77], 0x0CE0);
     }
 }

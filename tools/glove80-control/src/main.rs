@@ -7,6 +7,7 @@ mod config;
 mod hostproto;
 mod keycodes;
 mod keymap;
+mod keymapcfg;
 mod lightcfg;
 mod lighting;
 pub mod runtime_manifest;
@@ -38,9 +39,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Manage canonical configuration: keymap schema validation, and the
-    /// persistent lighting config (apply/export/show/validate over the
-    /// host protocol v1.1).
+    /// Manage the canonical configuration file — keymap layers + lighting
+    /// in one TOML (apply/export/show/validate over host protocol v1.1
+    /// lighting sessions and v1.2 keymap writes).
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
@@ -71,43 +72,49 @@ enum Command {
 enum ConfigCommand {
     /// Parse and semantically validate a configuration file, offline.
     ///
-    /// A `.json` file is checked against the canonical runtime keymap
-    /// schema. Anything else is treated as a persistent *lighting* config:
-    /// canonical TOML (see `examples/lighting-default.toml`) or a raw
-    /// config blob, validated with the exact checks the firmware runs.
+    /// A `.json` file is checked against the legacy runtime keymap schema.
+    /// Anything else is treated as the canonical config: TOML with
+    /// `[[layer]]` keymap entries and/or lighting tables (start from
+    /// `examples/glove80.toml`), or a raw lighting blob, validated with
+    /// the exact checks the firmware runs.
     Validate {
         path: PathBuf,
         /// Validate against a target firmware's total layer capacity
-        /// (canonical keymap JSON only).
+        /// (legacy keymap JSON only).
         #[arg(long, value_name = "COUNT")]
         layer_capacity: Option<usize>,
     },
-    /// Transactionally apply a persistent lighting config to the keyboard
-    /// (host protocol v1.1: CONFIG_BEGIN → CONFIG_DATA… → CONFIG_COMMIT).
+    /// Apply a canonical config file (keymap + lighting) to the keyboard.
     ///
-    /// FILE is canonical TOML (start from `examples/lighting-default.toml`)
-    /// or a raw config blob (detected by content or a `.bin` extension).
-    /// The device activates and persists either the complete new config or
-    /// keeps the old one — never a hybrid. Comments in the TOML are lost
-    /// if you later re-export from the device.
+    /// FILE is canonical TOML (start from `examples/glove80.toml`) or a
+    /// raw lighting blob (detected by content or a `.bin` extension).
+    /// The keymap section is written first via batched KEYMAP_WRITE with
+    /// read-back verification — best-effort per batch, NOT atomic across
+    /// batches; a failure reports exactly what was written. The lighting
+    /// section then goes through one atomic CONFIG session: the device
+    /// keeps the complete old lighting config or gets the complete new
+    /// one, never a hybrid. Either section may be omitted.
     Apply {
         file: PathBuf,
         /// Validate and print the summary without touching the device.
         #[arg(long)]
         dry_run: bool,
     },
-    /// Export the keyboard's active lighting config to a file.
+    /// Export the keyboard's active config (keymap + lighting) to a file.
     ///
-    /// Writes canonical TOML by default (comments and toggle names from
-    /// your original file are not stored on the device and will be
-    /// absent), or the raw byte-stable blob with --raw.
+    /// Writes canonical TOML by default. Layer IDs/names, comments, and
+    /// toggle names are host-side only and not stored on the device:
+    /// export synthesizes layer ids `layer0..layerN` (position = firmware
+    /// slot) and drops trailing all-unbound layers. `--raw` writes the raw
+    /// byte-stable lighting blob only (the keymap has no blob form).
     Export {
         file: PathBuf,
-        /// Write the raw config blob instead of TOML.
+        /// Write the raw lighting config blob instead of TOML.
         #[arg(long)]
         raw: bool,
     },
-    /// Read the keyboard's active lighting config and print a summary.
+    /// Read the keyboard's active config and print a summary of both the
+    /// keymap layers and the lighting records.
     Show,
 }
 

@@ -181,6 +181,13 @@ impl HostClient {
         Ok(capabilities)
     }
 
+    /// True when capabilities were fetched and the feature bit is absent
+    /// (used to distinguish "device cannot" from transport failures).
+    pub fn lacks_feature(&self, bit: u32) -> bool {
+        self.capabilities
+            .is_some_and(|capabilities| capabilities.feature_bits & bit == 0)
+    }
+
     fn require_feature(&mut self, bit: u32, name: &str) -> Result<Capabilities> {
         let capabilities = self.capabilities()?;
         if capabilities.feature_bits & bit == 0 {

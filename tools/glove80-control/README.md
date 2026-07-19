@@ -55,42 +55,95 @@ validated against what the device advertises.
   host protocol (asks for confirmation unless `--yes`). Targets the
   central half unless `--peripheral`.
 
-## Persistent lighting config (host protocol v1.1)
+## Canonical configuration file (keymap + lighting)
 
-The canonical lighting configuration is a human-editable TOML file
-(`examples/lighting-default.toml` approximates the compiled-in defaults and
-is the recommended starting point). It encodes to the protocol's config
-blob, which the firmware applies **transactionally**: after a successful
-apply the new config is active and survives reboots; any failure leaves the
-previous config untouched.
+One TOML file configures the whole keyboard — keymap layers and persistent
+lighting — over either transport, with one apply flow. Nothing here waits
+on firmware: keymap editing (v1.2) and lighting sessions (v1.1) are both
+live. `examples/glove80.toml` is the full-keyboard starting point (the
+stock Base/Lower/Magic/Games/Mac-Hyper keymap plus the default lighting);
+`examples/lighting-default.toml` remains a lighting-only example, and such
+files keep working unchanged.
 
 - Workflow: edit the TOML → `config validate` (offline) → `config apply`
-  → reboot the keyboard and the config persists. `config export` makes a
-  backup of whatever is active.
-- `config validate FILE` — offline parse + the exact validation the
-  firmware runs before commit (`.json` files are checked against the
-  canonical keymap schema instead). No device needed.
-- `config apply FILE [--dry-run]` — parse and validate client-side (also
-  against the advertised feature bit and `max_config_blob_len`), then run
-  the CONFIG_BEGIN → chunked CONFIG_DATA → CONFIG_COMMIT session, reporting
-  each stage. `FILE` is canonical TOML or a raw blob (detected by the
-  `G80L` magic or a `.bin` extension). `--dry-run` stops before touching
-  the device.
-- `config export FILE [--raw]` — read the active blob back
-  (byte-stable) and write canonical TOML, or the raw blob with `--raw`.
-  A device still on compiled defaults reports that clearly instead of
-  exporting anything.
-- `config show` — summary table of the active config: records,
-  activations, cell counts/keys, effects, and toggle persistence.
-- TOML format: optional `[[toggle]]` entries (`id`, optional `name`,
-  `persist`, `initial_on`) plus ordered `[[record]]` entries with
-  `activation = "always" | { layer = N } | { toggle = N }` and
+  → the keymap is live immediately, the lighting config is active and
+  persisted. `config export` makes a backup of whatever is active.
+- `config validate FILE` — offline parse of both sections + the exact
+  lighting validation the firmware runs before commit (`.json` files are
+  checked against the legacy keymap schema instead). No device needed.
+- `config apply FILE [--dry-run]` — validate client-side, then apply each
+  section that is present, reporting every stage. `--dry-run` stops before
+  touching the device. `FILE` may also be a raw lighting blob (detected by
+  the `G80L` magic or a `.bin` extension).
+- `config export FILE [--raw]` — read every keymap layer and the active
+  lighting blob back into one canonical TOML. `--raw` writes the
+  byte-stable lighting blob only (the keymap has no blob form). Degrades
+  gracefully with a note: keymap-only when the device is running
+  compiled-in lighting defaults, lighting-only when the firmware does not
+  advertise keymap editing.
+- `config show` — summary of both sections: layers with bound-key counts,
+  then records, activations, effects, and toggle persistence.
+
+### Keymap section
+
+```toml
+[[layer]]
+id = "base"            # stable host-side ID (must not be purely numeric)
+name = "Base"          # display name, host-side only
+keys = """
+KC_F1   KC_F2  ...     # 6 rows x 14 columns, whitespace-separated
+...
+"""
+```
+
+- A `[[layer]]`'s **position in the file is its firmware slot** (0-7).
+  Layer IDs and names never reach the firmware; lighting records reference
+  layers as `{ layer = "base" }` and the CLI resolves the ID to the slot
+  number at encode time (bare integers still mean literal slots).
+- `keys` is the full 6x14 grid, row-major: exactly 84 whitespace-separated
+  tokens, one row per line by convention. Tokens are the same QMK-style
+  names `keymap read`/`keymap set` use (`KC_A`, `MO(2)`, `LT(1,KC_ESC)`,
+  `LSFT(KC_9)`, ...); whitespace inside parentheses is fine. `--` means
+  unbound (`KC_NO`) and marks the four physical holes (r0c5, r0c8, r5c5,
+  r5c8). `#` starts a comment running to the end of the line. Export
+  produces this exact shape deterministically — aligned columns, `--` for
+  every unbound key — so exports diff cleanly in git.
+- A layer without `keys` only defines an ID for lighting references; apply
+  leaves its bindings untouched. Omit all layer keys for a lighting-only
+  file, or all lighting tables for a keymap-only file (the other side of
+  the keyboard's state is then left exactly as it was).
+- On export the device has no IDs/names to offer, so they are synthesized
+  as `layer0..layerN` (position = slot) and trailing all-unbound layers
+  are dropped. Export → apply → export is stable.
+
+### Lighting section
+
+- Optional `[[toggle]]` entries (`id`, optional `name`, `persist`,
+  `initial_on`) plus ordered `[[record]]` entries with `activation =
+  "always" | { layer = N } | { layer = "id" } | { toggle = N }` and
   `cells = [{ keys = "0-5,12", color = "#RRGGBB"|named, effect =
   "solid|blink|breathe", period_ms, phase_ms, duty_pct }]` (`keys` uses the
-  same list/range syntax as `lighting set`).
-- Comments and toggle names live only in the file — they never enter the
-  blob, so they are absent from a later export. Keep your edited TOML in
-  version control; the device round-trips the semantics, not the prose.
+  same list/range syntax as `lighting set`, LED chain positions 0-79).
+- Comments, toggle names, and layer IDs/names live only in the file — they
+  never enter the blob, so they are absent from a later export. Keep your
+  edited TOML in version control; the device round-trips the semantics,
+  not the prose.
+
+### Apply semantics — what is atomic and what is not
+
+- **Lighting is atomic.** The blob goes through one CONFIG_BEGIN → chunked
+  CONFIG_DATA → CONFIG_COMMIT session; the keyboard activates and persists
+  either the complete new lighting config or keeps the old one, never a
+  hybrid.
+- **Keymap apply is best-effort per batch.** Each KEYMAP_WRITE batch is
+  all-or-nothing device-side and verified by read-back (lossy stores are
+  reported per key), but a multi-batch apply interrupted midway leaves the
+  earlier batches written — there is no firmware-level keymap transaction.
+  The CLI is explicit about this: a failed batch aborts every remaining
+  batch and the error states exactly which layers and key ranges were
+  stored and that nothing is rolled back.
+- The keymap section is applied **first**, so a keymap failure stops the
+  run before the lighting config is touched.
 
 Partial application (peripheral half offline) is reported, never hidden:
 overlay writes print the keys still pending on the peripheral.
