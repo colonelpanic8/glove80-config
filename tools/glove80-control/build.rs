@@ -9,6 +9,14 @@ use std::process::Command;
 fn main() {
     // Two levels up: <repo root>/.git/HEAD (this crate is tools/glove80-control).
     println!("cargo:rerun-if-changed=../../.git/HEAD");
+    // HEAD only moves on checkout; ordinary commits move the branch ref, so
+    // watch that too or the embedded hash goes stale (same fix as the
+    // firmware's build.rs).
+    if let Ok(head) = std::fs::read_to_string("../../.git/HEAD") {
+        if let Some(refpath) = head.trim().strip_prefix("ref: ") {
+            println!("cargo:rerun-if-changed=../../.git/{refpath}");
+        }
+    }
 
     let hash = Command::new("git")
         .args(["rev-parse", "--short=8", "HEAD"])
