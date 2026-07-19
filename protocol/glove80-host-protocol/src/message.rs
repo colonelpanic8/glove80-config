@@ -7,7 +7,8 @@ use heapless::Vec;
 use crate::error::{DecodeError, EncodeError};
 use crate::io::{Reader, Writer};
 use crate::{
-    MAX_CELLS_PER_MESSAGE, MAX_PING_LEN, REQUEST_HEADER_LEN, RESPONSE_FLAG, RESPONSE_HEADER_LEN,
+    MAX_CELLS_PER_MESSAGE, MAX_CONFIG_DATA_PER_MESSAGE, MAX_PING_LEN, REQUEST_HEADER_LEN,
+    RESPONSE_FLAG, RESPONSE_HEADER_LEN,
 };
 
 /// Feature bits advertised in [`Capabilities::feature_bits`].
@@ -24,6 +25,9 @@ pub mod feature {
     pub const OVERLAY_READBACK: u32 = 1 << 4;
     /// PARTIAL_APPLY reporting (peripheral offline is reported, not hidden).
     pub const PARTIAL_APPLY: u32 = 1 << 5;
+    /// Persistent lighting configuration (CONFIG_* commands, v1.1). When set,
+    /// the capability payload carries the `max_config_blob_len` extension.
+    pub const PERSISTENT_CONFIG: u32 = 1 << 6;
 }
 
 /// Command opcodes (always < 0x80; responses set [`RESPONSE_FLAG`]).
@@ -41,6 +45,11 @@ pub enum Command {
     SetBrightness = 0x21,
     GetToggle = 0x30,
     SetToggle = 0x31,
+    ConfigBegin = 0x40,
+    ConfigData = 0x41,
+    ConfigCommit = 0x42,
+    ConfigAbort = 0x43,
+    ConfigRead = 0x44,
     EnterBootloader = 0x7F,
 }
 
@@ -62,6 +71,11 @@ impl Command {
             0x21 => Command::SetBrightness,
             0x30 => Command::GetToggle,
             0x31 => Command::SetToggle,
+            0x40 => Command::ConfigBegin,
+            0x41 => Command::ConfigData,
+            0x42 => Command::ConfigCommit,
+            0x43 => Command::ConfigAbort,
+            0x44 => Command::ConfigRead,
             0x7F => Command::EnterBootloader,
             _ => return None,
         })
@@ -91,6 +105,18 @@ pub enum Status {
     UnknownToggle = 0x07,
     BadMagic = 0x08,
     UnsupportedVersion = 0x09,
+    /// CONFIG_DATA / CONFIG_COMMIT without an open transfer session.
+    NoSession = 0x0A,
+    /// CONFIG_DATA offset is not the number of bytes received so far, or the
+    /// chunk would run past the announced total length.
+    BadOffset = 0x0B,
+    /// CONFIG_COMMIT before all announced bytes arrived.
+    ConfigIncomplete = 0x0C,
+    /// Assembled blob's CRC (announced in CONFIG_BEGIN, or the header's
+    /// body CRC) does not match.
+    CrcMismatch = 0x0D,
+    /// The complete blob failed validation; nothing was changed.
+    InvalidConfig = 0x0E,
 }
 
 impl Status {
@@ -106,6 +132,11 @@ impl Status {
             0x07 => Status::UnknownToggle,
             0x08 => Status::BadMagic,
             0x09 => Status::UnsupportedVersion,
+            0x0A => Status::NoSession,
+            0x0B => Status::BadOffset,
+            0x0C => Status::ConfigIncomplete,
+            0x0D => Status::CrcMismatch,
+            0x0E => Status::InvalidConfig,
             _ => return None,
         })
     }
@@ -159,7 +190,7 @@ impl Effect {
         Effect { kind: EffectKind::Breathe, r, g, b, period_ms, phase_ms, duty_percent: 0 }
     }
 
-    fn write(&self, w: &mut Writer<'_>) -> Result<(), EncodeError> {
+    pub(crate) fn write(&self, w: &mut Writer<'_>) -> Result<(), EncodeError> {
         w.u8(self.kind as u8)?;
         w.u8(self.r)?;
         w.u8(self.g)?;
@@ -170,7 +201,7 @@ impl Effect {
         w.u8(0) // reserved
     }
 
-    fn read(r: &mut Reader<'_>) -> Result<Effect, DecodeError> {
+    pub(crate) fn read(r: &mut Reader<'_>) -> Result<Effect, DecodeError> {
         let kind_byte = r.u8()?;
         let kind = EffectKind::from_u8(kind_byte).ok_or(DecodeError::UnknownEffectKind(kind_byte))?;
         let red = r.u8()?;
@@ -200,8 +231,9 @@ pub struct CellState {
     pub remaining_ttl_ms: u32,
 }
 
-/// Capability response payload (16 bytes). Tools must never assume
-/// capacities; everything they rely on is advertised here.
+/// Capability response payload (16 bytes; 20 with the v1.1 persistent-config
+/// extension). Tools must never assume capacities; everything they rely on is
+/// advertised here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Capabilities {
     pub protocol_major: u8,
@@ -215,6 +247,10 @@ pub struct Capabilities {
     pub overlay_cell_capacity: u16,
     pub max_message_len: u16,
     pub feature_bits: u32,
+    /// Largest config blob the device accepts (v1.1). On the wire this u32 is
+    /// present **iff** `feature_bits` has [`feature::PERSISTENT_CONFIG`] set;
+    /// otherwise it is absent and decodes as 0.
+    pub max_config_blob_len: u32,
 }
 
 /// Bootloader entry target half.
@@ -249,6 +285,18 @@ pub enum Request {
     SetBrightness { level: u8 },
     GetToggle { id: u8 },
     SetToggle { id: u8, state: bool },
+    /// Open a config transfer session (a new BEGIN replaces any open one).
+    /// `total_len`/`blob_crc32` describe the **entire** blob (header + body).
+    ConfigBegin { total_len: u32, blob_crc32: u32 },
+    /// One contiguous chunk of the blob; `offset` must equal the number of
+    /// bytes received so far.
+    ConfigData { offset: u32, data: Vec<u8, MAX_CONFIG_DATA_PER_MESSAGE> },
+    /// Validate, atomically activate, and persist the assembled blob.
+    ConfigCommit,
+    /// Discard any open transfer session (idempotent).
+    ConfigAbort,
+    /// Read `max_len` bytes of the active config blob starting at `offset`.
+    ConfigRead { offset: u32, max_len: u16 },
     EnterBootloader { magic: u32, target: BootTarget },
 }
 
@@ -266,6 +314,11 @@ impl Request {
             Request::SetBrightness { .. } => Command::SetBrightness,
             Request::GetToggle { .. } => Command::GetToggle,
             Request::SetToggle { .. } => Command::SetToggle,
+            Request::ConfigBegin { .. } => Command::ConfigBegin,
+            Request::ConfigData { .. } => Command::ConfigData,
+            Request::ConfigCommit => Command::ConfigCommit,
+            Request::ConfigAbort => Command::ConfigAbort,
+            Request::ConfigRead { .. } => Command::ConfigRead,
             Request::EnterBootloader { .. } => Command::EnterBootloader,
         }
     }
@@ -284,6 +337,9 @@ pub enum ResponsePayload {
     OverlayState { cells: Vec<CellState, MAX_CELLS_PER_MESSAGE> },
     Brightness { level: u8 },
     Toggle { id: u8, state: bool },
+    /// CONFIG_READ ok: `total_len` is the full blob length; `data` is the
+    /// slice at the requested offset (empty at end of blob).
+    ConfigData { total_len: u32, data: Vec<u8, MAX_CONFIG_DATA_PER_MESSAGE> },
 }
 
 /// A full response message.
@@ -348,6 +404,19 @@ pub fn encode_request(request_id: u8, req: &Request, out: &mut [u8]) -> Result<u
         Request::SetToggle { id, state } => {
             w.u8(*id)?;
             w.u8(*state as u8)?;
+        }
+        Request::ConfigBegin { total_len, blob_crc32 } => {
+            w.u32(*total_len)?;
+            w.u32(*blob_crc32)?;
+        }
+        Request::ConfigData { offset, data } => {
+            w.u32(*offset)?;
+            w.bytes(data)?;
+        }
+        Request::ConfigCommit | Request::ConfigAbort => {}
+        Request::ConfigRead { offset, max_len } => {
+            w.u32(*offset)?;
+            w.u16(*max_len)?;
         }
         Request::EnterBootloader { magic, target } => {
             w.u32(*magic)?;
@@ -416,6 +485,28 @@ pub fn decode_request(bytes: &[u8]) -> Result<(u8, Request), DecodeError> {
             };
             Request::SetToggle { id, state }
         }
+        Command::ConfigBegin => {
+            let total_len = r.u32()?;
+            let blob_crc32 = r.u32()?;
+            Request::ConfigBegin { total_len, blob_crc32 }
+        }
+        Command::ConfigData => {
+            let offset = r.u32()?;
+            let len = r.remaining();
+            if len > MAX_CONFIG_DATA_PER_MESSAGE {
+                return Err(DecodeError::CapacityExceeded);
+            }
+            let mut data = Vec::new();
+            data.extend_from_slice(r.bytes(len)?).map_err(|_| DecodeError::CapacityExceeded)?;
+            Request::ConfigData { offset, data }
+        }
+        Command::ConfigCommit => Request::ConfigCommit,
+        Command::ConfigAbort => Request::ConfigAbort,
+        Command::ConfigRead => {
+            let offset = r.u32()?;
+            let max_len = r.u16()?;
+            Request::ConfigRead { offset, max_len }
+        }
         Command::EnterBootloader => {
             let magic = r.u32()?;
             let target_byte = r.u8()?;
@@ -439,6 +530,14 @@ fn payload_matches(command: Command, status: Status, payload: &ResponsePayload) 
                 true
             }
             (Command::GetToggle | Command::SetToggle, ResponsePayload::Toggle { .. }) => true,
+            (
+                Command::ConfigBegin
+                | Command::ConfigData
+                | Command::ConfigCommit
+                | Command::ConfigAbort,
+                ResponsePayload::Empty,
+            ) => true,
+            (Command::ConfigRead, ResponsePayload::ConfigData { .. }) => true,
             (Command::EnterBootloader, ResponsePayload::Empty) => true,
             _ => false,
         },
@@ -472,6 +571,9 @@ pub fn encode_response(resp: &Response, out: &mut [u8]) -> Result<usize, EncodeE
             w.u16(c.overlay_cell_capacity)?;
             w.u16(c.max_message_len)?;
             w.u32(c.feature_bits)?;
+            if c.feature_bits & feature::PERSISTENT_CONFIG != 0 {
+                w.u32(c.max_config_blob_len)?;
+            }
         }
         ResponsePayload::Echo { data } => w.bytes(data)?,
         ResponsePayload::OverlayAck { pending_keys } => {
@@ -490,6 +592,10 @@ pub fn encode_response(resp: &Response, out: &mut [u8]) -> Result<usize, EncodeE
         ResponsePayload::Toggle { id, state } => {
             w.u8(*id)?;
             w.u8(*state as u8)?;
+        }
+        ResponsePayload::ConfigData { total_len, data } => {
+            w.u32(*total_len)?;
+            w.bytes(data)?;
         }
     }
     let len = w.pos();
@@ -515,18 +621,25 @@ pub fn decode_response(bytes: &[u8]) -> Result<Response, DecodeError> {
     }
     let payload = match status {
         Status::Ok => match command {
-            Command::GetCapabilities => ResponsePayload::Capabilities(Capabilities {
-                protocol_major: r.u8()?,
-                protocol_minor: r.u8()?,
-                led_count_left: r.u8()?,
-                led_count_right: r.u8()?,
-                layer_capacity: r.u8()?,
-                max_cells_per_op: r.u8()?,
-                effect_mask: r.u16()?,
-                overlay_cell_capacity: r.u16()?,
-                max_message_len: r.u16()?,
-                feature_bits: r.u32()?,
-            }),
+            Command::GetCapabilities => {
+                let mut caps = Capabilities {
+                    protocol_major: r.u8()?,
+                    protocol_minor: r.u8()?,
+                    led_count_left: r.u8()?,
+                    led_count_right: r.u8()?,
+                    layer_capacity: r.u8()?,
+                    max_cells_per_op: r.u8()?,
+                    effect_mask: r.u16()?,
+                    overlay_cell_capacity: r.u16()?,
+                    max_message_len: r.u16()?,
+                    feature_bits: r.u32()?,
+                    max_config_blob_len: 0,
+                };
+                if caps.feature_bits & feature::PERSISTENT_CONFIG != 0 {
+                    caps.max_config_blob_len = r.u32()?;
+                }
+                ResponsePayload::Capabilities(caps)
+            }
             Command::Ping => {
                 if payload_len > MAX_PING_LEN {
                     return Err(DecodeError::CapacityExceeded);
@@ -561,6 +674,21 @@ pub fn decode_response(bytes: &[u8]) -> Result<Response, DecodeError> {
                     v => return Err(DecodeError::BadToggleState(v)),
                 };
                 ResponsePayload::Toggle { id, state }
+            }
+            Command::ConfigBegin
+            | Command::ConfigData
+            | Command::ConfigCommit
+            | Command::ConfigAbort => ResponsePayload::Empty,
+            Command::ConfigRead => {
+                let total_len = r.u32()?;
+                let len = r.remaining();
+                if len > MAX_CONFIG_DATA_PER_MESSAGE {
+                    return Err(DecodeError::CapacityExceeded);
+                }
+                let mut data = Vec::new();
+                data.extend_from_slice(r.bytes(len)?)
+                    .map_err(|_| DecodeError::CapacityExceeded)?;
+                ResponsePayload::ConfigData { total_len, data }
             }
             Command::EnterBootloader => ResponsePayload::Empty,
             // All commands are covered above; this arm is unreachable.
@@ -641,6 +769,87 @@ mod tests {
             magic: BOOTLOADER_MAGIC,
             target: BootTarget::Peripheral,
         });
+        roundtrip_request(Request::ConfigBegin { total_len: 7148, blob_crc32: 0xDEAD_BEEF });
+        roundtrip_request(Request::ConfigData {
+            offset: 1024,
+            data: Vec::from_slice(&[0xAA; 100]).unwrap(),
+        });
+        roundtrip_request(Request::ConfigData { offset: 0, data: Vec::new() });
+        roundtrip_request(Request::ConfigCommit);
+        roundtrip_request(Request::ConfigAbort);
+        roundtrip_request(Request::ConfigRead { offset: 4096, max_len: 1024 });
+    }
+
+    #[test]
+    fn config_responses_roundtrip() {
+        for (command, status) in [
+            (Command::ConfigBegin, Status::Ok),
+            (Command::ConfigBegin, Status::CapacityExceeded),
+            (Command::ConfigData, Status::Ok),
+            (Command::ConfigData, Status::NoSession),
+            (Command::ConfigData, Status::BadOffset),
+            (Command::ConfigCommit, Status::Ok),
+            (Command::ConfigCommit, Status::ConfigIncomplete),
+            (Command::ConfigCommit, Status::CrcMismatch),
+            (Command::ConfigCommit, Status::InvalidConfig),
+            (Command::ConfigAbort, Status::Ok),
+        ] {
+            roundtrip_response(Response {
+                request_id: 20,
+                command,
+                status,
+                payload: ResponsePayload::Empty,
+            });
+        }
+        roundtrip_response(Response {
+            request_id: 21,
+            command: Command::ConfigRead,
+            status: Status::Ok,
+            payload: ResponsePayload::ConfigData {
+                total_len: 7148,
+                data: Vec::from_slice(&[1, 2, 3, 4, 5]).unwrap(),
+            },
+        });
+        roundtrip_response(Response {
+            request_id: 22,
+            command: Command::ConfigRead,
+            status: Status::Ok,
+            payload: ResponsePayload::ConfigData { total_len: 64, data: Vec::new() },
+        });
+        // ConfigData payload only pairs with CONFIG_READ.
+        let resp = Response {
+            request_id: 23,
+            command: Command::ConfigCommit,
+            status: Status::Ok,
+            payload: ResponsePayload::ConfigData { total_len: 0, data: Vec::new() },
+        };
+        let mut buf = [0u8; 64];
+        assert_eq!(encode_response(&resp, &mut buf), Err(EncodeError::PayloadMismatch));
+    }
+
+    #[test]
+    fn max_config_chunks_fit_in_max_message_len() {
+        let mut buf = [0u8; MAX_MESSAGE_LEN];
+        let data: Vec<u8, MAX_CONFIG_DATA_PER_MESSAGE> =
+            Vec::from_slice(&[0x5A; MAX_CONFIG_DATA_PER_MESSAGE]).unwrap();
+        let len = encode_request(
+            1,
+            &Request::ConfigData { offset: 0, data: data.clone() },
+            &mut buf,
+        )
+        .unwrap();
+        assert!(len <= MAX_MESSAGE_LEN);
+        let len = encode_response(
+            &Response {
+                request_id: 1,
+                command: Command::ConfigRead,
+                status: Status::Ok,
+                payload: ResponsePayload::ConfigData { total_len: 7148, data },
+            },
+            &mut buf,
+        )
+        .unwrap();
+        assert!(len <= MAX_MESSAGE_LEN);
     }
 
     #[test]
@@ -660,6 +869,26 @@ mod tests {
                 overlay_cell_capacity: 80,
                 max_message_len: 1536,
                 feature_bits: 0x3F,
+                max_config_blob_len: 0,
+            }),
+        });
+        // v1.1: the persistent-config bit gates the blob-length extension.
+        roundtrip_response(Response {
+            request_id: 1,
+            command: Command::GetCapabilities,
+            status: Status::Ok,
+            payload: ResponsePayload::Capabilities(Capabilities {
+                protocol_major: 1,
+                protocol_minor: 1,
+                led_count_left: 40,
+                led_count_right: 40,
+                layer_capacity: 8,
+                max_cells_per_op: 80,
+                effect_mask: 0b111,
+                overlay_cell_capacity: 80,
+                max_message_len: 1536,
+                feature_bits: 0x7F,
+                max_config_blob_len: 7148,
             }),
         });
         roundtrip_response(Response {

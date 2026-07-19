@@ -12,11 +12,18 @@
 #[cfg(test)]
 extern crate std;
 
+pub mod config;
 pub mod error;
 pub mod frame;
 mod io;
 mod message;
 
+pub use config::{
+    crc32, decode_lighting_config, encode_lighting_config, ConfigActivation, ConfigError,
+    ConfigRecord, LightingConfig, CONFIG_BODY_HEADER_LEN, CONFIG_HEADER_LEN, CONFIG_KEY_COUNT,
+    CONFIG_LAYER_COUNT, CONFIG_MAGIC, CONFIG_RECORD_HEADER_LEN, CONFIG_TOGGLE_COUNT,
+    CONFIG_VERSION, MAX_CELLS_PER_RECORD, MAX_CONFIG_BLOB_LEN, MAX_CONFIG_RECORDS,
+};
 pub use error::{DecodeError, EncodeError, FrameError};
 pub use message::{
     decode_request, decode_response, encode_request, encode_response, feature, BootTarget,
@@ -26,8 +33,9 @@ pub use message::{
 
 /// Protocol major version. A major bump is a breaking change.
 pub const PROTOCOL_VERSION_MAJOR: u8 = 1;
-/// Protocol minor version. Minor bumps are additive.
-pub const PROTOCOL_VERSION_MINOR: u8 = 0;
+/// Protocol minor version. Minor bumps are additive. 1.1 adds persistent
+/// lighting configuration (CONFIG_* commands, the config blob format).
+pub const PROTOCOL_VERSION_MINOR: u8 = 1;
 
 /// Bit 7 of the opcode byte marks a response.
 pub const RESPONSE_FLAG: u8 = 0x80;
@@ -44,6 +52,9 @@ pub const MAX_MESSAGE_LEN: usize = 1536;
 pub const MAX_CELLS_PER_MESSAGE: usize = 80;
 /// Maximum PING/echo payload.
 pub const MAX_PING_LEN: usize = 64;
+/// Maximum config bytes carried by one CONFIG_DATA request or one
+/// CONFIG_READ response (fits comfortably under [`MAX_MESSAGE_LEN`]).
+pub const MAX_CONFIG_DATA_PER_MESSAGE: usize = 1024;
 
 /// Required magic for `ENTER_BOOTLOADER`.
 pub const BOOTLOADER_MAGIC: u32 = 0xB007_10AD;

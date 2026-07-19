@@ -1,198 +1,25 @@
-//! Golden vector suite.
+//! Golden vector suite for protocol v1.0.
 //!
 //! The vector file `protocol/vectors/host-protocol-v1.json` is *generated*
 //! from the message constructions in this test (run with
 //! `GLOVE80_WRITE_VECTORS=1 cargo test --test golden` to regenerate) and
 //! consumed by both this suite and the TypeScript suite
 //! (`ui/src/lib/host-protocol.test.ts`), so the two codecs cannot drift.
+//!
+//! These vectors are **frozen at v1.0**: version numbers below are literal
+//! `1` / `0` (not the crate constants) so that later minor bumps can never
+//! change a v1.0 byte. v1.1 vectors live in `golden_v11.rs` /
+//! `host-protocol-v1.1.json`.
 
-use std::path::PathBuf;
+mod common;
 
+use common::{heapless_bytes, message_vectors, Message};
 use glove80_host_protocol::frame::write_frame;
 use glove80_host_protocol::{
-    decode_request, decode_response, encode_request, encode_response, BootTarget, Capabilities,
-    CellState, CellWrite, Command, Effect, EffectKind, Request, Response, ResponsePayload, Status,
-    BOOTLOADER_MAGIC, MAX_MESSAGE_LEN, PROTOCOL_VERSION_MAJOR, PROTOCOL_VERSION_MINOR,
+    BootTarget, Capabilities, CellState, CellWrite, Command, Effect, Request, Response,
+    ResponsePayload, Status, BOOTLOADER_MAGIC, MAX_MESSAGE_LEN,
 };
-use serde_json::{json, Map, Value};
-
-fn vector_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../vectors/host-protocol-v1.json")
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-fn unhex(s: &str) -> Vec<u8> {
-    assert!(s.len() % 2 == 0, "odd hex length");
-    (0..s.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
-        .collect()
-}
-
-// --- canonical JSON representation (mirrored by the TS codec/tests) -------
-
-fn command_name(c: Command) -> &'static str {
-    match c {
-        Command::GetCapabilities => "getCapabilities",
-        Command::Ping => "ping",
-        Command::SetCells => "setCells",
-        Command::UnsetCells => "unsetCells",
-        Command::ClearOverlay => "clearOverlay",
-        Command::ReadOverlay => "readOverlay",
-        Command::ReplaceOverlay => "replaceOverlay",
-        Command::GetBrightness => "getBrightness",
-        Command::SetBrightness => "setBrightness",
-        Command::GetToggle => "getToggle",
-        Command::SetToggle => "setToggle",
-        Command::EnterBootloader => "enterBootloader",
-    }
-}
-
-fn status_name(s: Status) -> &'static str {
-    match s {
-        Status::Ok => "ok",
-        Status::UnknownCommand => "unknownCommand",
-        Status::Malformed => "malformed",
-        Status::OutOfRange => "outOfRange",
-        Status::CapacityExceeded => "capacityExceeded",
-        Status::PartialApply => "partialApply",
-        Status::Busy => "busy",
-        Status::UnknownToggle => "unknownToggle",
-        Status::BadMagic => "badMagic",
-        Status::UnsupportedVersion => "unsupportedVersion",
-    }
-}
-
-fn effect_json(e: &Effect) -> Value {
-    let kind = match e.kind {
-        EffectKind::Solid => "solid",
-        EffectKind::Blink => "blink",
-        EffectKind::Breathe => "breathe",
-    };
-    json!({
-        "kind": kind,
-        "r": e.r,
-        "g": e.g,
-        "b": e.b,
-        "periodMs": e.period_ms,
-        "phaseMs": e.phase_ms,
-        "dutyPercent": e.duty_percent,
-    })
-}
-
-fn cells_json(cells: &[CellWrite]) -> Value {
-    Value::Array(
-        cells
-            .iter()
-            .map(|c| json!({ "key": c.key, "effect": effect_json(&c.effect) }))
-            .collect(),
-    )
-}
-
-fn request_json(req: &Request) -> Value {
-    let mut obj = Map::new();
-    obj.insert("command".into(), command_name(req.command()).into());
-    match req {
-        Request::GetCapabilities { client_major, client_minor } => {
-            obj.insert("clientMajor".into(), (*client_major).into());
-            obj.insert("clientMinor".into(), (*client_minor).into());
-        }
-        Request::Ping { data } => {
-            obj.insert("dataHex".into(), hex(data).into());
-        }
-        Request::SetCells { ttl_ms, cells } | Request::ReplaceOverlay { ttl_ms, cells } => {
-            obj.insert("ttlMs".into(), (*ttl_ms).into());
-            obj.insert("cells".into(), cells_json(cells));
-        }
-        Request::UnsetCells { keys } => {
-            obj.insert("keys".into(), Value::Array(keys.iter().map(|k| (*k).into()).collect()));
-        }
-        Request::ClearOverlay | Request::ReadOverlay | Request::GetBrightness => {}
-        Request::SetBrightness { level } => {
-            obj.insert("level".into(), (*level).into());
-        }
-        Request::GetToggle { id } => {
-            obj.insert("id".into(), (*id).into());
-        }
-        Request::SetToggle { id, state } => {
-            obj.insert("id".into(), (*id).into());
-            obj.insert("state".into(), (*state).into());
-        }
-        Request::EnterBootloader { magic, target } => {
-            obj.insert("magic".into(), (*magic).into());
-            obj.insert(
-                "target".into(),
-                match target {
-                    BootTarget::Central => "central",
-                    BootTarget::Peripheral => "peripheral",
-                }
-                .into(),
-            );
-        }
-    }
-    Value::Object(obj)
-}
-
-fn payload_json(p: &ResponsePayload) -> Value {
-    match p {
-        ResponsePayload::Empty => json!({ "type": "empty" }),
-        ResponsePayload::Capabilities(c) => json!({
-            "type": "capabilities",
-            "protocolMajor": c.protocol_major,
-            "protocolMinor": c.protocol_minor,
-            "ledCountLeft": c.led_count_left,
-            "ledCountRight": c.led_count_right,
-            "layerCapacity": c.layer_capacity,
-            "maxCellsPerOp": c.max_cells_per_op,
-            "effectMask": c.effect_mask,
-            "overlayCellCapacity": c.overlay_cell_capacity,
-            "maxMessageLen": c.max_message_len,
-            "featureBits": c.feature_bits,
-        }),
-        ResponsePayload::Echo { data } => json!({ "type": "echo", "dataHex": hex(data) }),
-        ResponsePayload::OverlayAck { pending_keys } => json!({
-            "type": "overlayAck",
-            "pendingKeys": pending_keys.iter().copied().collect::<Vec<u8>>(),
-        }),
-        ResponsePayload::OverlayState { cells } => json!({
-            "type": "overlayState",
-            "cells": cells
-                .iter()
-                .map(|c| json!({
-                    "key": c.key,
-                    "effect": effect_json(&c.effect),
-                    "remainingTtlMs": c.remaining_ttl_ms,
-                }))
-                .collect::<Vec<Value>>(),
-        }),
-        ResponsePayload::Brightness { level } => json!({ "type": "brightness", "level": level }),
-        ResponsePayload::Toggle { id, state } => {
-            json!({ "type": "toggle", "id": id, "state": state })
-        }
-    }
-}
-
-fn response_json(resp: &Response) -> Value {
-    json!({
-        "command": command_name(resp.command),
-        "status": status_name(resp.status),
-        "payload": payload_json(&resp.payload),
-    })
-}
-
-// --- the vectors ----------------------------------------------------------
-
-enum Message {
-    Req(u8, Request),
-    Resp(Response),
-}
-
-fn heapless_bytes<const N: usize>(data: &[u8]) -> heapless::Vec<u8, N> {
-    heapless::Vec::from_slice(data).unwrap()
-}
+use serde_json::{json, Value};
 
 fn messages() -> Vec<(&'static str, Message)> {
     use Message::{Req, Resp};
@@ -209,8 +36,8 @@ fn messages() -> Vec<(&'static str, Message)> {
     let one_cell = heapless::Vec::from_slice(&[CellWrite { key: 0, effect: breathe }]).unwrap();
 
     let caps = Capabilities {
-        protocol_major: PROTOCOL_VERSION_MAJOR,
-        protocol_minor: PROTOCOL_VERSION_MINOR,
+        protocol_major: 1,
+        protocol_minor: 0,
         led_count_left: 40,
         led_count_right: 40,
         layer_capacity: 8,
@@ -219,15 +46,14 @@ fn messages() -> Vec<(&'static str, Message)> {
         overlay_cell_capacity: 80,
         max_message_len: MAX_MESSAGE_LEN as u16,
         feature_bits: 0x3F,
+        // Not on the wire: the persistent-config feature bit is clear.
+        max_config_blob_len: 0,
     };
 
     vec![
         (
             "get_capabilities_request",
-            Req(1, Request::GetCapabilities {
-                client_major: PROTOCOL_VERSION_MAJOR,
-                client_minor: PROTOCOL_VERSION_MINOR,
-            }),
+            Req(1, Request::GetCapabilities { client_major: 1, client_minor: 0 }),
         ),
         (
             "get_capabilities_response",
@@ -409,40 +235,6 @@ fn messages() -> Vec<(&'static str, Message)> {
     ]
 }
 
-fn encode_message(m: &Message) -> Vec<u8> {
-    let mut buf = [0u8; MAX_MESSAGE_LEN];
-    let len = match m {
-        Message::Req(id, req) => encode_request(*id, req, &mut buf).unwrap(),
-        Message::Resp(resp) => encode_response(resp, &mut buf).unwrap(),
-    };
-    buf[..len].to_vec()
-}
-
-fn message_vectors() -> Vec<Value> {
-    messages()
-        .iter()
-        .map(|(name, m)| {
-            let bytes = encode_message(m);
-            match m {
-                Message::Req(id, req) => json!({
-                    "name": name,
-                    "kind": "request",
-                    "requestId": id,
-                    "message": request_json(req),
-                    "hex": hex(&bytes),
-                }),
-                Message::Resp(resp) => json!({
-                    "name": name,
-                    "kind": "response",
-                    "requestId": resp.request_id,
-                    "message": response_json(resp),
-                    "hex": hex(&bytes),
-                }),
-            }
-        })
-        .collect()
-}
-
 fn frame_vectors() -> Vec<Value> {
     // (name, message-name to frame, chunk size, pad to chunk size?)
     let plans = [
@@ -455,7 +247,7 @@ fn frame_vectors() -> Vec<Value> {
         .iter()
         .map(|(name, source, chunk, pad)| {
             let (_, m) = all.iter().find(|(n, _)| n == source).unwrap();
-            let message = encode_message(m);
+            let message = common::encode_message(m);
             let count = glove80_host_protocol::frame::frame_count(message.len(), *chunk).unwrap();
             let frames: Vec<String> = (0..count)
                 .map(|i| {
@@ -464,7 +256,7 @@ fn frame_vectors() -> Vec<Value> {
                     if !*pad {
                         out.truncate(used);
                     }
-                    hex(&out)
+                    common::hex(&out)
                 })
                 .collect();
             json!({
@@ -472,7 +264,7 @@ fn frame_vectors() -> Vec<Value> {
                 "sourceMessage": source,
                 "chunkSize": chunk,
                 "padded": pad,
-                "messageHex": hex(&message),
+                "messageHex": common::hex(&message),
                 "framesHex": frames,
             })
         })
@@ -481,73 +273,45 @@ fn frame_vectors() -> Vec<Value> {
 
 fn golden_doc() -> Value {
     json!({
-        "protocol": { "major": PROTOCOL_VERSION_MAJOR, "minor": PROTOCOL_VERSION_MINOR },
+        // Frozen v1.0 stamp; see the module comment.
+        "protocol": { "major": 1, "minor": 0 },
         "generatedBy": "protocol/glove80-host-protocol tests/golden.rs (GLOVE80_WRITE_VECTORS=1 cargo test --test golden)",
-        "messages": message_vectors(),
+        "messages": message_vectors(&messages()),
         "frames": frame_vectors(),
     })
 }
 
-fn load_file() -> Value {
-    let path = vector_path();
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    serde_json::from_str(&text).unwrap()
-}
+const FILE_NAME: &str = "host-protocol-v1.json";
 
 #[test]
 fn golden_file_matches_generator() {
     let doc = golden_doc();
-    if std::env::var("GLOVE80_WRITE_VECTORS").is_ok() {
-        let path = vector_path();
-        std::fs::write(&path, serde_json::to_string_pretty(&doc).unwrap() + "\n").unwrap();
+    if common::maybe_write(FILE_NAME, &doc) {
         return;
     }
     assert_eq!(
         doc,
-        load_file(),
+        common::load_file(FILE_NAME),
         "vector file is stale; regenerate with GLOVE80_WRITE_VECTORS=1 cargo test --test golden"
     );
 }
 
 #[test]
 fn golden_messages_decode() {
-    let file = load_file();
-    let constructed = messages();
-    for entry in file["messages"].as_array().unwrap() {
-        let name = entry["name"].as_str().unwrap();
-        let bytes = unhex(entry["hex"].as_str().unwrap());
-        let (_, expected) = constructed
-            .iter()
-            .find(|(n, _)| *n == name)
-            .unwrap_or_else(|| panic!("vector {name} not constructed in this suite"));
-        match expected {
-            Message::Req(id, req) => {
-                let (decoded_id, decoded) = decode_request(&bytes)
-                    .unwrap_or_else(|e| panic!("decode {name}: {e:?}"));
-                assert_eq!(decoded_id, *id, "{name}");
-                assert_eq!(&decoded, req, "{name}");
-            }
-            Message::Resp(resp) => {
-                let decoded =
-                    decode_response(&bytes).unwrap_or_else(|e| panic!("decode {name}: {e:?}"));
-                assert_eq!(&decoded, resp, "{name}");
-            }
-        }
-    }
+    common::assert_messages_decode(&common::load_file(FILE_NAME), &messages());
 }
 
 #[test]
 fn golden_frames_reassemble() {
-    let file = load_file();
+    let file = common::load_file(FILE_NAME);
     for entry in file["frames"].as_array().unwrap() {
         let name = entry["name"].as_str().unwrap();
-        let message = unhex(entry["messageHex"].as_str().unwrap());
+        let message = common::unhex(entry["messageHex"].as_str().unwrap());
         let mut reassembler: glove80_host_protocol::frame::Reassembler<MAX_MESSAGE_LEN> =
             glove80_host_protocol::frame::Reassembler::new();
         let frames = entry["framesHex"].as_array().unwrap();
         for (i, f) in frames.iter().enumerate() {
-            let chunk = unhex(f.as_str().unwrap());
+            let chunk = common::unhex(f.as_str().unwrap());
             let out = reassembler.push(&chunk).unwrap_or_else(|e| panic!("push {name}: {e:?}"));
             if i == frames.len() - 1 {
                 assert_eq!(out.expect("final frame yields message"), &message[..], "{name}");

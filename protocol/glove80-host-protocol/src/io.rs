@@ -42,6 +42,17 @@ impl<'a> Writer<'a> {
     pub fn patch_u16(&mut self, at: usize, v: u16) {
         self.buf[at..at + 2].copy_from_slice(&v.to_le_bytes());
     }
+
+    /// Overwrite four bytes at an absolute position (for back-patching
+    /// lengths/checksums).
+    pub fn patch_u32(&mut self, at: usize, v: u32) {
+        self.buf[at..at + 4].copy_from_slice(&v.to_le_bytes());
+    }
+
+    /// The bytes written so far.
+    pub fn written(&self) -> &[u8] {
+        &self.buf[..self.pos]
+    }
 }
 
 pub(crate) struct Reader<'a> {

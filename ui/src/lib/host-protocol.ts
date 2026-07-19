@@ -1,12 +1,13 @@
-// Glove80 host protocol v1 — TypeScript codec.
+// Glove80 host protocol v1.1 — TypeScript codec.
 //
 // Byte-level spec: protocol/glove80-host-protocol/PROTOCOL.md.
 // This mirrors the Rust codec (protocol/glove80-host-protocol); both are
-// pinned to the shared golden vectors in
-// protocol/vectors/host-protocol-v1.json. All integers little-endian.
+// pinned to the shared golden vectors in protocol/vectors/
+// (host-protocol-v1.json, frozen, plus host-protocol-v1.1.json).
+// All integers little-endian.
 
 export const PROTOCOL_VERSION_MAJOR = 1;
-export const PROTOCOL_VERSION_MINOR = 0;
+export const PROTOCOL_VERSION_MINOR = 1;
 export const RESPONSE_FLAG = 0x80;
 export const REQUEST_HEADER_LEN = 4;
 export const RESPONSE_HEADER_LEN = 5;
@@ -14,6 +15,8 @@ export const MAX_MESSAGE_LEN = 1536;
 export const MAX_CELLS_PER_MESSAGE = 80;
 export const MAX_PING_LEN = 64;
 export const BOOTLOADER_MAGIC = 0xb00710ad;
+/** Max config bytes in one CONFIG_DATA request / CONFIG_READ response. */
+export const MAX_CONFIG_DATA_PER_MESSAGE = 1024;
 
 export type CommandName =
   | "getCapabilities"
@@ -27,6 +30,11 @@ export type CommandName =
   | "setBrightness"
   | "getToggle"
   | "setToggle"
+  | "configBegin"
+  | "configData"
+  | "configCommit"
+  | "configAbort"
+  | "configRead"
   | "enterBootloader";
 
 export const OPCODES: Record<CommandName, number> = {
@@ -41,6 +49,11 @@ export const OPCODES: Record<CommandName, number> = {
   setBrightness: 0x21,
   getToggle: 0x30,
   setToggle: 0x31,
+  configBegin: 0x40,
+  configData: 0x41,
+  configCommit: 0x42,
+  configAbort: 0x43,
+  configRead: 0x44,
   enterBootloader: 0x7f,
 };
 
@@ -65,7 +78,12 @@ export type StatusName =
   | "busy"
   | "unknownToggle"
   | "badMagic"
-  | "unsupportedVersion";
+  | "unsupportedVersion"
+  | "noSession"
+  | "badOffset"
+  | "configIncomplete"
+  | "crcMismatch"
+  | "invalidConfig";
 
 const STATUS_VALUES: Record<StatusName, number> = {
   ok: 0x00,
@@ -78,6 +96,11 @@ const STATUS_VALUES: Record<StatusName, number> = {
   unknownToggle: 0x07,
   badMagic: 0x08,
   unsupportedVersion: 0x09,
+  noSession: 0x0a,
+  badOffset: 0x0b,
+  configIncomplete: 0x0c,
+  crcMismatch: 0x0d,
+  invalidConfig: 0x0e,
 };
 
 const STATUS_BY_VALUE = new Map<number, StatusName>(
@@ -129,6 +152,9 @@ export interface Capabilities {
   overlayCellCapacity: number;
   maxMessageLen: number;
   featureBits: number;
+  /** Largest config blob the device accepts (v1.1). On the wire this u32 is
+   * present iff FEATURE_PERSISTENT_CONFIG is set; otherwise it decodes as 0. */
+  maxConfigBlobLen: number;
 }
 
 export const FEATURE_TTL = 1 << 0;
@@ -137,6 +163,7 @@ export const FEATURE_BOOTLOADER_ENTRY = 1 << 2;
 export const FEATURE_ATOMIC_REPLACE = 1 << 3;
 export const FEATURE_OVERLAY_READBACK = 1 << 4;
 export const FEATURE_PARTIAL_APPLY = 1 << 5;
+export const FEATURE_PERSISTENT_CONFIG = 1 << 6;
 
 export type BootTarget = "central" | "peripheral";
 
@@ -152,6 +179,11 @@ export type Request =
   | { command: "setBrightness"; level: number }
   | { command: "getToggle"; id: number }
   | { command: "setToggle"; id: number; state: boolean }
+  | { command: "configBegin"; totalLen: number; blobCrc32: number }
+  | { command: "configData"; offset: number; data: Uint8Array }
+  | { command: "configCommit" }
+  | { command: "configAbort" }
+  | { command: "configRead"; offset: number; maxLen: number }
   | { command: "enterBootloader"; magic: number; target: BootTarget };
 
 export type ResponsePayload =
@@ -161,7 +193,8 @@ export type ResponsePayload =
   | { type: "overlayAck"; pendingKeys: number[] }
   | { type: "overlayState"; cells: CellState[] }
   | { type: "brightness"; level: number }
-  | { type: "toggle"; id: number; state: boolean };
+  | { type: "toggle"; id: number; state: boolean }
+  | { type: "configData"; totalLen: number; data: Uint8Array };
 
 export interface Response {
   requestId: number;
@@ -175,12 +208,16 @@ export class ProtocolError extends Error {}
 // --- little-endian cursor helpers ----------------------------------------
 
 class Writer {
-  private buf = new Uint8Array(MAX_MESSAGE_LEN);
+  private buf: Uint8Array;
   pos = 0;
+
+  constructor(capacity: number = MAX_MESSAGE_LEN) {
+    this.buf = new Uint8Array(capacity);
+  }
 
   private ensure(n: number): void {
     if (this.pos + n > this.buf.length) {
-      throw new ProtocolError(`message exceeds MAX_MESSAGE_LEN (${MAX_MESSAGE_LEN})`);
+      throw new ProtocolError(`message exceeds the encoder capacity (${this.buf.length})`);
     }
   }
 
@@ -208,6 +245,16 @@ class Writer {
   patchU16(at: number, v: number): void {
     this.buf[at] = v & 0xff;
     this.buf[at + 1] = (v >>> 8) & 0xff;
+  }
+
+  patchU32(at: number, v: number): void {
+    this.patchU16(at, v & 0xffff);
+    this.patchU16(at + 2, v >>> 16);
+  }
+
+  /** The bytes written so far (a view, not a copy). */
+  written(): Uint8Array {
+    return this.buf.subarray(0, this.pos);
   }
 
   finish(): Uint8Array {
@@ -346,6 +393,24 @@ export function encodeRequest(requestId: number, request: Request): Uint8Array {
       w.u8(request.id);
       w.u8(request.state ? 1 : 0);
       break;
+    case "configBegin":
+      w.u32(request.totalLen);
+      w.u32(request.blobCrc32);
+      break;
+    case "configData":
+      if (request.data.length > MAX_CONFIG_DATA_PER_MESSAGE) {
+        throw new ProtocolError(`config chunk exceeds ${MAX_CONFIG_DATA_PER_MESSAGE} bytes`);
+      }
+      w.u32(request.offset);
+      w.bytes(request.data);
+      break;
+    case "configCommit":
+    case "configAbort":
+      break;
+    case "configRead":
+      w.u32(request.offset);
+      w.u16(request.maxLen);
+      break;
     case "enterBootloader":
       w.u32(request.magic);
       w.u8(request.target === "peripheral" ? 1 : 0);
@@ -409,6 +474,24 @@ export function decodeRequest(bytes: Uint8Array): DecodedRequest {
       request = { command, id, state: stateByte === 1 };
       break;
     }
+    case "configBegin":
+      request = { command, totalLen: r.u32(), blobCrc32: r.u32() };
+      break;
+    case "configData": {
+      const offset = r.u32();
+      if (r.remaining > MAX_CONFIG_DATA_PER_MESSAGE) {
+        throw new ProtocolError("config chunk exceeds codec capacity");
+      }
+      request = { command, offset, data: r.bytes(r.remaining) };
+      break;
+    }
+    case "configCommit":
+    case "configAbort":
+      request = { command };
+      break;
+    case "configRead":
+      request = { command, offset: r.u32(), maxLen: r.u16() };
+      break;
     case "enterBootloader": {
       const magic = r.u32();
       const targetByte = r.u8();
@@ -438,8 +521,16 @@ function payloadMatches(command: CommandName, status: StatusName, payload: Respo
         return command === "getBrightness" || command === "setBrightness";
       case "toggle":
         return command === "getToggle" || command === "setToggle";
+      case "configData":
+        return command === "configRead";
       case "empty":
-        return command === "enterBootloader";
+        return (
+          command === "enterBootloader" ||
+          command === "configBegin" ||
+          command === "configData" ||
+          command === "configCommit" ||
+          command === "configAbort"
+        );
     }
   }
   if (status === "partialApply") {
@@ -472,6 +563,9 @@ export function encodeResponse(response: Response): Uint8Array {
       w.u16(payload.overlayCellCapacity);
       w.u16(payload.maxMessageLen);
       w.u32(payload.featureBits);
+      if ((payload.featureBits & FEATURE_PERSISTENT_CONFIG) !== 0) {
+        w.u32(payload.maxConfigBlobLen);
+      }
       break;
     case "echo":
       if (payload.data.length > MAX_PING_LEN) {
@@ -504,6 +598,13 @@ export function encodeResponse(response: Response): Uint8Array {
       w.u8(payload.id);
       w.u8(payload.state ? 1 : 0);
       break;
+    case "configData":
+      if (payload.data.length > MAX_CONFIG_DATA_PER_MESSAGE) {
+        throw new ProtocolError(`config chunk exceeds ${MAX_CONFIG_DATA_PER_MESSAGE} bytes`);
+      }
+      w.u32(payload.totalLen);
+      w.bytes(payload.data);
+      break;
   }
   w.patchU16(3, w.pos - RESPONSE_HEADER_LEN);
   return w.finish();
@@ -532,9 +633,9 @@ export function decodeResponse(bytes: Uint8Array): Response {
   let payload: ResponsePayload;
   if (status === "ok") {
     switch (command) {
-      case "getCapabilities":
-        payload = {
-          type: "capabilities",
+      case "getCapabilities": {
+        const caps = {
+          type: "capabilities" as const,
           protocolMajor: r.u8(),
           protocolMinor: r.u8(),
           ledCountLeft: r.u8(),
@@ -545,8 +646,14 @@ export function decodeResponse(bytes: Uint8Array): Response {
           overlayCellCapacity: r.u16(),
           maxMessageLen: r.u16(),
           featureBits: r.u32(),
+          maxConfigBlobLen: 0,
         };
+        if ((caps.featureBits & FEATURE_PERSISTENT_CONFIG) !== 0) {
+          caps.maxConfigBlobLen = r.u32();
+        }
+        payload = caps;
         break;
+      }
       case "ping":
         if (payloadLen > MAX_PING_LEN) throw new ProtocolError("echo payload too long");
         payload = { type: "echo", data: r.bytes(payloadLen) };
@@ -579,9 +686,21 @@ export function decodeResponse(bytes: Uint8Array): Response {
         payload = { type: "toggle", id, state: stateByte === 1 };
         break;
       }
+      case "configBegin":
+      case "configData":
+      case "configCommit":
+      case "configAbort":
       case "enterBootloader":
         payload = { type: "empty" };
         break;
+      case "configRead": {
+        const totalLen = r.u32();
+        if (r.remaining > MAX_CONFIG_DATA_PER_MESSAGE) {
+          throw new ProtocolError("config chunk exceeds codec capacity");
+        }
+        payload = { type: "configData", totalLen, data: r.bytes(r.remaining) };
+        break;
+      }
     }
   } else if (status === "partialApply") {
     if (!OVERLAY_WRITE_COMMANDS.has(command)) {
@@ -703,4 +822,208 @@ export class Reassembler {
     this.nextSeq = seq + 1;
     return null;
   }
+}
+
+// --- persistent lighting config blob (v1.1) -------------------------------
+//
+// The unit of persistence and transfer for CONFIG_BEGIN/DATA/COMMIT/READ.
+// Mirrors protocol/glove80-host-protocol/src/config.rs; byte layout in
+// PROTOCOL.md ("Persistent configuration (v1.1)").
+
+/** Blob magic ("G80L" read as a little-endian u32). */
+export const CONFIG_MAGIC = 0x4c303847;
+export const CONFIG_VERSION = 1;
+export const CONFIG_HEADER_LEN = 16;
+export const CONFIG_BODY_HEADER_LEN = 12;
+export const CONFIG_RECORD_HEADER_LEN = 5;
+export const MAX_CONFIG_RECORDS = 16;
+export const MAX_CELLS_PER_RECORD = 40;
+export const CONFIG_KEY_COUNT = 80;
+export const CONFIG_LAYER_COUNT = 8;
+export const CONFIG_TOGGLE_COUNT = 32;
+/** Largest possible blob: header + body prefix + 16 full records. */
+export const MAX_CONFIG_BLOB_LEN =
+  CONFIG_HEADER_LEN +
+  CONFIG_BODY_HEADER_LEN +
+  MAX_CONFIG_RECORDS *
+    (CONFIG_RECORD_HEADER_LEN + MAX_CELLS_PER_RECORD * (1 + EFFECT_ENCODED_LEN));
+
+/** Activation predicate of a persistable record. Host-overlay and status
+ * records are runtime state and deliberately not representable. */
+export type ConfigActivation =
+  | { kind: "always" }
+  | { kind: "layerActive"; layer: number }
+  | { kind: "toggle"; id: number };
+
+export interface ConfigRecord {
+  activation: ConfigActivation;
+  /** Sparse key → effect map; a key absent here is transparent and a key
+   * may appear at most once. */
+  cells: CellWrite[];
+}
+
+export interface LightingConfig {
+  /** Bit n set ⇔ toggle n's runtime state is persisted across reboots. */
+  togglePersistMask: number;
+  /** Bit n = toggle n's state on boot (for non-persisted toggles). */
+  toggleInitialState: number;
+  /** Blob order = composition order within each activation class. */
+  records: ConfigRecord[];
+}
+
+// Half-byte lookup table for CRC-32/ISO-HDLC (reflected poly 0xEDB88320).
+const CRC32_TABLE = [
+  0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
+  0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c, 0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c,
+];
+
+/** CRC-32/ISO-HDLC (the zlib/PNG CRC). crc32("123456789") = 0xCBF43926. */
+export function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const b of bytes) {
+    crc = (crc >>> 4) ^ CRC32_TABLE[(crc ^ b) & 0xf];
+    crc = (crc >>> 4) ^ CRC32_TABLE[(crc ^ (b >>> 4)) & 0xf];
+  }
+  return ~crc >>> 0;
+}
+
+function activationToWire(a: ConfigActivation): [number, number] {
+  switch (a.kind) {
+    case "always":
+      return [0, 0];
+    case "layerActive":
+      if (a.layer >= CONFIG_LAYER_COUNT || a.layer < 0) {
+        throw new ProtocolError(`layer ${a.layer} out of range (< ${CONFIG_LAYER_COUNT})`);
+      }
+      return [1, a.layer];
+    case "toggle":
+      if (a.id >= CONFIG_TOGGLE_COUNT || a.id < 0) {
+        throw new ProtocolError(`toggle ${a.id} out of range (< ${CONFIG_TOGGLE_COUNT})`);
+      }
+      return [2, a.id];
+  }
+}
+
+function activationFromWire(kind: number, arg: number): ConfigActivation {
+  switch (kind) {
+    case 0:
+      return { kind: "always" };
+    case 1:
+      if (arg >= CONFIG_LAYER_COUNT) {
+        throw new ProtocolError(`layer ${arg} out of range (< ${CONFIG_LAYER_COUNT})`);
+      }
+      return { kind: "layerActive", layer: arg };
+    case 2:
+      if (arg >= CONFIG_TOGGLE_COUNT) {
+        throw new ProtocolError(`toggle ${arg} out of range (< ${CONFIG_TOGGLE_COUNT})`);
+      }
+      return { kind: "toggle", id: arg };
+    default:
+      throw new ProtocolError(`unknown activation ${kind}`);
+  }
+}
+
+/** Encode a config as a complete blob (header + body, CRC filled in). The
+ * output is canonical: encoding a decoded blob reproduces it byte-for-byte. */
+export function encodeLightingConfig(config: LightingConfig): Uint8Array {
+  if (config.records.length > MAX_CONFIG_RECORDS) {
+    throw new ProtocolError(`too many records (max ${MAX_CONFIG_RECORDS})`);
+  }
+  const w = new Writer(MAX_CONFIG_BLOB_LEN);
+  w.u32(CONFIG_MAGIC);
+  w.u16(CONFIG_VERSION);
+  w.u16(0); // reserved
+  w.u32(0); // body_len, patched below
+  w.u32(0); // body_crc32, patched below
+  w.u8(config.records.length);
+  w.u32(config.togglePersistMask);
+  w.u32(config.toggleInitialState);
+  w.bytes([0, 0, 0]); // reserved
+  for (const record of config.records) {
+    if (record.cells.length > MAX_CELLS_PER_RECORD) {
+      throw new ProtocolError(`too many cells (max ${MAX_CELLS_PER_RECORD})`);
+    }
+    const [kind, arg] = activationToWire(record.activation);
+    w.u8(kind);
+    w.u8(arg);
+    w.u16(0); // reserved
+    w.u8(record.cells.length);
+    const seen = new Set<number>();
+    for (const cell of record.cells) {
+      if (cell.key >= CONFIG_KEY_COUNT || cell.key < 0) {
+        throw new ProtocolError(`key ${cell.key} out of range (< ${CONFIG_KEY_COUNT})`);
+      }
+      if (seen.has(cell.key)) {
+        throw new ProtocolError(`key ${cell.key} appears twice in one record`);
+      }
+      seen.add(cell.key);
+      w.u8(cell.key);
+      writeEffect(w, cell.effect);
+    }
+  }
+  w.patchU32(8, w.pos - CONFIG_HEADER_LEN);
+  w.patchU32(12, crc32(w.written().subarray(CONFIG_HEADER_LEN)));
+  return w.finish();
+}
+
+/** Decode and fully validate a config blob: magic, version, lengths, body
+ * CRC, record/cell counts, activation and effect kinds, key/layer/toggle
+ * ranges, and per-record key uniqueness. Any error means the blob must not
+ * be applied. */
+export function decodeLightingConfig(bytes: Uint8Array): LightingConfig {
+  const r = new ReaderCursor(bytes);
+  const magic = r.u32();
+  if (magic !== CONFIG_MAGIC) {
+    throw new ProtocolError(`bad config magic 0x${magic.toString(16)}`);
+  }
+  const version = r.u16();
+  if (version !== CONFIG_VERSION) {
+    throw new ProtocolError(`unsupported config version ${version}`);
+  }
+  r.u16(); // reserved
+  const bodyLen = r.u32();
+  const expectedCrc = r.u32();
+  if (r.remaining !== bodyLen) {
+    throw new ProtocolError("config length fields disagree with blob");
+  }
+  const actualCrc = crc32(bytes.subarray(CONFIG_HEADER_LEN));
+  if (actualCrc !== expectedCrc) {
+    throw new ProtocolError(
+      `config body crc mismatch: header 0x${expectedCrc.toString(16)}, body 0x${actualCrc.toString(16)}`,
+    );
+  }
+  const recordCount = r.u8();
+  if (recordCount > MAX_CONFIG_RECORDS) {
+    throw new ProtocolError(`record count ${recordCount} exceeds ${MAX_CONFIG_RECORDS}`);
+  }
+  const togglePersistMask = r.u32();
+  const toggleInitialState = r.u32();
+  r.bytes(3); // reserved
+  const records: ConfigRecord[] = [];
+  for (let i = 0; i < recordCount; i++) {
+    const kind = r.u8();
+    const arg = r.u8();
+    const activation = activationFromWire(kind, arg);
+    r.u16(); // reserved
+    const cellCount = r.u8();
+    if (cellCount > MAX_CELLS_PER_RECORD) {
+      throw new ProtocolError(`cell count ${cellCount} exceeds ${MAX_CELLS_PER_RECORD}`);
+    }
+    const seen = new Set<number>();
+    const cells: CellWrite[] = [];
+    for (let c = 0; c < cellCount; c++) {
+      const key = r.u8();
+      if (key >= CONFIG_KEY_COUNT) {
+        throw new ProtocolError(`key ${key} out of range (< ${CONFIG_KEY_COUNT})`);
+      }
+      if (seen.has(key)) {
+        throw new ProtocolError(`key ${key} appears twice in one record`);
+      }
+      seen.add(key);
+      cells.push({ key, effect: readEffect(r) });
+    }
+    records.push({ activation, cells });
+  }
+  r.finish();
+  return { togglePersistMask, toggleInitialState, records };
 }
