@@ -88,6 +88,8 @@ One protocol, three transports, one codec.
 
 - Lightbench: persistent lighting-layer editing on the new protocol (USB +
   BLE), TTL/brightness controls, capability-driven UI.
+- Nice-to-have: additive FRAME_READ command exposing the final composed
+  frame, enabling a true live-preview panel in Lightbench.
 - CLI: full verb set (validate/apply/export/restore/watch), shared codec.
 - Optional background service for app-state lighting (Codex states) as a
   thin overlay client.
