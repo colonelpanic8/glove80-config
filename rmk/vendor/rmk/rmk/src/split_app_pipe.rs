@@ -30,8 +30,12 @@
 //!   application messages"), only the senders differ.
 //! - Both sides: [`SPLIT_APP_LINK`] carries the split-link state (central:
 //!   "peripheral link up"; peripheral: "central link up"), set by the split
-//!   driver at session start/end. Applications use the `false → true` edge to
-//!   trigger an idempotent resync.
+//!   driver. The central raises it at session start; the peripheral raises
+//!   it on the FIRST message received from the central — for BLE the bare
+//!   connection is not enough, since notifications to a central that has
+//!   not yet subscribed are silently dropped (see `split/peripheral.rs`).
+//!   Both lower it at session end. Applications use the `false → true` edge
+//!   to trigger an idempotent resync.
 //!
 //! Note: the queues assume a single split peripheral (true on the Glove80).
 //! A multi-peripheral upstreaming of this hook would key them by peripheral
