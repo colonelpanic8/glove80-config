@@ -22,7 +22,7 @@
 //! versions). Both cases decode to a distinct error so firmware can drop
 //! them silently-but-logged.
 
-use crate::Cell;
+use crate::{Activation, Cell, MAX_CELLS_PER_RECORD, MAX_RECORDS, Record};
 
 /// Version byte carried by every sync payload.
 pub const SYNC_VERSION: u8 = 1;
@@ -44,6 +44,13 @@ const TAG_SET_CELLS: u8 = 0x01;
 const TAG_UNSET_KEYS: u8 = 0x02;
 const TAG_CLEAR: u8 = 0x03;
 const TAG_STATE: u8 = 0x04;
+// Persistent-config record transfer (Phase 4). Additive tags: an old
+// receiver ignores them (UnknownTag), which is safe — it simply keeps its
+// compiled default records.
+const TAG_CONFIG_RESET: u8 = 0x05;
+const TAG_CONFIG_RECORD: u8 = 0x06;
+const TAG_CONFIG_CELLS: u8 = 0x07;
+const TAG_CONFIG_COMMIT: u8 = 0x08;
 
 /// Bytes of one `key + cell` entry on the wire.
 const CELL_ENTRY_LEN: usize = 10;
@@ -146,6 +153,42 @@ pub enum SyncMessage {
     /// (still bounded by the receiver's compiled `CHANNEL_CEILING`), and the
     /// full toggle bitmap.
     State { brightness: u8, ceiling: u8, toggles: u32 },
+    /// Begin staging a persistent-config record set of `record_count`
+    /// records (Phase 4). Discards any half-staged set; the live records
+    /// stay untouched until [`SyncMessage::ConfigCommit`].
+    ConfigReset { record_count: u8 },
+    /// Declare record `index`: its activation predicate and how many cells
+    /// [`SyncMessage::ConfigCells`] messages will deliver for it.
+    ConfigRecord { index: u8, activation: Activation, cell_count: u8 },
+    /// Append cells to staged record `record_index`.
+    ConfigCells { record_index: u8, cells: SyncCells },
+    /// Atomically swap the staged set (which must be complete and match
+    /// `record_count`) into the live compositor records. An incomplete stage
+    /// is discarded instead — the previous records keep rendering, and the
+    /// next resync retransmits from `ConfigReset`.
+    ConfigCommit { record_count: u8 },
+}
+
+/// Wire encoding of an [`Activation`] for config-record transfer: matches
+/// the persistent blob's activation kinds (only base/layer/toggle records
+/// are persistable).
+fn put_activation(a: Activation) -> Option<(u8, u8)> {
+    match a {
+        Activation::Always => Some((0, 0)),
+        Activation::LayerActive(n) => Some((1, n)),
+        Activation::Toggle(id) => Some((2, id)),
+        // Not persistable; never encoded.
+        Activation::HostOverlay | Activation::Status => None,
+    }
+}
+
+fn get_activation(kind: u8, arg: u8) -> Result<Activation, SyncDecodeError> {
+    match kind {
+        0 => Ok(Activation::Always),
+        1 => Ok(Activation::LayerActive(arg)),
+        2 => Ok(Activation::Toggle(arg)),
+        k => Err(SyncDecodeError::UnknownActivation(k)),
+    }
 }
 
 /// Why a payload failed to decode. `UnsupportedVersion` / `UnknownTag` are
@@ -155,6 +198,7 @@ pub enum SyncDecodeError {
     UnsupportedVersion(u8),
     UnknownTag(u8),
     UnknownCellKind(u8),
+    UnknownActivation(u8),
     /// Payload shorter or longer than the tag's layout requires.
     BadLength,
 }
@@ -236,6 +280,37 @@ impl SyncMessage {
                 out[7] = ((*toggles >> 24) & 0xff) as u8;
                 8
             }
+            SyncMessage::ConfigReset { record_count } => {
+                out[1] = TAG_CONFIG_RESET;
+                out[2] = *record_count;
+                3
+            }
+            SyncMessage::ConfigRecord { index, activation, cell_count } => {
+                out[1] = TAG_CONFIG_RECORD;
+                out[2] = *index;
+                // Only persistable activations reach the wire (the config
+                // producers never build HostOverlay/Status records); map a
+                // programming error to Always rather than corrupt the frame.
+                let (kind, arg) = put_activation(*activation).unwrap_or((0, 0));
+                out[3] = kind;
+                out[4] = arg;
+                out[5] = *cell_count;
+                6
+            }
+            SyncMessage::ConfigCells { record_index, cells } => {
+                out[1] = TAG_CONFIG_CELLS;
+                out[2] = *record_index;
+                out[3] = cells.len;
+                for (i, (key, cell)) in cells.entries().iter().enumerate() {
+                    put_cell(out, 4 + i * CELL_ENTRY_LEN, *key, cell);
+                }
+                4 + cells.entries().len() * CELL_ENTRY_LEN
+            }
+            SyncMessage::ConfigCommit { record_count } => {
+                out[1] = TAG_CONFIG_COMMIT;
+                out[2] = *record_count;
+                3
+            }
         }
     }
 
@@ -293,6 +368,43 @@ impl SyncMessage {
                     | ((bytes[6] as u32) << 16)
                     | ((bytes[7] as u32) << 24);
                 Ok(SyncMessage::State { brightness: bytes[2], ceiling: bytes[3], toggles })
+            }
+            TAG_CONFIG_RESET => {
+                if bytes.len() != 3 {
+                    return Err(SyncDecodeError::BadLength);
+                }
+                Ok(SyncMessage::ConfigReset { record_count: bytes[2] })
+            }
+            TAG_CONFIG_RECORD => {
+                if bytes.len() != 6 {
+                    return Err(SyncDecodeError::BadLength);
+                }
+                Ok(SyncMessage::ConfigRecord {
+                    index: bytes[2],
+                    activation: get_activation(bytes[3], bytes[4])?,
+                    cell_count: bytes[5],
+                })
+            }
+            TAG_CONFIG_CELLS => {
+                if bytes.len() < 4 {
+                    return Err(SyncDecodeError::BadLength);
+                }
+                let count = bytes[3] as usize;
+                if count > MAX_CELLS_PER_SYNC || bytes.len() != 4 + count * CELL_ENTRY_LEN {
+                    return Err(SyncDecodeError::BadLength);
+                }
+                let mut cells = SyncCells::new();
+                for i in 0..count {
+                    let (key, cell) = get_cell(bytes, 4 + i * CELL_ENTRY_LEN)?;
+                    cells.push(key, cell);
+                }
+                Ok(SyncMessage::ConfigCells { record_index: bytes[2], cells })
+            }
+            TAG_CONFIG_COMMIT => {
+                if bytes.len() != 3 {
+                    return Err(SyncDecodeError::BadLength);
+                }
+                Ok(SyncMessage::ConfigCommit { record_count: bytes[2] })
             }
             tag => Err(SyncDecodeError::UnknownTag(tag)),
         }
@@ -384,6 +496,200 @@ impl<const N: usize> RemoteOverlay<N> {
     }
 }
 
+// --- Persistent-config record transfer (Phase 4) ---------------------------
+
+/// Peripheral-side staging area for a persistent-config record set arriving
+/// as `ConfigReset` / `ConfigRecord` / `ConfigCells` / `ConfigCommit`
+/// messages. The live compositor records are only touched when a COMPLETE
+/// set commits: any gap (lost message, link drop mid-transfer, stray
+/// out-of-order commit) discards the stage and keeps the previous records —
+/// the central retransmits from `ConfigReset` on the next resync.
+pub struct ConfigStage {
+    /// Declared record count; `None` = no transfer in progress.
+    expected: Option<u8>,
+    records: [Record; MAX_RECORDS],
+    declared: [bool; MAX_RECORDS],
+    expected_cells: [u8; MAX_RECORDS],
+}
+
+impl Default for ConfigStage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ConfigStage {
+    pub const fn new() -> Self {
+        Self {
+            expected: None,
+            records: [Record::new(Activation::Always); MAX_RECORDS],
+            declared: [false; MAX_RECORDS],
+            expected_cells: [0; MAX_RECORDS],
+        }
+    }
+
+    /// Begin staging `record_count` records; discards any half-staged set.
+    /// `false` (stage inactive) when the count exceeds [`MAX_RECORDS`].
+    pub fn reset(&mut self, record_count: u8) -> bool {
+        self.declared = [false; MAX_RECORDS];
+        self.expected_cells = [0; MAX_RECORDS];
+        if record_count as usize > MAX_RECORDS {
+            self.expected = None;
+            return false;
+        }
+        self.expected = Some(record_count);
+        true
+    }
+
+    /// Declare record `index`. Out-of-range or out-of-transfer declarations
+    /// abort the stage.
+    pub fn record(&mut self, index: u8, activation: Activation, cell_count: u8) {
+        let ok = matches!(self.expected, Some(n) if index < n)
+            && cell_count as usize <= MAX_CELLS_PER_RECORD;
+        if !ok {
+            self.expected = None;
+            return;
+        }
+        self.records[index as usize] = Record::new(activation);
+        self.declared[index as usize] = true;
+        self.expected_cells[index as usize] = cell_count;
+    }
+
+    /// Append cells to staged record `record_index`. Any inconsistency
+    /// (undeclared record, overflow past the declared cell count) aborts the
+    /// stage.
+    pub fn cells(&mut self, record_index: u8, cells: &[(u8, Cell)]) {
+        let declared = matches!(self.expected, Some(n) if record_index < n)
+            && self.declared[record_index as usize];
+        if !declared {
+            self.expected = None;
+            return;
+        }
+        let record = &mut self.records[record_index as usize];
+        for &(key, cell) in cells {
+            let over = record.cells().count() >= self.expected_cells[record_index as usize] as usize;
+            if over || record.set(key, cell).is_err() {
+                self.expected = None;
+                return;
+            }
+        }
+    }
+
+    /// Commit: when the staged set is complete and matches `record_count`,
+    /// return the records (and deactivate the stage); otherwise discard.
+    pub fn commit(&mut self, record_count: u8) -> Option<&[Record]> {
+        let expected = self.expected.take()?;
+        if expected != record_count {
+            return None;
+        }
+        let n = expected as usize;
+        for i in 0..n {
+            if !self.declared[i] || self.records[i].cells().count() != self.expected_cells[i] as usize {
+                return None;
+            }
+        }
+        Some(&self.records[..n])
+    }
+
+    /// Whether a transfer is currently staged (for diagnostics).
+    pub fn in_progress(&self) -> bool {
+        self.expected.is_some()
+    }
+}
+
+/// Central-side cursor producing the message stream that transfers a record
+/// set: `ConfigReset`, then per record `ConfigRecord` + its `ConfigCells`
+/// batches, then `ConfigCommit`. Pure and restartable: the firmware peeks
+/// [`next_message`](Self::next_message), tries to queue it, and only then
+/// [`advance`](Self::advance)s — so a full split queue simply retries the
+/// same message later. The record slice must not change mid-push (the
+/// firmware restarts the push whenever it swaps record sets).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ConfigPush {
+    Reset,
+    /// About to declare record `record`.
+    Record { record: u8 },
+    /// About to send the batch starting at cell `cell` of record `record`.
+    Cells { record: u8, cell: u8 },
+    Commit,
+    Done,
+}
+
+impl ConfigPush {
+    pub const fn new() -> Self {
+        ConfigPush::Reset
+    }
+
+    /// The next message to send, or `None` when the push is complete.
+    pub fn next_message(&self, records: &[Record]) -> Option<SyncMessage> {
+        match *self {
+            ConfigPush::Reset => Some(SyncMessage::ConfigReset { record_count: records.len() as u8 }),
+            ConfigPush::Record { record } => {
+                let r = records.get(record as usize)?;
+                Some(SyncMessage::ConfigRecord {
+                    index: record,
+                    activation: r.activation(),
+                    cell_count: r.cells().count() as u8,
+                })
+            }
+            ConfigPush::Cells { record, cell } => {
+                let r = records.get(record as usize)?;
+                let mut batch = SyncCells::new();
+                for (key, c) in r.cells().skip(cell as usize).take(MAX_CELLS_PER_SYNC) {
+                    batch.push(key, *c);
+                }
+                Some(SyncMessage::ConfigCells { record_index: record, cells: batch })
+            }
+            ConfigPush::Commit => Some(SyncMessage::ConfigCommit { record_count: records.len() as u8 }),
+            ConfigPush::Done => None,
+        }
+    }
+
+    /// Step the cursor past the message [`next_message`](Self::next_message)
+    /// just produced (call only after that message was queued successfully).
+    pub fn advance(&mut self, records: &[Record]) {
+        let next_record_or_commit = |record: u8| {
+            if (record as usize + 1) < records.len() {
+                ConfigPush::Record { record: record + 1 }
+            } else {
+                ConfigPush::Commit
+            }
+        };
+        *self = match *self {
+            ConfigPush::Reset => {
+                if records.is_empty() {
+                    ConfigPush::Commit
+                } else {
+                    ConfigPush::Record { record: 0 }
+                }
+            }
+            ConfigPush::Record { record } => {
+                let cells = records.get(record as usize).map_or(0, |r| r.cells().count());
+                if cells == 0 {
+                    next_record_or_commit(record)
+                } else {
+                    ConfigPush::Cells { record, cell: 0 }
+                }
+            }
+            ConfigPush::Cells { record, cell } => {
+                let cells = records.get(record as usize).map_or(0, |r| r.cells().count());
+                let next = cell as usize + MAX_CELLS_PER_SYNC;
+                if next < cells {
+                    ConfigPush::Cells { record, cell: next as u8 }
+                } else {
+                    next_record_or_commit(record)
+                }
+            }
+            ConfigPush::Commit => ConfigPush::Done,
+            ConfigPush::Done => ConfigPush::Done,
+        };
+    }
+
+    pub fn done(&self) -> bool {
+        matches!(self, ConfigPush::Done)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -470,6 +776,160 @@ mod tests {
         let len = SyncMessage::SetCells(cells).encode(&mut buf);
         buf[4] = 9; // kind byte of entry 0
         assert_eq!(SyncMessage::decode(&buf[..len]), Err(SyncDecodeError::UnknownCellKind(9)));
+    }
+
+    #[test]
+    fn config_messages_roundtrip() {
+        roundtrip(SyncMessage::ConfigReset { record_count: 7 });
+        roundtrip(SyncMessage::ConfigRecord {
+            index: 3,
+            activation: Activation::LayerActive(2),
+            cell_count: 40,
+        });
+        roundtrip(SyncMessage::ConfigRecord { index: 0, activation: Activation::Toggle(31), cell_count: 0 });
+        let mut cells = SyncCells::new();
+        cells.push(4, solid(RED));
+        cells.push(39, Cell::Breathe { color: RED, period_ms: 2000, phase_ms: 0 });
+        roundtrip(SyncMessage::ConfigCells { record_index: 5, cells });
+        roundtrip(SyncMessage::ConfigCommit { record_count: 7 });
+
+        // Unknown activation kind is rejected (stage discards on the drop).
+        let mut buf = [0u8; MAX_SYNC_PAYLOAD];
+        let len = SyncMessage::ConfigRecord { index: 0, activation: Activation::Always, cell_count: 1 }
+            .encode(&mut buf);
+        buf[3] = 9;
+        assert_eq!(SyncMessage::decode(&buf[..len]), Err(SyncDecodeError::UnknownActivation(9)));
+    }
+
+    fn stage_records() -> Vec<Record> {
+        let mut base = Record::new(Activation::Always);
+        for k in 0..5u8 {
+            base.set(k, solid(RED)).unwrap();
+        }
+        let mut layer = Record::new(Activation::LayerActive(1));
+        layer.set(7, Cell::Blink { color: RED, period_ms: 400, phase_ms: 0, duty_pct: 50 }).unwrap();
+        let toggle = Record::new(Activation::Toggle(3)); // zero cells
+        vec![base, layer, toggle]
+    }
+
+    fn assert_same_records(a: &[Record], b: &[Record]) {
+        assert_eq!(a.len(), b.len());
+        for (x, y) in a.iter().zip(b) {
+            assert_eq!(x.activation(), y.activation());
+            let xs: Vec<_> = x.cells().map(|(k, c)| (k, *c)).collect();
+            let ys: Vec<_> = y.cells().map(|(k, c)| (k, *c)).collect();
+            assert_eq!(xs, ys);
+        }
+    }
+
+    #[test]
+    fn config_push_drives_stage_to_commit() {
+        let records = stage_records();
+        let mut push = ConfigPush::new();
+        let mut stage = ConfigStage::new();
+        let mut committed = None;
+        let mut msgs = 0;
+        while let Some(msg) = push.next_message(&records) {
+            msgs += 1;
+            assert!(msgs < 100, "push must terminate");
+            // Wire roundtrip on the way through.
+            let mut buf = [0u8; MAX_SYNC_PAYLOAD];
+            let len = msg.encode(&mut buf);
+            let msg = SyncMessage::decode(&buf[..len]).unwrap();
+            match msg {
+                SyncMessage::ConfigReset { record_count } => {
+                    stage.reset(record_count);
+                }
+                SyncMessage::ConfigRecord { index, activation, cell_count } => {
+                    stage.record(index, activation, cell_count);
+                }
+                SyncMessage::ConfigCells { record_index, cells } => {
+                    stage.cells(record_index, cells.entries());
+                }
+                SyncMessage::ConfigCommit { record_count } => {
+                    committed = stage.commit(record_count).map(<[Record]>::to_vec);
+                }
+                other => panic!("unexpected message {other:?}"),
+            }
+            push.advance(&records);
+        }
+        assert!(push.done());
+        assert_same_records(&committed.expect("commit must succeed"), &records);
+        assert!(!stage.in_progress());
+    }
+
+    #[test]
+    fn config_push_empty_set() {
+        let records: Vec<Record> = vec![];
+        let mut push = ConfigPush::new();
+        let mut stage = ConfigStage::new();
+        // Reset then commit, nothing else.
+        assert_eq!(push.next_message(&records), Some(SyncMessage::ConfigReset { record_count: 0 }));
+        push.advance(&records);
+        assert_eq!(push.next_message(&records), Some(SyncMessage::ConfigCommit { record_count: 0 }));
+        stage.reset(0);
+        let committed = stage.commit(0).unwrap();
+        assert!(committed.is_empty());
+        push.advance(&records);
+        assert!(push.done());
+    }
+
+    #[test]
+    fn config_stage_discards_incomplete_or_inconsistent_sets() {
+        let records = stage_records();
+
+        // Missing cells: declared 5, delivered 2.
+        let mut stage = ConfigStage::new();
+        stage.reset(1);
+        stage.record(0, Activation::Always, 5);
+        stage.cells(0, &[(0, solid(RED)), (1, solid(RED))]);
+        assert_eq!(stage.commit(1), None);
+
+        // Commit without reset.
+        assert_eq!(stage.commit(1), None);
+
+        // Record count mismatch at commit.
+        stage.reset(2);
+        stage.record(0, Activation::Always, 0);
+        stage.record(1, Activation::Always, 0);
+        assert_eq!(stage.commit(3), None);
+
+        // Cells for an undeclared record abort the stage.
+        stage.reset(2);
+        stage.record(0, Activation::Always, 1);
+        stage.cells(1, &[(0, solid(RED))]);
+        assert!(!stage.in_progress());
+        assert_eq!(stage.commit(2), None);
+
+        // Cell overflow past the declared count aborts the stage.
+        stage.reset(1);
+        stage.record(0, Activation::Always, 1);
+        stage.cells(0, &[(0, solid(RED)), (1, solid(RED))]);
+        assert_eq!(stage.commit(1), None);
+
+        // Reset above capacity deactivates.
+        assert!(!stage.reset(MAX_RECORDS as u8 + 1));
+        assert!(!stage.in_progress());
+
+        // A fresh, complete run still works after all the aborts.
+        let mut push = ConfigPush::new();
+        stage.reset(records.len() as u8);
+        push.advance(&records);
+        while let Some(msg) = push.next_message(&records) {
+            match msg {
+                SyncMessage::ConfigRecord { index, activation, cell_count } => {
+                    stage.record(index, activation, cell_count)
+                }
+                SyncMessage::ConfigCells { record_index, cells } => {
+                    stage.cells(record_index, cells.entries())
+                }
+                SyncMessage::ConfigCommit { record_count } => {
+                    assert!(stage.commit(record_count).is_some());
+                }
+                other => panic!("unexpected message {other:?}"),
+            }
+            push.advance(&records);
+        }
     }
 
     #[test]

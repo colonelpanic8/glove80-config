@@ -222,7 +222,7 @@ pub struct CapacityError;
 /// A sparse lighting record: an activation predicate plus up to
 /// [`MAX_CELLS_PER_RECORD`] `(key -> Cell)` entries. Keys are chain indices
 /// (`0..N` on the target half); setting an existing key replaces its cell.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Record {
     activation: Activation,
     len: usize,
@@ -350,6 +350,25 @@ impl<const N: usize> Compositor<N> {
         self.records[self.record_count] = record;
         self.record_count += 1;
         Ok(())
+    }
+
+    /// Atomically replace the whole configuration record set (Phase 4: a
+    /// persistent-config apply swaps every base/layer/toggle record in one
+    /// step). Validate-first: on capacity error nothing changes, so the
+    /// caller keeps rendering the previous config. The live host overlay and
+    /// runtime inputs (layer, toggles, brightness, ceiling) are untouched.
+    pub fn replace_records(&mut self, records: &[Record]) -> Result<(), CapacityError> {
+        if records.len() > MAX_RECORDS {
+            return Err(CapacityError);
+        }
+        self.records[..records.len()].copy_from_slice(records);
+        self.record_count = records.len();
+        Ok(())
+    }
+
+    /// The current configuration record set, in composition order.
+    pub fn records(&self) -> &[Record] {
+        &self.records[..self.record_count]
     }
 
     pub fn set_active_layer(&mut self, layer: u8) {
@@ -711,6 +730,38 @@ mod tests {
             c.add_record(Record::new(Activation::Always)).unwrap();
         }
         assert_eq!(c.add_record(Record::new(Activation::Always)), Err(CapacityError));
+    }
+
+    #[test]
+    fn replace_records_swaps_the_whole_set_atomically() {
+        let mut c = comp_with(&[
+            record(Activation::Always, &[(0, solid(RED))]),
+            record(Activation::LayerActive(0), &[(1, solid(GREEN))]),
+        ]);
+        c.host_set(2, solid(WHITE), None, 0).unwrap();
+        assert_eq!(c.render(0).frame[0], RED);
+
+        // Replace with a different set: old records are gone, new ones
+        // compose; the live host overlay and runtime inputs are untouched.
+        let new_set = [record(Activation::Always, &[(3, solid(BLUE))])];
+        c.replace_records(&new_set).unwrap();
+        assert_eq!(c.records().len(), 1);
+        let out = c.render(1);
+        assert_eq!(out.frame[0], Rgb::OFF);
+        assert_eq!(out.frame[1], Rgb::OFF);
+        assert_eq!(out.frame[2], WHITE, "host overlay survives the swap");
+        assert_eq!(out.frame[3], BLUE);
+
+        // Oversized set: error, nothing changes.
+        let too_many = [record(Activation::Always, &[]); MAX_RECORDS + 1];
+        assert_eq!(c.replace_records(&too_many), Err(CapacityError));
+        assert_eq!(c.records().len(), 1);
+        assert_eq!(c.render(2).frame[3], BLUE);
+
+        // Empty set is valid (config with no records).
+        c.replace_records(&[]).unwrap();
+        assert_eq!(c.records().len(), 0);
+        assert_eq!(c.render(3).frame[3], Rgb::OFF);
     }
 
     // --- Blink ------------------------------------------------------------
