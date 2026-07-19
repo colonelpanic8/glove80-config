@@ -40,6 +40,8 @@ pub enum DecodeError {
     UnknownBootTarget(u8),
     /// Toggle state byte is not 0 or 1.
     BadToggleState(u8),
+    /// A boolean flag byte (present / dirty / mismatch, v1.3) is not 0 or 1.
+    BadFlag(u8),
     /// A count exceeds the codec's compile-time capacity.
     CapacityExceeded,
     /// Status/payload combination is not valid for the command.
@@ -56,6 +58,7 @@ impl fmt::Display for DecodeError {
             DecodeError::UnknownEffectKind(k) => write!(f, "unknown effect kind {k}"),
             DecodeError::UnknownBootTarget(t) => write!(f, "unknown boot target {t}"),
             DecodeError::BadToggleState(v) => write!(f, "toggle state must be 0 or 1, got {v}"),
+            DecodeError::BadFlag(v) => write!(f, "flag byte must be 0 or 1, got {v}"),
             DecodeError::CapacityExceeded => write!(f, "count exceeds codec capacity"),
             DecodeError::InvalidStatusForCommand => {
                 write!(f, "status not valid for this command")

@@ -27,16 +27,17 @@ pub use config::{
 pub use error::{DecodeError, EncodeError, FrameError};
 pub use message::{
     decode_request, decode_response, encode_request, encode_response, feature, BootTarget,
-    Capabilities, CellState, CellWrite, Command, Effect, EffectKind, KeymapEntry, Request,
-    Response, ResponsePayload, Status,
+    Capabilities, CellState, CellWrite, Command, Effect, EffectKind, HalfVersion, KeymapEntry,
+    Request, Response, ResponsePayload, Status, VersionInfo,
 };
 
 /// Protocol major version. A major bump is a breaking change.
 pub const PROTOCOL_VERSION_MAJOR: u8 = 1;
 /// Protocol minor version. Minor bumps are additive. 1.1 adds persistent
 /// lighting configuration (CONFIG_* commands, the config blob format); 1.2
-/// adds keymap editing (KEYMAP_* commands, VIA 16-bit keycodes).
-pub const PROTOCOL_VERSION_MINOR: u8 = 2;
+/// adds keymap editing (KEYMAP_* commands, VIA 16-bit keycodes); 1.3 adds
+/// build-identity reporting (GET_VERSION).
+pub const PROTOCOL_VERSION_MINOR: u8 = 3;
 
 /// Bit 7 of the opcode byte marks a response.
 pub const RESPONSE_FLAG: u8 = 0x80;

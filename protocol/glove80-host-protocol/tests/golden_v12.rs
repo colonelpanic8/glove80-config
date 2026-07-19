@@ -1,20 +1,16 @@
 //! Golden vector suite for the protocol v1.2 additions (keymap editing).
 //!
 //! Generates/checks `protocol/vectors/host-protocol-v1.2.json`, consumed by
-//! this suite and the TypeScript suite. Regenerate with
-//! `GLOVE80_WRITE_VECTORS=1 cargo test --test golden_v12`. The v1.0/v1.1
-//! vectors (`golden.rs` / `golden_v11.rs`) are frozen and never change.
-//!
-//! Unlike the older suites this one uses the live crate version constants:
-//! it IS the current-version suite. When v1.3 lands, freeze the literals
-//! here the same way `golden_v11.rs` froze its own.
+//! this suite and the TypeScript suite. The v1.0/v1.1/v1.2 vectors are all
+//! frozen now that v1.3 exists (`golden_v13.rs` is the current-version
+//! suite): the 1/2 version literals below are deliberate and never change.
 
 mod common;
 
 use common::{message_vectors, Message};
 use glove80_host_protocol::{
     Capabilities, Command, KeymapEntry, Request, Response, ResponsePayload, Status,
-    MAX_CONFIG_BLOB_LEN, MAX_MESSAGE_LEN, PROTOCOL_VERSION_MAJOR, PROTOCOL_VERSION_MINOR,
+    MAX_CONFIG_BLOB_LEN, MAX_MESSAGE_LEN,
 };
 use serde_json::{json, Value};
 
@@ -24,8 +20,8 @@ const FILE_NAME: &str = "host-protocol-v1.2.json";
 /// feature bits, both capability extensions (config + keymap), the 6x14 grid.
 fn glove80_caps() -> Capabilities {
     Capabilities {
-        protocol_major: PROTOCOL_VERSION_MAJOR,
-        protocol_minor: PROTOCOL_VERSION_MINOR,
+        protocol_major: 1,
+        protocol_minor: 2,
         led_count_left: 40,
         led_count_right: 40,
         layer_capacity: 8,
@@ -132,7 +128,7 @@ fn messages() -> Vec<(&'static str, Message)> {
 
 fn golden_doc() -> Value {
     json!({
-        "protocol": { "major": PROTOCOL_VERSION_MAJOR, "minor": PROTOCOL_VERSION_MINOR },
+        "protocol": { "major": 1, "minor": 2 },
         "generatedBy": "protocol/glove80-host-protocol tests/golden_v12.rs (GLOVE80_WRITE_VECTORS=1 cargo test --test golden_v12)",
         "messages": message_vectors(&messages()),
     })

@@ -32,6 +32,9 @@ pub mod feature {
     /// payload carries the keymap extension (`keymap_rows`, `keymap_cols`,
     /// `max_keymap_entries_per_op`).
     pub const KEYMAP: u32 = 1 << 7;
+    /// Build-identity reporting (GET_VERSION, v1.3). Adds no capability
+    /// extension — the bit only gates the command.
+    pub const VERSION_REPORT: u32 = 1 << 8;
 }
 
 /// Command opcodes (always < 0x80; responses set [`RESPONSE_FLAG`]).
@@ -40,6 +43,7 @@ pub mod feature {
 pub enum Command {
     GetCapabilities = 0x01,
     Ping = 0x02,
+    GetVersion = 0x03,
     SetCells = 0x10,
     UnsetCells = 0x11,
     ClearOverlay = 0x12,
@@ -68,6 +72,7 @@ impl Command {
         Some(match op {
             0x01 => Command::GetCapabilities,
             0x02 => Command::Ping,
+            0x03 => Command::GetVersion,
             0x10 => Command::SetCells,
             0x11 => Command::UnsetCells,
             0x12 => Command::ClearOverlay,
@@ -251,6 +256,76 @@ pub struct KeymapEntry {
     pub keycode: u16,
 }
 
+/// Build identity of one keyboard half: 16 bytes on the wire (v1.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct HalfVersion {
+    /// Whether this half is currently reachable. The central is always
+    /// present in its own response; the peripheral entry keeps its
+    /// last-known version fields with `present = false` while the split
+    /// link is down (all-zero fields = never seen).
+    pub present: bool,
+    /// Firmware semver, from the firmware crate's `CARGO_PKG_VERSION`.
+    pub fw_major: u8,
+    pub fw_minor: u8,
+    pub fw_patch: u8,
+    /// Git short hash of the build tree (`git rev-parse --short=8 HEAD`),
+    /// ASCII, zero-padded on the right. `b"unknown0"` when the build had no
+    /// git available; all-zero when this half was never seen.
+    pub git_hash: [u8; 8],
+    /// Whether the build tree had uncommitted changes
+    /// (`git status --porcelain` non-empty).
+    pub dirty: bool,
+}
+
+impl HalfVersion {
+    pub const ENCODED_LEN: usize = 16;
+
+    fn write(&self, w: &mut Writer<'_>) -> Result<(), EncodeError> {
+        w.u8(self.present as u8)?;
+        w.u8(self.fw_major)?;
+        w.u8(self.fw_minor)?;
+        w.u8(self.fw_patch)?;
+        w.bytes(&self.git_hash)?;
+        w.u8(self.dirty as u8)?;
+        w.bytes(&[0; 3]) // reserved
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<HalfVersion, DecodeError> {
+        let present = read_flag(r)?;
+        let fw_major = r.u8()?;
+        let fw_minor = r.u8()?;
+        let fw_patch = r.u8()?;
+        let mut git_hash = [0u8; 8];
+        git_hash.copy_from_slice(r.bytes(8)?);
+        let dirty = read_flag(r)?;
+        let _reserved = r.bytes(3)?; // ignored for forward compatibility
+        Ok(HalfVersion { present, fw_major, fw_minor, fw_patch, git_hash, dirty })
+    }
+}
+
+/// GET_VERSION response payload: both halves' build identity plus the
+/// firmware-computed mismatch flag (v1.3). 33 bytes on the wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct VersionInfo {
+    pub central: HalfVersion,
+    pub peripheral: HalfVersion,
+    /// Set by the firmware when both halves are present and their git hash
+    /// or firmware semver differ.
+    pub halves_mismatch: bool,
+}
+
+impl VersionInfo {
+    pub const ENCODED_LEN: usize = 2 * HalfVersion::ENCODED_LEN + 1;
+}
+
+fn read_flag(r: &mut Reader<'_>) -> Result<bool, DecodeError> {
+    match r.u8()? {
+        0 => Ok(false),
+        1 => Ok(true),
+        v => Err(DecodeError::BadFlag(v)),
+    }
+}
+
 /// Capability response payload (16 bytes; +4 with the v1.1 persistent-config
 /// extension, +4 more with the v1.2 keymap extension). Tools must never
 /// assume capacities; everything they rely on is advertised here.
@@ -304,6 +379,8 @@ impl BootTarget {
 pub enum Request {
     GetCapabilities { client_major: u8, client_minor: u8 },
     Ping { data: Vec<u8, MAX_PING_LEN> },
+    /// Query both halves' firmware build identity (v1.3, empty payload).
+    GetVersion,
     SetCells { ttl_ms: u32, cells: Vec<CellWrite, MAX_CELLS_PER_MESSAGE> },
     UnsetCells { keys: Vec<u8, MAX_CELLS_PER_MESSAGE> },
     ClearOverlay,
@@ -340,6 +417,7 @@ impl Request {
         match self {
             Request::GetCapabilities { .. } => Command::GetCapabilities,
             Request::Ping { .. } => Command::Ping,
+            Request::GetVersion => Command::GetVersion,
             Request::SetCells { .. } => Command::SetCells,
             Request::UnsetCells { .. } => Command::UnsetCells,
             Request::ClearOverlay => Command::ClearOverlay,
@@ -368,6 +446,8 @@ pub enum ResponsePayload {
     Empty,
     Capabilities(Capabilities),
     Echo { data: Vec<u8, MAX_PING_LEN> },
+    /// GET_VERSION ok (v1.3): both halves' build identity.
+    Version(VersionInfo),
     /// Ack for the four overlay writes; `pending_keys` lists keys accepted on
     /// the central but not yet applied on the peripheral.
     OverlayAck { pending_keys: Vec<u8, MAX_CELLS_PER_MESSAGE> },
@@ -435,6 +515,7 @@ pub fn encode_request(request_id: u8, req: &Request, out: &mut [u8]) -> Result<u
             w.u8(*client_minor)?;
         }
         Request::Ping { data } => w.bytes(data)?,
+        Request::GetVersion => {}
         Request::SetCells { ttl_ms, cells } | Request::ReplaceOverlay { ttl_ms, cells } => {
             write_cells(&mut w, *ttl_ms, cells)?;
         }
@@ -510,6 +591,7 @@ pub fn decode_request(bytes: &[u8]) -> Result<(u8, Request), DecodeError> {
                 .map_err(|_| DecodeError::CapacityExceeded)?;
             Request::Ping { data }
         }
+        Command::GetVersion => Request::GetVersion,
         Command::SetCells => {
             let (ttl_ms, cells) = read_cells(&mut r)?;
             Request::SetCells { ttl_ms, cells }
@@ -603,6 +685,7 @@ fn payload_matches(command: Command, status: Status, payload: &ResponsePayload) 
         Status::Ok => match (command, payload) {
             (Command::GetCapabilities, ResponsePayload::Capabilities(_)) => true,
             (Command::Ping, ResponsePayload::Echo { .. }) => true,
+            (Command::GetVersion, ResponsePayload::Version(_)) => true,
             (c, ResponsePayload::OverlayAck { .. }) if c.is_overlay_write() => true,
             (Command::ReadOverlay, ResponsePayload::OverlayState { .. }) => true,
             (Command::GetBrightness | Command::SetBrightness, ResponsePayload::Brightness { .. }) => {
@@ -663,6 +746,11 @@ pub fn encode_response(resp: &Response, out: &mut [u8]) -> Result<usize, EncodeE
             }
         }
         ResponsePayload::Echo { data } => w.bytes(data)?,
+        ResponsePayload::Version(v) => {
+            v.central.write(&mut w)?;
+            v.peripheral.write(&mut w)?;
+            w.u8(v.halves_mismatch as u8)?;
+        }
         ResponsePayload::OverlayAck { pending_keys } => {
             w.u8(pending_keys.len() as u8)?;
             w.bytes(pending_keys)?;
@@ -758,6 +846,12 @@ pub fn decode_response(bytes: &[u8]) -> Result<Response, DecodeError> {
                 data.extend_from_slice(r.bytes(payload_len)?)
                     .map_err(|_| DecodeError::CapacityExceeded)?;
                 ResponsePayload::Echo { data }
+            }
+            Command::GetVersion => {
+                let central = HalfVersion::read(&mut r)?;
+                let peripheral = HalfVersion::read(&mut r)?;
+                let halves_mismatch = read_flag(&mut r)?;
+                ResponsePayload::Version(VersionInfo { central, peripheral, halves_mismatch })
             }
             c if c.is_overlay_write() => read_overlay_ack(&mut r)?,
             Command::ReadOverlay => {
@@ -889,6 +983,7 @@ mod tests {
         roundtrip_request(Request::GetCapabilities { client_major: 1, client_minor: 0 });
         roundtrip_request(Request::Ping { data: Vec::from_slice(&[1, 2, 3]).unwrap() });
         roundtrip_request(Request::Ping { data: Vec::new() });
+        roundtrip_request(Request::GetVersion);
         roundtrip_request(Request::SetCells { ttl_ms: 12345, cells: sample_cells(3) });
         roundtrip_request(Request::SetCells { ttl_ms: 0, cells: Vec::new() });
         roundtrip_request(Request::UnsetCells { keys: Vec::from_slice(&[0, 40, 79]).unwrap() });
@@ -921,6 +1016,67 @@ mod tests {
             .unwrap(),
         });
         roundtrip_request(Request::KeymapWrite { entries: Vec::new() });
+    }
+
+    fn sample_half(present: bool, hash: &[u8; 8], dirty: bool) -> HalfVersion {
+        HalfVersion {
+            present,
+            fw_major: 0,
+            fw_minor: 1,
+            fw_patch: 0,
+            git_hash: *hash,
+            dirty,
+        }
+    }
+
+    #[test]
+    fn version_responses_roundtrip() {
+        roundtrip_response(Response {
+            request_id: 60,
+            command: Command::GetVersion,
+            status: Status::Ok,
+            payload: ResponsePayload::Version(VersionInfo {
+                central: sample_half(true, b"1a2b3c4d", true),
+                peripheral: sample_half(false, b"unknown0", false),
+                halves_mismatch: false,
+            }),
+        });
+        roundtrip_response(Response {
+            request_id: 61,
+            command: Command::GetVersion,
+            status: Status::Ok,
+            payload: ResponsePayload::Version(VersionInfo {
+                central: sample_half(true, b"1a2b3c4d", false),
+                peripheral: sample_half(true, b"9f8e7d6c", false),
+                halves_mismatch: true,
+            }),
+        });
+        roundtrip_response(Response {
+            request_id: 62,
+            command: Command::GetVersion,
+            status: Status::UnknownCommand,
+            payload: ResponsePayload::Empty,
+        });
+        // The payload only pairs with GET_VERSION.
+        let resp = Response {
+            request_id: 63,
+            command: Command::Ping,
+            status: Status::Ok,
+            payload: ResponsePayload::Version(VersionInfo::default()),
+        };
+        let mut buf = [0u8; 64];
+        assert_eq!(encode_response(&resp, &mut buf), Err(EncodeError::PayloadMismatch));
+        // Flag bytes must be 0 or 1.
+        let resp = Response {
+            request_id: 64,
+            command: Command::GetVersion,
+            status: Status::Ok,
+            payload: ResponsePayload::Version(VersionInfo::default()),
+        };
+        let len = encode_response(&resp, &mut buf).unwrap();
+        assert_eq!(len, RESPONSE_HEADER_LEN + VersionInfo::ENCODED_LEN);
+        buf[RESPONSE_HEADER_LEN] = 2; // central present flag
+        assert_eq!(decode_response(&buf[..len]), Err(DecodeError::BadFlag(2)));
     }
 
     #[test]

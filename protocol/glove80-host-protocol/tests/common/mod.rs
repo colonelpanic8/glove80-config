@@ -34,6 +34,7 @@ pub fn command_name(c: Command) -> &'static str {
     match c {
         Command::GetCapabilities => "getCapabilities",
         Command::Ping => "ping",
+        Command::GetVersion => "getVersion",
         Command::SetCells => "setCells",
         Command::UnsetCells => "unsetCells",
         Command::ClearOverlay => "clearOverlay",
@@ -111,6 +112,7 @@ pub fn request_json(req: &Request) -> Value {
         Request::Ping { data } => {
             obj.insert("dataHex".into(), hex(data).into());
         }
+        Request::GetVersion => {}
         Request::SetCells { ttl_ms, cells } | Request::ReplaceOverlay { ttl_ms, cells } => {
             obj.insert("ttlMs".into(), (*ttl_ms).into());
             obj.insert("cells".into(), cells_json(cells));
@@ -202,6 +204,25 @@ pub fn payload_json(p: &ResponsePayload) -> Value {
             Value::Object(obj)
         }
         ResponsePayload::Echo { data } => json!({ "type": "echo", "dataHex": hex(data) }),
+        ResponsePayload::Version(v) => {
+            let half = |h: &glove80_host_protocol::HalfVersion| {
+                json!({
+                    "present": h.present,
+                    "fwMajor": h.fw_major,
+                    "fwMinor": h.fw_minor,
+                    "fwPatch": h.fw_patch,
+                    // Raw 8 wire bytes (ASCII short hash, zero-padded).
+                    "gitHashHex": hex(&h.git_hash),
+                    "dirty": h.dirty,
+                })
+            };
+            json!({
+                "type": "version",
+                "central": half(&v.central),
+                "peripheral": half(&v.peripheral),
+                "halvesMismatch": v.halves_mismatch,
+            })
+        }
         ResponsePayload::OverlayAck { pending_keys } => json!({
             "type": "overlayAck",
             "pendingKeys": pending_keys.iter().copied().collect::<Vec<u8>>(),
