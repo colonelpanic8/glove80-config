@@ -111,6 +111,12 @@ impl<const ROW: usize, const COL: usize, const ROW_OFFSET: usize, const COL_OFFS
         #[cfg(feature = "display")]
         let mut sleep_sub = crate::event::SleepStateEvent::subscriber();
 
+        // GLOVE80 PATCH: expose the split-link state to the application. This
+        // manager runs exactly while the peripheral session is up; the
+        // `false → true` edge is the application's resync trigger.
+        let app_link = crate::split_app_pipe::SPLIT_APP_LINK.sender();
+        app_link.send(true);
+
         // Send the current state once on startup so the peripheral matches us
         // even when no transition has happened since the central booted.
         if self
@@ -120,6 +126,7 @@ impl<const ROW: usize, const COL: usize, const ROW_OFFSET: usize, const COL_OFFS
             .await
             .is_err()
         {
+            app_link.send(false); // GLOVE80 PATCH
             return;
         }
 
@@ -152,6 +159,10 @@ impl<const ROW: usize, const COL: usize, const ROW_OFFSET: usize, const COL_OFFS
                     with_feature("display"): e = wpm_sub.next_event().fuse() => SplitMessage::Wpm(e.0),
                     with_feature("display"): e = modifier_sub.next_event().fuse() => SplitMessage::Modifier(e.modifier.into_bits()),
                     with_feature("display"): e = sleep_sub.next_event().fuse() => SplitMessage::SleepState(e.0),
+                    // GLOVE80 PATCH: application messages, deliberately the
+                    // last (lowest-priority) outgoing arm; the read arm of the
+                    // outer select still beats all outgoing traffic.
+                    m = crate::split_app_pipe::SPLIT_APP_TX.receive().fuse() => SplitMessage::Application(m),
                 }
             };
 
@@ -168,6 +179,7 @@ impl<const ROW: usize, const COL: usize, const ROW_OFFSET: usize, const COL_OFFS
                 },
                 Either::Second(Either::First(msg)) => {
                     if self.send(&msg).await.is_err() {
+                        app_link.send(false); // GLOVE80 PATCH
                         return;
                     }
                 }

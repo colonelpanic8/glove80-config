@@ -89,6 +89,9 @@ pub mod matrix;
 pub mod processor;
 #[cfg(feature = "split")]
 pub mod split;
+// GLOVE80 PATCH: bounded application-message hook for the split protocol.
+#[cfg(feature = "split")]
+pub mod split_app_pipe;
 pub mod state;
 #[cfg(feature = "storage")]
 pub mod storage;

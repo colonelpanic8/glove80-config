@@ -78,6 +78,12 @@ impl<S: SplitWriter + SplitReader> SplitPeripheral<S> {
     /// The peripheral uses the general matrix, does scanning and sends key events through `SplitWriter`.
     /// It also receives split messages from the central through `SplitReader`.
     pub(crate) async fn run(&mut self) {
+        // GLOVE80 PATCH: expose the split-link state to the application.
+        // `run` executes exactly while a central session is up (for BLE it is
+        // invoked per connection and returns on disconnect).
+        let app_link = crate::split_app_pipe::SPLIT_APP_LINK.sender();
+        app_link.send(true);
+
         // Proactively announce our firmware hash so the central can detect
         // us even when it booted first and already gave up waiting for a query response.
         #[cfg(feature = "dfu_split")]
@@ -227,6 +233,15 @@ impl<S: SplitWriter + SplitReader> SplitPeripheral<S> {
                                 error!("dfu_split: no active DFU session");
                             }
                         }
+                        // GLOVE80 PATCH: forward application payloads;
+                        // drop-on-full so a slow consumer can never stall the
+                        // split read loop (the application resyncs on
+                        // reconnect and must tolerate loss).
+                        SplitMessage::Application(data) => {
+                            if crate::split_app_pipe::SPLIT_APP_RX.try_send(data).is_err() {
+                                warn!("split app message dropped (inbox full)");
+                            }
+                        }
                         _ => (),
                     },
                     Err(e) => {
@@ -242,5 +257,8 @@ impl<S: SplitWriter + SplitReader> SplitPeripheral<S> {
                 }
             }
         }
+
+        // GLOVE80 PATCH: the loop only exits on disconnect.
+        app_link.send(false);
     }
 }
