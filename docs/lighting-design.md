@@ -54,8 +54,13 @@ The contract for the Glove80 lighting system. General system goals live in
 - Lighting work never delays keystrokes.
 - Static-only state = no animation timer at all; only animated cells
   recompute on a tick.
-- Brightness is a runtime setting; the driver hard-clamps every channel at
-  the 80% current ceiling regardless of what any layer or host asks for.
+- Brightness is a runtime setting scaling everything below the ceiling.
+- The safety ceiling is a compile-time constant (default 80%, per MoErgo's
+  current/warranty limit). Hosts may lower the effective ceiling at runtime
+  but can never raise it above the compiled value.
+- Future refinement: replace the per-channel clamp with a frame-level
+  current budget (estimate total draw, scale the frame proportionally) so
+  sparse bright cells are allowed while whole-board floods stay limited.
 
 ## Split
 
