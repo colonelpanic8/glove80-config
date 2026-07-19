@@ -96,7 +96,25 @@ One protocol, three transports, one codec.
 - Exit: every lighting-design.md host operation is exercisable from both
   Lightbench and the CLI.
 
-## Phase 6 — Qualification and cutover
+## Phase 6 — Unified keymap + lighting configuration
+
+One protocol, one editor, one config file for the whole keyboard; Vial
+becomes optional rather than load-bearing (and keymap editing finally works
+over BLE, which Vial cannot do on Linux).
+
+- Protocol v1.2: batched keymap read/write by (layer, position),
+  capability-gated; firmware writes RMK's runtime keymap through the same
+  persistence path Vial uses (Vial stays compatible).
+- Layer names and stable layer IDs live in the canonical config, not the
+  firmware slots.
+- Lightbench: keymap panel beside the lighting panels, same board
+  rendering, both transports.
+- CLI + canonical schema: the config file grows to cover bindings + layers
+  + lighting; transactional apply covers it all; export round-trips.
+- Exit: a fresh keyboard is fully configured (keymap + lighting) from one
+  file over either transport; Vial-made edits still read back correctly.
+
+## Phase 7 — Qualification and cutover
 
 - Run the full checklist in design-goals.md on both halves.
 - Fix stragglers (battery-idle behavior, bootloader entry from host, etc.).
