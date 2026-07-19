@@ -1,9 +1,11 @@
 #![no_main]
 #![no_std]
 
+mod config_store;
 mod host_proto;
 mod host_pump;
 mod lighting;
+mod lighting_config;
 mod split_lighting;
 
 use rmk::macros::rmk_central;

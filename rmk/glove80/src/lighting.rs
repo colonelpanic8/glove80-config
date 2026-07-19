@@ -207,9 +207,30 @@ fn default_compositor() -> Compositor<NUM_LEDS> {
 /// compositor's reported `next_wake` elapses; in both cases it re-renders
 /// and writes the frame only if it changed. When the compositor reports no
 /// upcoming change (`None`), no timer exists at all.
+/// Central-only persistent-config runtime state (Phase 4): the transactional
+/// store handle plus the RAM blob buffer (boot load now; host config
+/// sessions once the protocol's config commands are wired).
+pub struct CentralConfig {
+    pub store: crate::config_store::ConfigStore,
+    /// Assembly buffer: boot load first, then CONFIG_BEGIN/DATA sessions.
+    /// (CONFIG_READ serves the active blob straight from flash instead, so
+    /// an open session and a concurrent read cannot collide.)
+    pub blob_buf: &'static mut [u8; crate::config_store::CONFIG_BLOB_MAX],
+    /// The open transfer session, if any (one per keyboard, both transports).
+    pub session: Option<crate::host_proto::ConfigSession>,
+}
+
+/// Backing storage for [`CentralConfig::blob_buf`]. Only the central takes
+/// it; on the peripheral binary it is dead BSS.
+static BLOB_BUF: static_cell::StaticCell<[u8; crate::config_store::CONFIG_BLOB_MAX]> =
+    static_cell::StaticCell::new();
+
 pub struct LightingProcessor {
     chain: Ws2812Chain,
     compositor: Compositor<NUM_LEDS>,
+    /// `Some` on the central once boot load has run; `None` on the
+    /// peripheral (which persists nothing — central is authoritative).
+    config: Option<CentralConfig>,
     /// Which split half this is, plus that half's lighting-sync state
     /// (Phase 3): the central's authoritative right-half overlay store and
     /// delta queue, or the peripheral's link-loss bookkeeping.
@@ -264,6 +285,7 @@ pub fn init(
     LightingProcessor {
         chain: Ws2812Chain::new(spi, data_pin),
         compositor: default_compositor(),
+        config: None,
         role,
         next_wake_ms: None,
         power_ready_at,
@@ -273,6 +295,46 @@ pub fn init(
 }
 
 impl LightingProcessor {
+    /// Central boot load (Phase 4): open the transactional config store and
+    /// apply the newest valid stored config over the compiled defaults.
+    /// Recovery order per design-goals.md: newest valid stored config →
+    /// compiled defaults (already installed by [`init`], so every failure
+    /// path is simply "change nothing"). Runs before the first frame; the
+    /// flash traffic is serviced by the shared-flash task and never touches
+    /// the key-scan path.
+    async fn boot_load_config(&mut self) {
+        if self.role.central_mut().is_none() {
+            return;
+        }
+        let store = crate::config_store::ConfigStore::open().await;
+        let blob_buf = BLOB_BUF.init([0; crate::config_store::CONFIG_BLOB_MAX]);
+        let config = CentralConfig { store, blob_buf, session: None };
+        if config.store.active_len().is_some() {
+            match config.store.read_active(config.blob_buf).await {
+                Ok(len) => {
+                    let blob = &config.blob_buf[..len];
+                    match crate::lighting_config::apply_blob(
+                        &mut self.compositor,
+                        &mut self.role,
+                        blob,
+                        now_ms(),
+                    ) {
+                        Ok(()) => defmt::info!("lighting: stored config applied at boot"),
+                        Err(e) => defmt::warn!(
+                            "lighting: stored config rejected, keeping compiled defaults: {}",
+                            defmt::Debug2Format(&e)
+                        ),
+                    }
+                }
+                Err(e) => defmt::warn!(
+                    "lighting: stored config unreadable, keeping compiled defaults: {}",
+                    defmt::Debug2Format(&e)
+                ),
+            }
+        }
+        self.config = Some(config);
+    }
+
     /// Render at `now`, remember the next self-driven deadline, and write
     /// the frame out only if it differs from the last one on the wire.
     async fn render_at(&mut self, now: u64) {
@@ -290,13 +352,39 @@ impl LightingProcessor {
     /// immediately so a host write is visible without waiting for another
     /// event.
     async fn process_host_request(&mut self, req: crate::host_proto::HostRequest) {
-        let response = crate::host_proto::apply(
-            &mut self.compositor,
-            &mut self.role,
-            req.request_id,
-            &req.request,
-            now_ms(),
-        );
+        let response = if crate::host_proto::is_config_request(&req.request) {
+            match &mut self.config {
+                Some(cfg) => {
+                    crate::host_proto::apply_config(
+                        &mut self.compositor,
+                        &mut self.role,
+                        cfg,
+                        req.request_id,
+                        &req.request,
+                        now_ms(),
+                    )
+                    .await
+                }
+                // Unreachable: the transport pumps only run on the central,
+                // where boot load installed the config state before this
+                // loop; answered defensively instead of panicking.
+                None => crate::host_proto::apply(
+                    &mut self.compositor,
+                    &mut self.role,
+                    req.request_id,
+                    &req.request,
+                    now_ms(),
+                ),
+            }
+        } else {
+            crate::host_proto::apply(
+                &mut self.compositor,
+                &mut self.role,
+                req.request_id,
+                &req.request,
+                now_ms(),
+            )
+        };
         crate::host_proto::respond(req.transport, response).await;
         self.render_at(now_ms()).await;
     }
@@ -355,6 +443,10 @@ impl Processor for LightingProcessor {
             .expect("split link watch has a free receiver slot");
         let requests = crate::host_proto::HOST_REQUESTS.receiver();
         let app_rx = rmk::split_app_pipe::SPLIT_APP_RX.receiver();
+        // Central: load the persisted lighting config before the first
+        // frame (no-op on the peripheral). Interleaves with the chain
+        // power-settle wait below, which usually dominates.
+        self.boot_load_config().await;
         Timer::at(self.power_ready_at).await;
         self.render_at(now_ms()).await;
         loop {

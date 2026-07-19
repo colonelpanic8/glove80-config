@@ -424,9 +424,12 @@ out).
   from the central's stores. `CLEAR_OVERLAY` / `REPLACE_OVERLAY` with the
   peripheral offline answer `PARTIAL_APPLY` (for a bare right-half clear,
   with `pending_count = 0` per the overlay-ack rules above).
-- `ENTER_BOOTLOADER` target 1 (peripheral) is not yet reachable and answers
-  `OUT_OF_RANGE` (the protocol has no dedicated "unsupported" status);
-  target 0 (central) works via the Adafruit bootloader.
+- `ENTER_BOOTLOADER`: target 0 (central) works via the Adafruit bootloader.
+  Target 1 (peripheral) is forwarded over the split link (magic-guarded on
+  that hop too): `OK` means the request was dispatched to a connected
+  peripheral, which then reboots into its UF2 bootloader; `BUSY` means the
+  peripheral is offline (or the split queue was momentarily full) and
+  nothing happened — retry.
 
 ## Constants
 

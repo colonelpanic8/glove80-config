@@ -168,11 +168,11 @@ central and forwarded to the peripheral over the split link. Toggle ids
 peripheral; no default records reference them yet, so they have no visual
 effect until lighting config gains toggle records). `ENTER_BOOTLOADER` on
 target central answers OK, waits ~300 ms for the response to flush, then
-reboots via the Adafruit bootloader GPREGRET magic; target peripheral still
-answers `OUT_OF_RANGE`: RMK at our pinned revision has no
-peripheral-reboot-to-bootloader mechanism (its `dfu_split` machinery only
-reboots into freshly flashed firmware and is disabled here). When wanted,
-the Phase 3 split application channel makes this a one-message addition.
+reboots via the Adafruit bootloader GPREGRET magic; target peripheral is
+forwarded over the Phase 3 split application channel as a magic-guarded
+`EnterBootloader` message and the peripheral reboots the same way (`OK` =
+dispatched to a connected peripheral, `BUSY` = peripheral offline, nothing
+happened).
 
 RMK is now consumed as a **vendored git subtree** at the previously pinned
 revision `1156f82` (`rmk/vendor/rmk`; implementation-plan.md expected this at
@@ -234,8 +234,84 @@ Behavior:
   answer `OK` when forwarded, `PARTIAL_APPLY` only when the peripheral is
   genuinely unavailable; `READ_OVERLAY` reports all 80 keys with TTLs;
   offline `CLEAR_OVERLAY`/`REPLACE_OVERLAY` answer `PARTIAL_APPLY` (empty
-  pending list for a bare clear). Peripheral bootloader entry remains
-  `OUT_OF_RANGE` (see "Host protocol transports" above).
+  pending list for a bare clear). Peripheral bootloader entry forwards over
+  this channel too (see "Host protocol transports" above).
+
+## Persistent lighting (Phase 4)
+
+Base / layer / toggle lighting records now persist across reboots. The unit
+of persistence and transfer is the protocol v1.1 **config blob**
+(`protocol/glove80-host-protocol/PROTOCOL.md`, "Persistent configuration"):
+storage treats it as opaque validated bytes; only
+`src/lighting_config.rs` interprets it, via the shared
+`glove80_host_protocol::config` codec (no firmware-side reimplementation).
+
+### Storage: the reserved runtime-config partition
+
+`src/config_store.rs` owns `0xdc000`-`0xec000` (64 KiB — the partition the
+ZMK-era flash map reserved for runtime config, untouched until now) as two
+32 KiB generation slots (A `0xdc000`, B `0xe4000`). Slot layout: a 32-byte
+header (commit magic `"G80C"`, generation counter, blob length, blob CRC-32,
+header CRC-32) followed by the blob bytes.
+
+A save is transactional by construction: it only ever touches the inactive
+slot — erase, write blob, read back + CRC verify, write the header fields,
+then write the 4-byte magic **last** (a single NVMC word program, the commit
+point). Boot picks the valid slot with the highest generation. Power loss or
+a malformed write at ANY byte leaves the previous slot untouched and still
+winning; there is no state in which a torn save validates.
+
+Flash access shares the radio-safe `nrf_mpsl::Flash` singleton with RMK's
+storage task through a vendored patch (`rmk::config_flash` +
+the macro's flash init, both marked `GLOVE80 PATCH`): the driver lives in an
+async mutex, RMK storage gets a locking `SharedFlash` wrapper, and a small
+service task executes the application's bounded requests (256-byte chunks,
+one erase page per lock) against a registered address window — so a bug
+cannot touch flash outside the partition, and no flash work ever blocks key
+scanning.
+
+### Boot
+
+The central's lighting task loads the newest valid stored config before its
+first frame and applies it over the compiled defaults (recovery order per
+design-goals.md: newest valid stored config → compiled defaults; the
+defaults in `default_compositor()` are unchanged and remain the no-config
+behavior). The peripheral persists nothing — central is authoritative.
+Toggle state: non-persisted toggles boot to their `toggle_initial_state`
+bit; opted-in (`toggle_persist_mask`) toggles keep runtime state across a
+config commit, but flash write-back of runtime flips is not implemented yet,
+so they boot off until it is (needs its own small record so a toggle
+keypress does not rewrite the whole blob).
+
+### Split record sync
+
+Applying a config splits each record by half: keys 0-39 go into the
+central's compositor (atomic `replace_records` swap); keys 40-79 are
+remapped to local 0-39 and streamed to the peripheral over the Phase 3
+split application channel as new sync-codec tags (`ConfigReset` /
+`ConfigRecord` / `ConfigCells` / `ConfigCommit`, additive in
+`glove80-compositor/src/sync.rs`). The peripheral stages the incoming set
+(`ConfigStage`) and swaps its compositor records only on a complete commit —
+a link drop mid-transfer discards the stage and keeps the previous records.
+The central re-streams the whole set on every link-up edge (paced at 4
+messages / 20 ms so the peripheral's bounded inbox can never overflow; a
+full 16×40-cell set transfers in under two seconds). While no stored config
+exists nothing is pushed and both halves render their identical compiled
+defaults.
+
+### Host protocol session (v1.1, wired)
+
+`CONFIG_BEGIN` / `CONFIG_DATA` accumulate into a central-side 8 KiB RAM
+buffer (one session per keyboard, shared across USB and BLE; a new BEGIN
+replaces it). `CONFIG_COMMIT` re-checks the announced CRC, runs the shared
+validator, persists via the transactional store, then applies live (central
+swap + toggle persist state + peripheral push) — old config or new config,
+never a hybrid; a storage failure answers `BUSY` with nothing changed.
+`CONFIG_ABORT` discards the session. `CONFIG_READ` streams the active blob
+straight from flash (byte-stable export, independent of any open session).
+Capabilities now advertise feature bit 6 with
+`max_config_blob_len = 7148`. All of this runs inside the lighting task —
+the compositor, split state, store, and session keep exactly one owner.
 
 ## Building
 
@@ -313,6 +389,15 @@ uses the explicit `start_addr = 0xec000`. The warnings are cosmetic.
       overlay 5 s after losing the central (see "Split lighting transfer"
       above). UF2 ranges after the change: left `0x26000`-`0x9ae24`, right
       `0x26000`-`0x7109c`.
+- [ ] Phase 4: persistent lighting (built, awaiting hardware test).
+      Config blobs (protocol v1.1) persist transactionally in the reserved
+      runtime-config partition, load at boot ahead of the compiled defaults,
+      stream to the peripheral on link-up, and are written/read over the
+      CONFIG_* session commands on both transports (see "Persistent lighting"
+      above). Peripheral bootloader entry now works via a magic-guarded split
+      message (`ENTER_BOOTLOADER` target 1 answers OK when dispatched, BUSY
+      when the peripheral is offline). UF2 ranges after the change: left
+      `0x26000`-`0x9ed5c`, right `0x26000`-`0x754ec`.
 
 ## Safety rules for flashing
 

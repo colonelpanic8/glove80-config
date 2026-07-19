@@ -28,10 +28,13 @@
 
 use embassy_sync::channel::Channel;
 use glove80_compositor::{Cell, Compositor, Rgb};
+use glove80_host_protocol::config::{
+    ConfigError as BlobError, MAX_CONFIG_BLOB_LEN, crc32, validate_lighting_config,
+};
 use glove80_host_protocol::{
     BOOTLOADER_MAGIC, BootTarget, Capabilities, CellState, Effect, EffectKind,
-    MAX_CELLS_PER_MESSAGE, MAX_MESSAGE_LEN, PROTOCOL_VERSION_MAJOR, PROTOCOL_VERSION_MINOR,
-    Request, Response, ResponsePayload, Status, feature,
+    MAX_CELLS_PER_MESSAGE, MAX_CONFIG_DATA_PER_MESSAGE, MAX_MESSAGE_LEN, PROTOCOL_VERSION_MAJOR,
+    PROTOCOL_VERSION_MINOR, Request, Response, ResponsePayload, Status, feature,
 };
 use rmk::RawMutex;
 
@@ -114,12 +117,18 @@ fn capabilities() -> Capabilities {
             | feature::BOOTLOADER_ENTRY
             | feature::ATOMIC_REPLACE
             | feature::OVERLAY_READBACK
-            | feature::PARTIAL_APPLY,
+            | feature::PARTIAL_APPLY
+            | feature::PERSISTENT_CONFIG,
+        // The storage slots hold more (config_store::CONFIG_BLOB_MAX), so
+        // the protocol's own maximum is the binding limit.
+        max_config_blob_len: MAX_CONFIG_BLOB_LEN as u32,
     }
 }
+const _: () = assert!(MAX_CONFIG_BLOB_LEN <= crate::config_store::CONFIG_BLOB_MAX);
 
-/// Wire effect -> compositor cell. Every wire kind is representable.
-fn effect_to_cell(e: &Effect) -> Cell {
+/// Wire effect -> compositor cell. Every wire kind is representable. Shared
+/// with the persistent-config apply path (`lighting_config.rs`).
+pub fn effect_to_cell(e: &Effect) -> Cell {
     let color = Rgb::new(e.r, e.g, e.b);
     match e.kind {
         EffectKind::Solid => Cell::Solid { color },
@@ -398,6 +407,14 @@ pub fn apply(
                 (Status::Ok, ResponsePayload::Toggle { id: *id, state: comp.toggle(*id) })
             }
         }
+        // Persistent-config commands are routed to [`apply_config`] by the
+        // lighting task (they need the central's store + session state and
+        // async flash access); this arm is unreachable there.
+        Request::ConfigBegin { .. }
+        | Request::ConfigData { .. }
+        | Request::ConfigCommit
+        | Request::ConfigAbort
+        | Request::ConfigRead { .. } => (Status::Busy, ResponsePayload::Empty),
         Request::EnterBootloader { magic, target } => {
             if *magic != BOOTLOADER_MAGIC {
                 (Status::BadMagic, ResponsePayload::Empty)
@@ -407,16 +424,22 @@ pub fn apply(
                         enter_bootloader = true;
                         (Status::Ok, ResponsePayload::Empty)
                     }
-                    // Still unsupported: RMK at our pinned revision has no
-                    // peripheral reboot-to-bootloader mechanism (dfu_split
-                    // only reboots into freshly flashed firmware, and is
-                    // disabled here). The protocol has no dedicated
-                    // "unsupported" status, so this reports the target as out
-                    // of range (documented in PROTOCOL.md's transport
-                    // addendum and the firmware README). The Phase 3 split
-                    // application channel would make this a one-message
-                    // addition when wanted.
-                    BootTarget::Peripheral => (Status::OutOfRange, ResponsePayload::Empty),
+                    // Forwarded over the split application channel (magic-
+                    // guarded on the wire too); the peripheral reboots via
+                    // the same Adafruit bootloader GPREGRET mechanism as the
+                    // central. OK = the request was dispatched to a
+                    // connected peripheral; BUSY = peripheral offline (or
+                    // queue momentarily full) — nothing happened, retry.
+                    BootTarget::Peripheral => {
+                        let dispatched = role
+                            .central_mut()
+                            .is_some_and(|split| split.request_peripheral_bootloader());
+                        if dispatched {
+                            (Status::Ok, ResponsePayload::Empty)
+                        } else {
+                            (Status::Busy, ResponsePayload::Empty)
+                        }
+                    }
                 }
             }
         }
@@ -424,5 +447,167 @@ pub fn apply(
     HostResponse {
         response: Response { request_id, command, status, payload },
         enter_bootloader,
+    }
+}
+
+// --- Persistent-config session (protocol v1.1, Phase 4) ---------------------
+
+/// One open CONFIG_BEGIN → DATA → COMMIT transfer session. Exactly one
+/// exists, on the central, shared across both transports (a BEGIN on either
+/// replaces it); the assembled bytes accumulate in the central's RAM blob
+/// buffer (`CentralConfig::blob_buf`).
+pub struct ConfigSession {
+    total_len: u32,
+    blob_crc32: u32,
+    received: u32,
+}
+
+/// Whether `req` is a persistent-config command (routed to [`apply_config`]
+/// instead of [`apply`]).
+pub fn is_config_request(req: &Request) -> bool {
+    matches!(
+        req,
+        Request::ConfigBegin { .. }
+            | Request::ConfigData { .. }
+            | Request::ConfigCommit
+            | Request::ConfigAbort
+            | Request::ConfigRead { .. }
+    )
+}
+
+/// Apply one persistent-config request (PROTOCOL.md "Persistent
+/// configuration"). Called by the lighting task on the central, which owns
+/// the compositor, the split state, and the config store/session — so the
+/// whole commit (persist, activate, split push) happens under the single
+/// owner. Flash traffic awaits the shared-flash service; key scanning is
+/// unaffected.
+pub async fn apply_config(
+    comp: &mut Compositor<NUM_LEDS>,
+    role: &mut crate::split_lighting::SplitRole,
+    cfg: &mut crate::lighting::CentralConfig,
+    request_id: u8,
+    req: &Request,
+    now_ms: u64,
+) -> HostResponse {
+    let command = req.command();
+    let (status, payload) = match req {
+        Request::ConfigBegin { total_len, blob_crc32 } => {
+            // A new BEGIN always replaces any open session (even when it
+            // itself is then rejected).
+            cfg.session = None;
+            if *total_len as usize > MAX_CONFIG_BLOB_LEN {
+                (Status::CapacityExceeded, ResponsePayload::Empty)
+            } else {
+                cfg.session =
+                    Some(ConfigSession { total_len: *total_len, blob_crc32: *blob_crc32, received: 0 });
+                (Status::Ok, ResponsePayload::Empty)
+            }
+        }
+        Request::ConfigData { offset, data } => match &mut cfg.session {
+            None => (Status::NoSession, ResponsePayload::Empty),
+            Some(s) => {
+                let contiguous = *offset == s.received
+                    && s.received as usize + data.len() <= s.total_len as usize;
+                if !contiguous {
+                    // Any DATA error aborts the session (restart with BEGIN).
+                    cfg.session = None;
+                    (Status::BadOffset, ResponsePayload::Empty)
+                } else {
+                    cfg.blob_buf[s.received as usize..][..data.len()].copy_from_slice(data);
+                    s.received += data.len() as u32;
+                    (Status::Ok, ResponsePayload::Empty)
+                }
+            }
+        },
+        Request::ConfigCommit => match cfg.session.take() {
+            // Every COMMIT, success or failure, ends the session.
+            None => (Status::NoSession, ResponsePayload::Empty),
+            Some(s) if s.received < s.total_len => {
+                (Status::ConfigIncomplete, ResponsePayload::Empty)
+            }
+            Some(s) => {
+                let blob = &cfg.blob_buf[..s.total_len as usize];
+                if crc32(blob) != s.blob_crc32 {
+                    (Status::CrcMismatch, ResponsePayload::Empty)
+                } else {
+                    match validate_lighting_config(blob) {
+                        Err(BlobError::CrcMismatch { .. }) => {
+                            (Status::CrcMismatch, ResponsePayload::Empty)
+                        }
+                        Err(e) => {
+                            defmt::warn!(
+                                "host-proto: config rejected: {}",
+                                defmt::Debug2Format(&e)
+                            );
+                            (Status::InvalidConfig, ResponsePayload::Empty)
+                        }
+                        Ok(()) => {
+                            // Persist first (transactional: the previous
+                            // config survives any failure or power loss),
+                            // then activate live + stream to the peripheral.
+                            match cfg.store.save(blob).await {
+                                Err(e) => {
+                                    defmt::error!(
+                                        "host-proto: config store failed: {}",
+                                        defmt::Debug2Format(&e)
+                                    );
+                                    (Status::Busy, ResponsePayload::Empty)
+                                }
+                                Ok(()) => match crate::lighting_config::apply_blob(
+                                    comp, role, blob, now_ms,
+                                ) {
+                                    Ok(()) => (Status::Ok, ResponsePayload::Empty),
+                                    // Unreachable for a validated blob.
+                                    Err(_) => (Status::InvalidConfig, ResponsePayload::Empty),
+                                },
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        Request::ConfigAbort => {
+            cfg.session = None; // idempotent
+            (Status::Ok, ResponsePayload::Empty)
+        }
+        Request::ConfigRead { offset, max_len } => match cfg.store.active_len() {
+            // No stored config: total_len = 0, no bytes.
+            None => (
+                Status::Ok,
+                ResponsePayload::ConfigData { total_len: 0, data: heapless::Vec::new() },
+            ),
+            Some(total) => {
+                if *offset as usize > total {
+                    (Status::OutOfRange, ResponsePayload::Empty)
+                } else {
+                    let want = (*max_len as usize)
+                        .min(MAX_CONFIG_DATA_PER_MESSAGE)
+                        .min(total - *offset as usize);
+                    let mut data: heapless::Vec<u8, MAX_CONFIG_DATA_PER_MESSAGE> =
+                        heapless::Vec::new();
+                    // Cannot fail: want <= the Vec's capacity.
+                    let _ = data.resize(want, 0);
+                    match cfg.store.read_active_at(*offset as usize, &mut data).await {
+                        Ok(_) => (
+                            Status::Ok,
+                            ResponsePayload::ConfigData { total_len: total as u32, data },
+                        ),
+                        Err(e) => {
+                            defmt::error!(
+                                "host-proto: config read failed: {}",
+                                defmt::Debug2Format(&e)
+                            );
+                            (Status::Busy, ResponsePayload::Empty)
+                        }
+                    }
+                }
+            }
+        },
+        // Non-config requests never reach here (see [`is_config_request`]).
+        _ => (Status::UnknownCommand, ResponsePayload::Empty),
+    };
+    HostResponse {
+        response: Response { request_id, command, status, payload },
+        enter_bootloader: false,
     }
 }

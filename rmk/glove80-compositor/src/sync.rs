@@ -51,6 +51,12 @@ const TAG_CONFIG_RESET: u8 = 0x05;
 const TAG_CONFIG_RECORD: u8 = 0x06;
 const TAG_CONFIG_CELLS: u8 = 0x07;
 const TAG_CONFIG_COMMIT: u8 = 0x08;
+const TAG_ENTER_BOOTLOADER: u8 = 0x09;
+
+/// Wire magic carried by [`SyncMessage::EnterBootloader`] so a corrupted or
+/// truncated payload can never reboot the peripheral (same value as the
+/// host protocol's bootloader magic).
+pub const BOOTLOADER_SYNC_MAGIC: u32 = 0xB007_10AD;
 
 /// Bytes of one `key + cell` entry on the wire.
 const CELL_ENTRY_LEN: usize = 10;
@@ -167,6 +173,9 @@ pub enum SyncMessage {
     /// is discarded instead — the previous records keep rendering, and the
     /// next resync retransmits from `ConfigReset`.
     ConfigCommit { record_count: u8 },
+    /// Reboot the peripheral into its UF2 bootloader. Guarded by
+    /// [`BOOTLOADER_SYNC_MAGIC`] on the wire (checked at decode).
+    EnterBootloader,
 }
 
 /// Wire encoding of an [`Activation`] for config-record transfer: matches
@@ -199,6 +208,8 @@ pub enum SyncDecodeError {
     UnknownTag(u8),
     UnknownCellKind(u8),
     UnknownActivation(u8),
+    /// An [`SyncMessage::EnterBootloader`] payload without the wire magic.
+    BadMagic,
     /// Payload shorter or longer than the tag's layout requires.
     BadLength,
 }
@@ -311,6 +322,11 @@ impl SyncMessage {
                 out[2] = *record_count;
                 3
             }
+            SyncMessage::EnterBootloader => {
+                out[1] = TAG_ENTER_BOOTLOADER;
+                out[2..6].copy_from_slice(&BOOTLOADER_SYNC_MAGIC.to_le_bytes());
+                6
+            }
         }
     }
 
@@ -405,6 +421,17 @@ impl SyncMessage {
                     return Err(SyncDecodeError::BadLength);
                 }
                 Ok(SyncMessage::ConfigCommit { record_count: bytes[2] })
+            }
+            TAG_ENTER_BOOTLOADER => {
+                if bytes.len() != 6 {
+                    return Err(SyncDecodeError::BadLength);
+                }
+                let magic =
+                    u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
+                if magic != BOOTLOADER_SYNC_MAGIC {
+                    return Err(SyncDecodeError::BadMagic);
+                }
+                Ok(SyncMessage::EnterBootloader)
             }
             tag => Err(SyncDecodeError::UnknownTag(tag)),
         }
@@ -792,6 +819,13 @@ mod tests {
         cells.push(39, Cell::Breathe { color: RED, period_ms: 2000, phase_ms: 0 });
         roundtrip(SyncMessage::ConfigCells { record_index: 5, cells });
         roundtrip(SyncMessage::ConfigCommit { record_count: 7 });
+        roundtrip(SyncMessage::EnterBootloader);
+
+        // Bootloader entry without the wire magic is rejected.
+        let mut buf = [0u8; MAX_SYNC_PAYLOAD];
+        let len = SyncMessage::EnterBootloader.encode(&mut buf);
+        buf[2] ^= 0xFF;
+        assert_eq!(SyncMessage::decode(&buf[..len]), Err(SyncDecodeError::BadMagic));
 
         // Unknown activation kind is rejected (stage discards on the drop).
         let mut buf = [0u8; MAX_SYNC_PAYLOAD];

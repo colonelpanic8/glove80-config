@@ -24,8 +24,10 @@
 //!   resync anyway). Brightness/ceiling/toggles are kept across link loss,
 //!   like the synced layer state.
 
-use glove80_compositor::sync::{MAX_SYNC_PAYLOAD, RemoteOverlay, SyncCells, SyncKeys, SyncMessage};
-use glove80_compositor::{Cell, Compositor};
+use glove80_compositor::sync::{
+    ConfigPush, ConfigStage, MAX_SYNC_PAYLOAD, RemoteOverlay, SyncCells, SyncKeys, SyncMessage,
+};
+use glove80_compositor::{Cell, Compositor, MAX_RECORDS, Record};
 use rmk::split_app_pipe::{SPLIT_APP_MSG_MAX, SPLIT_APP_TX, SplitAppData};
 
 use crate::lighting::NUM_LEDS;
@@ -41,6 +43,14 @@ pub const LINK_LOSS_GRACE_MS: u64 = 5_000;
 
 /// Retry cadence for a resync that could not be queued in one go.
 const RESYNC_RETRY_MS: u64 = 50;
+
+/// Persistent-config push pacing (Phase 4): at most this many messages per
+/// tick, one tick per [`PUSH_TICK_MS`]. Sized so the peripheral's bounded
+/// split inbox (capacity 8, drained promptly by its lighting task) can never
+/// overflow, while a full 16-record / 640-cell set still transfers in under
+/// two seconds.
+const PUSH_MSGS_PER_TICK: usize = 4;
+const PUSH_TICK_MS: u64 = 20;
 
 /// Encode and queue one message; `false` if the (bounded) queue is full.
 fn try_queue(msg: &SyncMessage) -> bool {
@@ -62,6 +72,23 @@ pub struct CentralSplit {
     /// (link-up edge or delta-queue overflow). While owed, delta queueing is
     /// suppressed — the resync will carry the final state.
     resync_at_ms: Option<u64>,
+    /// The peripheral's persistent lighting records (Phase 4): right-half
+    /// cells of the applied config, remapped to local keys. `None` until a
+    /// stored config is applied — while running compiled defaults nothing is
+    /// pushed and the peripheral renders its own identical compiled
+    /// defaults.
+    persist: Option<PersistState>,
+}
+
+/// Streaming state for the peripheral's persistent record set.
+struct PersistState {
+    count: usize,
+    records: [Record; MAX_RECORDS],
+    /// Active push cursor; `None` when the peripheral is up to date (or the
+    /// link is down — every link-up edge restarts the push).
+    push: Option<ConfigPush>,
+    /// Earliest time the next push tick may run.
+    push_at_ms: u64,
 }
 
 impl CentralSplit {
@@ -69,7 +96,7 @@ impl CentralSplit {
     // calls; the peripheral binary compiles this as dead code.
     #[allow(dead_code)]
     pub const fn new() -> Self {
-        Self { remote: RemoteOverlay::new(), link_up: false, resync_at_ms: None }
+        Self { remote: RemoteOverlay::new(), link_up: false, resync_at_ms: None, persist: None }
     }
 
     /// Live right-half cells as `(local key, cell, absolute expiry)`.
@@ -185,6 +212,14 @@ impl CentralSplit {
         self.queue_cells(cells.iter(), now_ms)
     }
 
+    /// Ask the connected peripheral to reboot into its UF2 bootloader.
+    /// `true` when the request was dispatched (⇒ protocol `OK`); `false`
+    /// when the peripheral is offline or the queue is full (⇒ `BUSY` — the
+    /// host retries). Magic-guarded on the wire.
+    pub fn request_peripheral_bootloader(&mut self) -> bool {
+        self.link_up && try_queue(&SyncMessage::EnterBootloader)
+    }
+
     /// Best-effort forward of the shared state snapshot (brightness,
     /// effective ceiling, toggle bitmap). Falls back to resync on overflow.
     pub fn notify_state(&mut self, comp: &Compositor<NUM_LEDS>, now_ms: u64) {
@@ -201,24 +236,54 @@ impl CentralSplit {
         }
     }
 
+    /// Install the peripheral's persistent record set (Phase 4: right-half
+    /// cells of an applied config, already remapped to local keys) and start
+    /// streaming it if the link is up. Also called on boot load, so a
+    /// link-up may precede or follow it — both orders end in a push.
+    pub fn set_persistent_records(&mut self, records: &[Record], now_ms: u64) {
+        let mut state = PersistState {
+            count: records.len().min(MAX_RECORDS),
+            records: [Record::new(glove80_compositor::Activation::Always); MAX_RECORDS],
+            push: None,
+            push_at_ms: now_ms,
+        };
+        state.records[..state.count].copy_from_slice(&records[..state.count]);
+        if self.link_up {
+            state.push = Some(ConfigPush::new());
+        }
+        self.persist = Some(state);
+    }
+
     /// React to a split-link edge. A `false → true` edge schedules the
-    /// reconnect resync immediately.
+    /// reconnect resync immediately and restarts the persistent-record push
+    /// from the top (idempotent on the peripheral: a commit only lands when
+    /// the staged set is complete).
     pub fn on_link_change(&mut self, up: bool, now_ms: u64) {
         self.link_up = up;
         self.resync_at_ms = if up { Some(now_ms) } else { None };
-    }
-
-    /// The next moment this state machine needs the loop to wake: a pending
-    /// right-half TTL expiry or an owed resync.
-    pub fn next_deadline(&self) -> Option<u64> {
-        match (self.remote.next_expiry(), self.resync_at_ms) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
+        if let Some(persist) = &mut self.persist {
+            persist.push = up.then(ConfigPush::new);
+            persist.push_at_ms = now_ms;
         }
     }
 
+    /// The next moment this state machine needs the loop to wake: a pending
+    /// right-half TTL expiry, an owed resync, or a persistent-push tick.
+    pub fn next_deadline(&self) -> Option<u64> {
+        let push_at = self
+            .persist
+            .as_ref()
+            .filter(|p| p.push.is_some() && self.link_up)
+            .map(|p| p.push_at_ms);
+        [self.remote.next_expiry(), self.resync_at_ms, push_at]
+            .into_iter()
+            .flatten()
+            .min()
+    }
+
     /// Deadline housekeeping: expire right-half TTLs (forwarding the unsets
-    /// — expiry authority lives here) and run an owed resync.
+    /// — expiry authority lives here), run an owed resync, and stream the
+    /// next slice of a pending persistent-record push.
     pub fn service(&mut self, comp: &Compositor<NUM_LEDS>, now_ms: u64) {
         let expired = self.remote.expire(now_ms);
         if !expired.as_slice().is_empty() {
@@ -226,6 +291,43 @@ impl CentralSplit {
         }
         if matches!(self.resync_at_ms, Some(at) if at <= now_ms) && self.link_up {
             self.resync(comp, now_ms);
+        }
+        self.service_push(now_ms);
+    }
+
+    /// One paced tick of the persistent-record push: peek → queue → advance,
+    /// at most [`PUSH_MSGS_PER_TICK`] messages, retrying the same message
+    /// later when the split queue is full.
+    fn service_push(&mut self, now_ms: u64) {
+        if !self.link_up {
+            return;
+        }
+        let Some(persist) = &mut self.persist else {
+            return;
+        };
+        let Some(push) = &mut persist.push else {
+            return;
+        };
+        if now_ms < persist.push_at_ms {
+            return;
+        }
+        for _ in 0..PUSH_MSGS_PER_TICK {
+            let records = &persist.records[..persist.count];
+            let Some(msg) = push.next_message(records) else {
+                break;
+            };
+            if !try_queue(&msg) {
+                // Queue full: keep the cursor, retry the same message soon.
+                persist.push_at_ms = now_ms + RESYNC_RETRY_MS;
+                return;
+            }
+            push.advance(records);
+        }
+        if push.done() {
+            defmt::info!("split-lighting: persistent records pushed to the peripheral");
+            persist.push = None;
+        } else {
+            persist.push_at_ms = now_ms + PUSH_TICK_MS;
         }
     }
 
@@ -271,13 +373,20 @@ pub struct PeripheralSplit {
     /// When set, the host overlay is cleared at/after this time unless the
     /// central link comes back first.
     clear_at_ms: Option<u64>,
+    /// Staging area for an incoming persistent-record set (Phase 4). The
+    /// live records swap only on a complete commit; a partial transfer
+    /// (link drop, lost message) is discarded and the previous records —
+    /// compiled defaults or the last committed set — keep rendering. The
+    /// set is NOT persisted here: the central is authoritative and
+    /// re-streams it on every link-up.
+    stage: ConfigStage,
 }
 
 impl PeripheralSplit {
     // See CentralSplit::new: only the peripheral binary constructs this.
     #[allow(dead_code)]
     pub const fn new() -> Self {
-        Self { clear_at_ms: None }
+        Self { clear_at_ms: None, stage: ConfigStage::new() }
     }
 
     pub fn on_link_change(&mut self, up: bool, now_ms: u64) {
@@ -324,6 +433,37 @@ impl PeripheralSplit {
                 }
             }
             Ok(SyncMessage::Clear) => comp.host_clear(),
+            Ok(SyncMessage::ConfigReset { record_count }) => {
+                if !self.stage.reset(record_count) {
+                    defmt::warn!("split-lighting: config push exceeds record capacity");
+                }
+            }
+            Ok(SyncMessage::ConfigRecord { index, activation, cell_count }) => {
+                self.stage.record(index, activation, cell_count);
+            }
+            Ok(SyncMessage::ConfigCells { record_index, cells }) => {
+                self.stage.cells(record_index, cells.entries());
+            }
+            Ok(SyncMessage::ConfigCommit { record_count }) => match self.stage.commit(record_count) {
+                Some(records) => {
+                    // Cannot fail: the stage capacity equals the
+                    // compositor's; guarded anyway.
+                    if comp.replace_records(records).is_err() {
+                        defmt::warn!("split-lighting: config commit exceeded compositor capacity");
+                    } else {
+                        defmt::info!("split-lighting: persistent records applied ({})", record_count);
+                    }
+                }
+                // Incomplete stage: keep the previous records; the central
+                // restarts the push on the next link-up edge.
+                None => defmt::warn!("split-lighting: incomplete config push discarded"),
+            },
+            Ok(SyncMessage::EnterBootloader) => {
+                // Magic-checked at decode; requested by the central on the
+                // host's behalf (ENTER_BOOTLOADER target 1).
+                defmt::warn!("split-lighting: entering bootloader by central request");
+                rmk::boot::jump_to_bootloader();
+            }
             Ok(SyncMessage::State { brightness, ceiling, toggles }) => {
                 comp.set_brightness(brightness);
                 // set_ceiling re-clamps to this half's compiled CHANNEL_CEILING.

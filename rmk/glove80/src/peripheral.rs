@@ -6,8 +6,10 @@
 // never fires here (host transports are central-only). Split lighting
 // forwarding (Phase 3) arrives instead through the vendored split app pipe,
 // applied by the lighting task via `split_lighting.rs`.
+mod config_store;
 mod host_proto;
 mod lighting;
+mod lighting_config;
 mod split_lighting;
 
 use rmk::macros::rmk_peripheral;
