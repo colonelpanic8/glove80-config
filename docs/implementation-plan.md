@@ -139,13 +139,15 @@ over BLE, which Vial cannot do on Linux).
 Deliberately last: only after the system works the way we want it, so the
 hooks we upstream are the ones reality validated.
 
-- Write rmk/vendor/rmk/PATCHES.md: every `GLOVE80 PATCH` site, what/why,
-  upstreamability rating.
-- Prepare upstream RMK PRs for the generic pieces: split application
-  message hook, USB-interface and GATT-service extension points, shared
-  flash access, the link-down-on-cancellation fix.
-- As PRs merge, advance the subtree to a release containing them and drop
-  the corresponding local patches.
+- Restructure the vendored subtree into a proper fork + submodule: our own
+  RMK fork repo, one logical branch per extension (split app messages,
+  transport hooks, shared flash, bugfixes) off the pinned base, an
+  integration branch merging them, and the monorepo consuming it as a
+  submodule. `git subtree split` can extract the existing patch history so
+  nothing needs rewriting from scratch.
+- Write PATCHES.md: every `GLOVE80 PATCH` site, what/why, upstreamability.
+- Upstream PRs straight from the per-feature branches; as they merge,
+  rebase the integration branch and drop local patches.
 - Exit: the vendored tree carries zero (or near-zero, documented) local
   patches, or is replaced outright by a plain pinned dependency; the repo
   reads like a standard RMK consumer with its own crates on top.
