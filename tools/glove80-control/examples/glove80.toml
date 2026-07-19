@@ -144,3 +144,45 @@ cells = [{ keys = "0-2,6-9,40-42,46-49", color = "#80ff00" }]
 [[record]] # slot 7 — white
 activation = { layer = 7 }
 cells = [{ keys = "0-2,6-9,40-42,46-49", color = "#ffffff" }]
+
+# --- Optional press-and-hold status panel -----------------------------------
+# Uncomment this block to show five layer indicators only while Magic is held,
+# plus a USB-data indicator and a split-link indicator. The first five records
+# are the same shape emitted by:
+#   glove80-control config generate layer-indicators \
+#     --keys 0-4 --gate magic --colors blue,green,magenta,red,cyan
+#
+# [[record]]
+# activation = { layer = "base" }
+# gate = { layer = "magic" }
+# cells = [{ keys = "0", color = "blue" }]
+#
+# [[record]]
+# activation = { layer = "lower" }
+# gate = { layer = "magic" }
+# cells = [{ keys = "1", color = "green" }]
+#
+# [[record]]
+# activation = { layer = "magic" }
+# gate = { layer = "magic" }
+# cells = [{ keys = "2", color = "magenta" }]
+#
+# [[record]]
+# activation = { layer = "games" }
+# gate = { layer = "magic" }
+# cells = [{ keys = "3", color = "red" }]
+#
+# [[record]]
+# activation = { layer = "mac_hyper" }
+# gate = { layer = "magic" }
+# cells = [{ keys = "4", color = "cyan" }]
+#
+# [[record]]
+# activation = "always"
+# gate = "usb"
+# cells = [{ keys = "5", color = "white" }]
+#
+# [[record]]
+# activation = "always"
+# gate = "split-link"
+# cells = [{ keys = "45", color = "green" }]
