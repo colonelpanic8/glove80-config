@@ -22,9 +22,16 @@ final phase.
 - **Layer lighting scope**: the sparse model supports both accents and
   full scenes; no schema decision needed. Lightbench starts with per-key
   editing either way.
-- **RMK vendoring**: stay on the pinned git dependency until we must patch
-  RMK internals (expected at split lighting transfer). At that point vendor
-  as a git subtree and carry patches there.
+- **RMK vendoring**: vendored as a git subtree (rmk/vendor/rmk) at the
+  pinned revision, with every modification marked `GLOVE80 PATCH` (~775
+  added / 15 changed lines across 14 files; most are new self-contained
+  pipe modules). This is deliberately nonstandard RMK usage: the features
+  in these docs need internals RMK does not expose. Exit strategy: after
+  cutover, upstream the generic hooks (split application messages, extra
+  USB interface / GATT service registration, shared flash, the
+  link-down-on-cancellation fix) so the patch set shrinks toward zero and
+  the dependency returns to a plain pinned crate. A PATCHES.md inventory
+  in the vendor directory keeps the fork surface reviewable.
 - **Old ZMK-era host code** (`protocol/proto`, `host-lighting/`, the
   protobuf/Studio parts of `ui/`): kept for reference, replaced by the new
   protocol; deleted at cutover.
