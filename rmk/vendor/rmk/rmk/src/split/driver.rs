@@ -114,6 +114,18 @@ impl<const ROW: usize, const COL: usize, const ROW_OFFSET: usize, const COL_OFFS
         // GLOVE80 PATCH: expose the split-link state to the application. This
         // manager runs exactly while the peripheral session is up; the
         // `false → true` edge is the application's resync trigger.
+        //
+        // The link-down edge MUST be sent from a drop guard: on connection
+        // loss the outer `select3` in `split/ble/central.rs` resolves via its
+        // connection-monitor arm and this future is *cancelled*, so any
+        // `send(false)` written on an error path here would never run.
+        struct LinkDownGuard;
+        impl Drop for LinkDownGuard {
+            fn drop(&mut self) {
+                crate::split_app_pipe::SPLIT_APP_LINK.sender().send(false);
+            }
+        }
+        let _link_guard = LinkDownGuard;
         let app_link = crate::split_app_pipe::SPLIT_APP_LINK.sender();
         app_link.send(true);
 
@@ -126,8 +138,7 @@ impl<const ROW: usize, const COL: usize, const ROW_OFFSET: usize, const COL_OFFS
             .await
             .is_err()
         {
-            app_link.send(false); // GLOVE80 PATCH
-            return;
+            return; // GLOVE80 PATCH: guard sends the link-down edge
         }
 
         #[cfg(feature = "dfu_split")]
@@ -179,8 +190,7 @@ impl<const ROW: usize, const COL: usize, const ROW_OFFSET: usize, const COL_OFFS
                 },
                 Either::Second(Either::First(msg)) => {
                     if self.send(&msg).await.is_err() {
-                        app_link.send(false); // GLOVE80 PATCH
-                        return;
+                        return; // GLOVE80 PATCH: guard sends the link-down edge
                     }
                 }
                 Either::Second(Either::Second(())) => {}
