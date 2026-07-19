@@ -651,6 +651,10 @@ export function decodeResponse(bytes: Uint8Array): Response {
         if ((caps.featureBits & FEATURE_PERSISTENT_CONFIG) !== 0) {
           caps.maxConfigBlobLen = r.u32();
         }
+        // Newer protocol minors append further extensions in feature-bit
+        // order (PROTOCOL.md "Versioning"). A v1.1 client skips what it
+        // does not understand rather than rejecting the handshake.
+        r.bytes(r.remaining);
         payload = caps;
         break;
       }

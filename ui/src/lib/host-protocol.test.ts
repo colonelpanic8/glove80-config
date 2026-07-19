@@ -385,6 +385,40 @@ describe("host protocol codec", () => {
     );
   });
 
+  it("skips capability extensions appended by newer protocol minors", () => {
+    // A v1.2+ device with feature bit 7 appends a 4-byte keymap extension
+    // after max_config_blob_len; a v1.1 client must skip it, not reject the
+    // handshake (PROTOCOL.md "Versioning": minor bumps are additive).
+    const expected: Response = {
+      requestId: 7,
+      command: "getCapabilities",
+      status: "ok",
+      payload: {
+        type: "capabilities",
+        protocolMajor: 1,
+        protocolMinor: 2,
+        ledCountLeft: 40,
+        ledCountRight: 40,
+        layerCapacity: 8,
+        maxCellsPerOp: 80,
+        effectMask: 0b111,
+        overlayCellCapacity: 80,
+        maxMessageLen: MAX_MESSAGE_LEN,
+        featureBits: 0x7f | (1 << 7),
+        maxConfigBlobLen: MAX_CONFIG_BLOB_LEN,
+      },
+    };
+    const withoutExtension = encodeResponse(expected);
+    const keymapExtension = Uint8Array.from([6, 14, 64, 0]);
+    const extended = new Uint8Array(withoutExtension.length + keymapExtension.length);
+    extended.set(withoutExtension);
+    extended.set(keymapExtension, withoutExtension.length);
+    // Patch payload_len (u16 at offset 3) for the appended bytes.
+    const view = new DataView(extended.buffer);
+    view.setUint16(3, view.getUint16(3, true) + keymapExtension.length, true);
+    expect(decodeResponse(extended)).toEqual(expected);
+  });
+
   it("round-trips config responses", () => {
     const responses: Response[] = [
       { requestId: 1, command: "configBegin", status: "ok", payload: { type: "empty" } },

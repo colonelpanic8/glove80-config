@@ -1,8 +1,18 @@
 # Glove80 Lightbench
 
-Lightbench is a standalone browser interface for the experimental Glove80
-host-lighting protocol. It connects directly to the keyboard and has no Codex
-integration or daemon dependency.
+Lightbench is the browser workbench for the Glove80 host protocol
+(`protocol/glove80-host-protocol/PROTOCOL.md`). It connects straight to the
+keyboard — no daemon, no Studio, no install — and drives two things:
+
+- the **live host overlay**: RAM-only lighting painted directly onto the
+  board, with TTL and brightness control;
+- the **persistent config**: the ordered lighting records the keyboard boots
+  with, edited offline and applied through the transactional v1.1 config
+  session.
+
+The ZMK-era Studio path (`@zmkfirmware/zmk-studio-ts-client`, the protobuf
+lighting protocol) has been retired from the app; Lightbench now speaks only
+our own protocol over WebHID and Web Bluetooth.
 
 ## Run locally
 
@@ -12,50 +22,86 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite in Chrome or Edge. `localhost` is important:
-browser hardware APIs require a secure context, and browsers treat localhost as
-secure for local development.
+Open the printed URL in Chrome or Edge (WebHID and Web Bluetooth need a
+Chromium browser; `localhost` counts as a secure context).
 
-Use **Connect USB** for the Studio CDC/ACM serial endpoint. **Connect BLE** is
-available when the browser and operating system expose Web Bluetooth for the
-ZMK Studio GATT service. The keyboard must be running this repository's custom
-firmware, and its active output should match the chosen connection transport.
+## Connecting
 
-Only one program can normally own the USB serial port at a time. Close ZMK
-Studio or any future lighting service before using the direct USB connection.
+- **Connect USB** — WebHID. Lightbench matches the keyboard's dedicated
+  host-protocol interface (VID `0x16C0` / PID `0x27DB`, usage page `0xFF88`,
+  usage `0x01`) and never touches the Vial raw-HID interface. Pick the
+  Glove80 in the browser prompt; no other program needs to be closed, the
+  interface is exclusive to this protocol.
+- **Connect BLE** — Web Bluetooth. The keyboard must already be paired
+  (bonded) with the OS; the `fc550001-…` GATT service requires an encrypted
+  link and is claimed via `optionalServices`. Requests go out as
+  write-without-response chunks; responses arrive as notifications.
+- **Demo mode** — an in-memory keyboard (`src/lib/mock-device.ts`)
+  implementing the full protocol, including the config transfer session and
+  partial-apply semantics. Everything in the UI can be exercised with no
+  hardware; a banner makes the mode unmistakable.
+
+The first exchange on any connection is `GET_CAPABILITIES`; the connection
+readout shows the protocol version and advertised features, and every panel
+gates itself on what the keyboard actually advertises.
+
+## Live overlay panel
+
+- Click or drag to paint; the brush chooses color and effect (solid, blink
+  with period/duty, breathe with period), or **Erase** to make keys
+  transparent again.
+- **TTL** applies to subsequent strokes: the firmware reverts those cells by
+  itself when it expires (the board shows a countdown). No TTL means cells
+  survive until an explicit clear or reboot — disconnecting never changes
+  what the keyboard shows.
+- **Brightness** is the device's global scalar (0–255) under the compiled
+  safety ceiling.
+- **Sync from keyboard** (`READ_OVERLAY`) adopts whatever the keyboard is
+  currently showing; **Push my state** (`REPLACE_OVERLAY`) makes the keyboard
+  match the canvas exactly. **Clear overlay** removes everything.
+- If the right half is offline, writes answer `PARTIAL_APPLY`; the affected
+  keys are marked pending on the board instead of pretending they lit. They
+  apply automatically when the half reconnects.
+
+## Persistent config editor
+
+- A config is an **ordered list of records** (composition order), each with
+  an activation — always on, active on a keymap layer, or bound to a toggle
+  id — and a sparse map of key → effect cells. Unpainted keys stay
+  transparent and reveal the records below.
+- Toggles used by records get boot-state and persistence checkboxes (the
+  blob's `toggle_initial_state` / `toggle_persist_mask`), plus live on/off
+  control when connected.
+- **Apply to keyboard** runs the transactional session
+  (`CONFIG_BEGIN → CONFIG_DATA… → CONFIG_COMMIT`) with staged progress. The
+  commit is all-or-nothing: on `CRC_MISMATCH`, `INVALID_CONFIG` or any other
+  failure the previous config stays active and the error says so precisely.
+- **Load from keyboard** (`CONFIG_READ`) pulls the active blob back
+  byte-stable into the editor.
+- **Export/Import .bin** moves the raw config blob to and from disk; imports
+  are fully validated before they touch the editor. The same blob works with
+  the CLI.
+- The **sync indicator** compares the editor's encoded bytes against the
+  last blob seen from the keyboard, so drift is always visible. Drafts are
+  kept in browser local storage; client-side validation (the same rules the
+  firmware enforces) runs on every edit.
 
 ## Architecture
 
-The application is intentionally split into four pieces:
+- `src/lib/host-protocol.ts` — the TypeScript codec (messages, frame layer,
+  config blob), locked to the Rust codec by shared golden vectors under
+  `protocol/vectors/`.
+- `src/lib/transport.ts` + `webhid-transport.ts` / `webbluetooth-transport.ts`
+  — one chunk-level `Transport` interface and the two browser transports.
+- `src/lib/protocol-client.ts` — frame split/reassembly, request-id
+  correlation, one-in-flight serialization, timeouts, and the config
+  transfer/read flows.
+- `src/lib/mock-device.ts` — the in-memory keyboard used by both the test
+  suite and demo mode.
+- `src/components/` — `Board` (the shared keyboard rendering, protocol key
+  space = LED chain order), `BrushControls`, `OverlayPanel`, `ConfigPanel`.
 
-- `App.tsx` owns the manual editor and never imports a concrete transport.
-- `lighting-client.ts` exposes the generic `LightingClient` interface and
-  implements bounded frames, capability negotiation, rate limiting, and color
-  safety.
-- `transports.ts` adapts the official ZMK Studio USB and BLE transports.
-- `protobuf.ts` is the language-neutral host-lighting wire contract encoded for
-  the browser.
-
-The browser currently uses TypeScript because it is a browser application, not
-because ZMK Studio or the firmware requires JavaScript. A future native daemon
-can be written in Rust, Python, or another language and can expose a separate
-adapter implementing the same conceptual lighting operations. Neither the
-manual editor nor the firmware protocol contains Codex-specific state.
-
-## Behavior
-
-- Clicking or dragging paints individual keys.
-- Static, blink, and breathe modes can be painted independently per key; period
-  and blink duty cycle are configurable, and motion is previewed on the canvas.
-- Complete scenes, fill, blackout, and left-to-right mirroring are supported.
-- The current colors and per-key effects are stored only in browser local
-  storage.
-- Live frames are kept in keyboard RAM and refreshed while connected.
-- **Release** clears the host override without erasing the local canvas.
-- Disconnecting clears the override; an unexpected disconnect falls back when
-  the firmware timeout expires.
-
-The visible key legends come from the current base layer. The LED mapping uses
-the Glove80 hardware chain order, including the mirrored right half; the tests
-verify that all 80 logical keys and all 80 LED indices are represented exactly
-once.
+`npm test` covers the codec against the golden vectors, the frame layer, the
+mock device's protocol semantics (including the config session state
+machine), and the client against the mock end to end. `npm run build` type
+checks and produces the production bundle.
