@@ -157,7 +157,7 @@ Risk: low.
 
 The project already plans a custom host transport (docs/rmk-evaluation.md "a
 versioned command set carried by raw HID/Vial" and the custom-host-interface
-direction; docs/desired-system.md "Host interfaces"), and Lightbench will speak Web
+direction; docs/design-goals.md "Host interfaces"), and Lightbench will speak Web
 Bluetooth GATT directly — Web Bluetooth cannot see HID-over-GATT services at all
 (blocklisted/claimed by the OS HID stack), so the custom service is required for
 Lightbench regardless of whether Vial-over-BLE works. Vial then matters only as the

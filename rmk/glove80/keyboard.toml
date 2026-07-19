@@ -99,7 +99,7 @@ enabled = true
 
 [host]
 vial_enabled = true
-# No physical unlock chord (desired-system.md non-negotiable #9).
+# No physical unlock chord (design-goals.md non-negotiables).
 vial_insecure = true
 
 [split]

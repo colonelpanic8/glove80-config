@@ -10,7 +10,7 @@
 //!   ZMK uses (20 us period, ~5% duty).
 //!
 //! The design is a seed for the future sparse lighting compositor
-//! (docs/desired-system.md "Lighting model"): rendering is split into a
+//! (docs/lighting-design.md): rendering is split into a
 //! *frame source* (today: a trivial "layer color on chain index 0" rule fed
 //! by RMK `LayerChangeEvent`s) and a *frame sink* ([`Ws2812Chain`], which
 //! encodes and DMAs a full 40-cell RGB frame). The compositor replaces the
@@ -161,18 +161,19 @@ impl Ws2812Chain {
     }
 }
 
-/// Dim per-layer colors for chain index 0 (kept low; well under the clamp).
+/// Per-layer colors for chain index 0, at full scale (the driver clamps each
+/// channel to [`MAX_CHANNEL`], so these render at the 80% safety ceiling).
 /// Layer order matches keyboard.toml: Base, Lower, Magic, Games, Mac Hyper,
 /// then the three unassigned layers.
 const LAYER_COLORS: [Rgb; 8] = [
-    Rgb::new(0, 0, 24),   // 0 Base: blue
-    Rgb::new(0, 24, 0),   // 1 Lower: green
-    Rgb::new(24, 0, 24),  // 2 Magic: magenta
-    Rgb::new(24, 0, 0),   // 3 Games: red
-    Rgb::new(0, 24, 24),  // 4 Mac Hyper: cyan
-    Rgb::new(24, 12, 0),  // 5: amber
-    Rgb::new(12, 24, 0),  // 6: chartreuse
-    Rgb::new(16, 16, 16), // 7: white
+    Rgb::new(0, 0, 255),     // 0 Base: blue
+    Rgb::new(0, 255, 0),     // 1 Lower: green
+    Rgb::new(255, 0, 255),   // 2 Magic: magenta
+    Rgb::new(255, 0, 0),     // 3 Games: red
+    Rgb::new(0, 255, 255),   // 4 Mac Hyper: cyan
+    Rgb::new(255, 128, 0),   // 5: amber
+    Rgb::new(128, 255, 0),   // 6: chartreuse
+    Rgb::new(255, 255, 255), // 7: white
 ];
 
 /// Event-driven lighting task. Registered with RMK via

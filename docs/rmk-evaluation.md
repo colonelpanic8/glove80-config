@@ -301,7 +301,7 @@ bootloader replacement or an unmaintainable split fork.
 
 If RMK passes, implement the complete compositor and host protocol in Rust,
 then repeat the full qualification matrix in
-[`desired-system.md`](./desired-system.md). If it fails,
+[`design-goals.md`](./design-goals.md). If it fails,
 the spike remains useful documentation and the ZMK implementation continues
 from its preserved baseline.
 
