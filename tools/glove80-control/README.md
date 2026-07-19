@@ -1,0 +1,72 @@
+# glove80-control
+
+CLI for the Glove80 host extensions. It speaks two protocols:
+
+- Legacy ZMK Studio serial (`capabilities`, `all`, `set`, `effect`, `clear`,
+  `bootloader left|right`, `config validate`) — unchanged, kept until the
+  RMK cutover.
+- The RMK host protocol v1 (`PROTOCOL.md` in
+  `protocol/glove80-host-protocol/`) over USB raw HID or BLE — the
+  `lighting` family and the host-protocol `bootloader` path.
+
+## Transports
+
+- `--usb` — Linux hidraw. Enumerates `/dev/hidraw*`, matches VID `16c0`
+  PID `27db`, and picks the interface whose report descriptor carries the
+  protocol's vendor usage page.
+- `--ble` — BlueZ over D-Bus. Discovers by the custom GATT service UUID;
+  requests go via write-without-response, responses via notifications.
+- Default is auto: USB when present, otherwise BLE.
+- `--device` disambiguates: a `/dev/hidraw*` path or a BLE address
+  (`AA:BB:CC:DD:EE:FF`). For legacy serial commands it stays the serial
+  port (default `/dev/ttyACM0`).
+- Device-identification constants (vendor usage page/usage, GATT UUIDs)
+  live in `src/transport/ids.rs`, the single place to keep in sync with
+  the firmware's transport definitions.
+
+## Lighting commands (RMK host protocol)
+
+Capabilities are queried first on every connection; all parameters are
+validated against what the device advertises.
+
+- `lighting ping [--data TEXT]` — round-trip latency check.
+- `lighting caps` — advertised capacities, effects, and feature bits.
+- `lighting set <KEYS> <COLOR> [--effect blink|breathe] [--period MS]
+  [--phase MS] [--duty PCT] [--ttl MS]` — set overlay cells. `KEYS` is a
+  comma/range list (`0-5,12,40`); `COLOR` is `#RRGGBB` or a named color
+  (`red`, `green`, `blue`, `white`, `black`/`off`, `yellow`, `cyan`,
+  `magenta`, `orange`, `purple`, `pink`). Batches larger than the device's
+  `max_cells_per_op` are split automatically.
+- `lighting unset <KEYS>...` — revert cells to transparent.
+- `lighting clear` — clear the whole host overlay.
+- `lighting read` — table of the current overlay, including remaining TTLs.
+- `lighting replace [FILE] [--ttl MS]` — atomically replace the whole
+  overlay from cell-spec lines (stdin when `FILE` is omitted or `-`).
+  One cell per line, `#`-comments and blank lines ignored:
+
+  ```
+  # KEY COLOR [EFFECT] [period=MS] [phase=MS] [duty=PCT]
+  12 #ff0000
+  40 00ff00 blink period=750 duty=30
+  41 blue breathe period=3000 phase=1500
+  ```
+
+  An empty spec is equivalent to `lighting clear`.
+- `lighting brightness [VALUE]` — get, or set (0-255), the global
+  brightness scalar.
+- `lighting toggle <ID> [on|off]` — get or set a toggle overlay's state.
+- `bootloader [--peripheral] [--yes]` — send `ENTER_BOOTLOADER` over the
+  host protocol (asks for confirmation unless `--yes`). With a positional
+  `left`/`right` target it uses the legacy Studio serial path instead.
+
+Partial application (peripheral half offline) is reported, never hidden:
+overlay writes print the keys still pending on the peripheral.
+
+## Development
+
+- Build/test from the repo root: `cargo build -p glove80-control`,
+  `cargo test -p glove80-control`. Tests run a mock transport; no hardware
+  needed.
+- The wire codec (messages, framing, reassembly) comes from
+  `protocol/glove80-host-protocol`; this crate adds transports,
+  request/response correlation, validation, and rendering.

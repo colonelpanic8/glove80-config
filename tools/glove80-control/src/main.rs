@@ -8,7 +8,10 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 
 mod config;
+mod hostproto;
+mod lighting;
 pub mod runtime_manifest;
+mod transport;
 
 const SOF: u8 = 0xab;
 const ESC: u8 = 0xac;
@@ -16,10 +19,23 @@ const EOF: u8 = 0xad;
 const DEFAULT_DEVICE: &str = "/dev/ttyACM0";
 
 #[derive(Parser)]
-#[command(about = "Control Glove80 host extensions over ZMK Studio USB serial")]
+#[command(about = "Control Glove80 host extensions (ZMK Studio serial, or the RMK host \
+                   protocol over USB raw HID / BLE for `lighting` and `bootloader`)")]
 struct Cli {
-    #[arg(long, global = true, default_value = DEFAULT_DEVICE)]
-    device: PathBuf,
+    /// Device to talk to. Legacy commands: a serial port (default
+    /// /dev/ttyACM0). `lighting`/host-protocol `bootloader`: a
+    /// /dev/hidraw* path or a BLE address (AA:BB:CC:DD:EE:FF).
+    #[arg(long, global = true)]
+    device: Option<PathBuf>,
+
+    /// Use the USB raw-HID transport (host-protocol commands only).
+    #[arg(long, global = true, conflicts_with = "ble")]
+    usb: bool,
+
+    /// Use the BLE transport (host-protocol commands only). Default is
+    /// auto: USB when present, BLE otherwise.
+    #[arg(long, global = true)]
+    ble: bool,
 
     #[command(subcommand)]
     command: Command,
@@ -71,10 +87,24 @@ enum Command {
     },
     /// Release host control and restore firmware lighting.
     Clear,
-    /// Reboot either half into its UF2 bootloader over USB.
+    /// Reboot a half into its UF2 bootloader.
+    ///
+    /// With a positional TARGET (left/right) — or bare — this uses the
+    /// legacy ZMK Studio serial path. With --peripheral, --yes, --usb,
+    /// --ble, or a host-protocol --device it sends ENTER_BOOTLOADER over
+    /// the RMK host protocol instead (central half unless --peripheral).
     Bootloader {
-        #[arg(value_enum, default_value_t = Half::Left)]
-        target: Half,
+        /// Legacy ZMK Studio serial target (defaults to left when the
+        /// legacy path is used).
+        #[arg(value_enum)]
+        target: Option<Half>,
+        #[command(flatten)]
+        host: lighting::BootloaderArgs,
+    },
+    /// Control the RMK lighting host overlay over USB raw HID or BLE.
+    Lighting {
+        #[command(subcommand)]
+        command: lighting::LightingCommand,
     },
 }
 
@@ -777,6 +807,23 @@ fn print_capabilities(value: &Capabilities) {
     println!("effect_time_quantum_ms: {}", value.effect_time_quantum_ms);
 }
 
+fn hostproto_selector(cli: &Cli) -> transport::Selector {
+    let preference = if cli.usb {
+        transport::Preference::Usb
+    } else if cli.ble {
+        transport::Preference::Ble
+    } else {
+        transport::Preference::Auto
+    };
+    transport::Selector {
+        preference,
+        device: cli
+            .device
+            .as_ref()
+            .map(|device| device.to_string_lossy().into_owned()),
+    }
+}
+
 fn run(cli: Cli) -> Result<()> {
     if let Command::Config {
         command: ConfigCommand::Validate {
@@ -796,12 +843,41 @@ fn run(cli: Cli) -> Result<()> {
         return Ok(());
     }
 
-    let mut client = SerialClient::open(&cli.device)?;
-    if let Command::Bootloader { target } = cli.command {
+    if let Command::Lighting { command } = &cli.command {
+        return lighting::run(&hostproto_selector(&cli), command);
+    }
+
+    let serial_device = cli
+        .device
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_DEVICE));
+
+    if let Command::Bootloader { target, host } = &cli.command {
+        // Host-protocol path when any of its flags/transports are selected;
+        // otherwise the legacy ZMK Studio serial path, unchanged.
+        let hostproto = host.peripheral
+            || host.yes
+            || cli.usb
+            || cli.ble
+            || cli
+                .device
+                .as_ref()
+                .is_some_and(|device| transport::is_hostproto_device(&device.to_string_lossy()));
+        if hostproto {
+            if target.is_some() {
+                bail!("positional left/right targets belong to the legacy serial path; \
+                       use --peripheral to target the peripheral half");
+            }
+            return lighting::run_bootloader(&hostproto_selector(&cli), host.peripheral, host.yes);
+        }
+        let target = target.unwrap_or(Half::Left);
+        let mut client = SerialClient::open(&serial_device)?;
         client.enter_bootloader(target)?;
         println!("{} bootloader request accepted", target.name());
         return Ok(());
     }
+
+    let mut client = SerialClient::open(&serial_device)?;
 
     let capabilities = client.capabilities()?;
     match cli.command {
@@ -904,6 +980,7 @@ fn run(cli: Cli) -> Result<()> {
         }
         Command::Bootloader { .. } => unreachable!(),
         Command::Config { .. } => unreachable!(),
+        Command::Lighting { .. } => unreachable!(),
     }
     Ok(())
 }
