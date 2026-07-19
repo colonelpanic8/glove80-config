@@ -124,9 +124,18 @@ uses the explicit `start_addr = 0xec000`. The warnings are cosmetic.
 - [x] Stage 4: USB/BLE Vial editing and storage (2026-07-18). Live keymap
       editing via vial.rocks over USB WebHID; BLE pairs without a passkey,
       registers HID keyboard + mouse, and reports battery over GATT.
-      Known limitation: browser Vial cannot reach the keyboard over BLE
-      (WebHID has no GATT transport) — the planned custom host protocol
-      must cover that path.
+      Known limitation: Vial cannot reach the keyboard over BLE on Linux.
+      Root cause (gdb + btmon verified 2026-07-18): a BlueZ bug in
+      profiles/input/hog-lib.c `find_report()`, which decides output-report
+      numbering from the HID Information flags byte instead of the kernel
+      uhid dev_flags; RMK's HID Info flags (0x03) make BlueZ misread the
+      unnumbered Vial report as numbered and silently drop every write
+      (present in 5.86 and master; worth reporting upstream — the fix is
+      using uhid_flags). Firmware-side Vial-over-BLE was proven working by
+      driving the GATT path directly. Decision: Vial stays USB-only; the
+      planned custom GATT host protocol owns the wireless path (Web
+      Bluetooth could not reach HID-over-GATT anyway). Full analysis in
+      docs/vial-ble-investigation.md.
 - [ ] Stage 5: minimum viable lighting (built, awaiting hardware test).
       Both halves: rear power-button LED dim at boot; WS2812 chain driven
       over SPIM3 with the layer color on chain index 0 (see "Lighting"
