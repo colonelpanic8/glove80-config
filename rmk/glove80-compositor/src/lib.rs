@@ -200,6 +200,87 @@ pub enum Activation {
     Status,
 }
 
+/// A firmware-evaluable condition (docs/lighting-design.md, "Conditions and
+/// gates"). Two flavors of condition sit on top of the same primitive:
+///
+/// - **layer/toggle** conditions mirror the two activation predicates a
+///   record can already carry, and
+/// - **firmware-state** conditions ([`Condition::UsbConnected`],
+///   [`Condition::Charging`], [`Condition::SplitLinkUp`]) read the runtime
+///   inputs the caller feeds the compositor ([`Compositor::set_usb_connected`]
+///   etc.).
+///
+/// A [`Condition`] is used as a record's optional **gate**: a second predicate
+/// that must ALSO hold (a logical AND with the activation) for the record to
+/// compose. One gate primitive covers the stock "Magic shows status" behavior
+/// — a layer-indicator record gated on the Magic layer is press-and-hold; the
+/// same record ungated is permanent.
+///
+/// The `(kind, arg)` wire encoding is shared by the split-sync codec
+/// ([`crate::sync`]) and mirrored by the persistent blob (protocol crate),
+/// so the same gate survives config transfer and split forwarding unchanged.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Condition {
+    /// Holds while this keymap layer is the active layer.
+    LayerActive(u8),
+    /// Holds while the named toggle (id `0..32`) is on.
+    Toggle(u8),
+    /// Holds while the central reports an active USB data connection
+    /// (central-truth, mirrored to the peripheral over the split link — the
+    /// right half's own port is charge-only).
+    UsbConnected,
+    /// Holds while THIS half sees USB bus power (local truth per half).
+    Charging,
+    /// Holds while this half's split link to the other half is up.
+    SplitLinkUp,
+}
+
+/// A gate wire pair `(kind, arg)` named an unknown condition kind.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct UnknownCondition(pub u8);
+
+impl Condition {
+    /// Wire `(kind, arg)` for this condition. `kind == 0` is reserved for
+    /// "no gate" ([`Condition::from_gate_wire`]).
+    pub const fn to_wire(self) -> (u8, u8) {
+        match self {
+            Condition::LayerActive(n) => (1, n),
+            Condition::Toggle(id) => (2, id),
+            Condition::UsbConnected => (3, 0),
+            Condition::Charging => (4, 0),
+            Condition::SplitLinkUp => (5, 0),
+        }
+    }
+
+    /// Decode a gate wire pair into an optional gate: `kind == 0` is no gate
+    /// (`Ok(None)`); a known kind yields `Ok(Some(_))`; an unknown kind is
+    /// rejected. Argument ranges are NOT re-checked here (the persistent blob
+    /// validates them before a config is ever accepted; the split link only
+    /// carries already-validated conditions), so this is deliberately lenient
+    /// about `arg`.
+    pub const fn from_gate_wire(kind: u8, arg: u8) -> Result<Option<Condition>, UnknownCondition> {
+        Ok(match kind {
+            0 => None,
+            1 => Some(Condition::LayerActive(arg)),
+            2 => Some(Condition::Toggle(arg)),
+            3 => Some(Condition::UsbConnected),
+            4 => Some(Condition::Charging),
+            5 => Some(Condition::SplitLinkUp),
+            k => return Err(UnknownCondition(k)),
+        })
+    }
+}
+
+/// Wire `(kind, arg)` for an optional gate: `None` encodes as `(0, 0)`, the
+/// same bytes every ungated record has always written into the reserved
+/// field — so ungated configs are byte-identical across this change.
+pub const fn gate_to_wire(gate: Option<Condition>) -> (u8, u8) {
+    match gate {
+        None => (0, 0),
+        Some(c) => c.to_wire(),
+    }
+}
+
 /// Composition class order (bottom to top). Derived from [`Activation`].
 fn class(a: Activation) -> u8 {
     match a {
@@ -222,16 +303,27 @@ pub struct CapacityError;
 /// A sparse lighting record: an activation predicate plus up to
 /// [`MAX_CELLS_PER_RECORD`] `(key -> Cell)` entries. Keys are chain indices
 /// (`0..N` on the target half); setting an existing key replaces its cell.
+///
+/// A record may also carry one optional [`gate`](Self::gate): a [`Condition`]
+/// that must hold for the record to compose, on top of its activation
+/// predicate (a logical AND). `gate == None` is the default and the common
+/// case — an ungated record behaves exactly as before gates existed.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Record {
     activation: Activation,
+    gate: Option<Condition>,
     len: usize,
     cells: [(u8, Cell); MAX_CELLS_PER_RECORD],
 }
 
 impl Record {
     pub const fn new(activation: Activation) -> Self {
-        Self { activation, len: 0, cells: [(0, Cell::Transparent); MAX_CELLS_PER_RECORD] }
+        Self {
+            activation,
+            gate: None,
+            len: 0,
+            cells: [(0, Cell::Transparent); MAX_CELLS_PER_RECORD],
+        }
     }
 
     /// Build a record from `(key, cell)` pairs (later duplicates replace
@@ -242,6 +334,22 @@ impl Record {
             r.set(key, cell)?;
         }
         Ok(r)
+    }
+
+    /// Builder: attach a [`gate`](Self::gate) condition to this record.
+    pub const fn gated(mut self, gate: Condition) -> Self {
+        self.gate = Some(gate);
+        self
+    }
+
+    /// The record's optional gate condition.
+    pub fn gate(&self) -> Option<Condition> {
+        self.gate
+    }
+
+    /// Set or clear the record's gate condition.
+    pub fn set_gate(&mut self, gate: Option<Condition>) {
+        self.gate = gate;
     }
 
     pub fn activation(&self) -> Activation {
@@ -317,6 +425,12 @@ pub struct Compositor<const N: usize> {
     brightness: u8,
     /// Runtime effective ceiling; always `<=` [`CHANNEL_CEILING`].
     ceiling: u8,
+    /// Firmware-state condition inputs (docs/lighting-design.md). Fed by the
+    /// caller; read by gates ([`Condition::UsbConnected`] etc.). All default
+    /// off so an unconfigured or freshly-booted compositor gates nothing on.
+    usb_connected: bool,
+    charging: bool,
+    split_link: bool,
     host: [Option<HostSlot>; MAX_HOST_CELLS],
     last_frame: Option<[Rgb; N]>,
 }
@@ -336,6 +450,9 @@ impl<const N: usize> Compositor<N> {
             toggles: 0,
             brightness: 255,
             ceiling: CHANNEL_CEILING,
+            usb_connected: false,
+            charging: false,
+            split_link: false,
             host: [None; MAX_HOST_CELLS],
             last_frame: None,
         }
@@ -429,6 +546,54 @@ impl<const N: usize> Compositor<N> {
     /// (`<=` [`CHANNEL_CEILING`]).
     pub fn ceiling(&self) -> u8 {
         self.ceiling
+    }
+
+    // --- Firmware-state condition inputs ----------------------------------
+
+    /// Report whether the central has an active USB data connection (the
+    /// [`Condition::UsbConnected`] gate input). Central-truth: the firmware
+    /// mirrors it to the peripheral over the split link so both halves gate
+    /// identically.
+    pub fn set_usb_connected(&mut self, connected: bool) {
+        self.usb_connected = connected;
+    }
+
+    pub fn usb_connected(&self) -> bool {
+        self.usb_connected
+    }
+
+    /// Report whether THIS half sees USB bus power (the [`Condition::Charging`]
+    /// gate input). Local truth per half — deliberately a different source
+    /// from [`set_usb_connected`](Self::set_usb_connected).
+    pub fn set_charging(&mut self, charging: bool) {
+        self.charging = charging;
+    }
+
+    pub fn charging(&self) -> bool {
+        self.charging
+    }
+
+    /// Report whether this half's split link is up (the
+    /// [`Condition::SplitLinkUp`] gate input).
+    pub fn set_split_link(&mut self, up: bool) {
+        self.split_link = up;
+    }
+
+    pub fn split_link(&self) -> bool {
+        self.split_link
+    }
+
+    /// Whether a bare condition holds against the current runtime inputs.
+    /// This is the gate evaluator; the activation predicate is checked
+    /// separately (see [`record_active`](Self::record_active)).
+    fn condition_holds(&self, c: Condition) -> bool {
+        match c {
+            Condition::LayerActive(layer) => layer == self.active_layer,
+            Condition::Toggle(id) => self.toggle(id),
+            Condition::UsbConnected => self.usb_connected,
+            Condition::Charging => self.charging,
+            Condition::SplitLinkUp => self.split_link,
+        }
     }
 
     // --- Host overlay (live, RAM-only) ------------------------------------
@@ -536,7 +701,7 @@ impl<const N: usize> Compositor<N> {
         };
         for cls in 0..NUM_CLASSES {
             for record in &self.records[..self.record_count] {
-                if class(record.activation) == cls && self.record_active(record.activation) {
+                if class(record.activation) == cls && self.record_participates(record) {
                     for (key, cell) in record.cells() {
                         place(key, cell, None);
                     }
@@ -591,6 +756,14 @@ impl<const N: usize> Compositor<N> {
         self.last_frame = Some(frame);
 
         RenderOutput { frame, changed, next_wake_ms }
+    }
+
+    /// Whether a record composes right now: its activation predicate holds
+    /// AND its gate (if any) holds. The gate is a pure AND — it can only
+    /// suppress a record, never activate one whose class predicate is false.
+    fn record_participates(&self, record: &Record) -> bool {
+        self.record_active(record.activation)
+            && record.gate.is_none_or(|g| self.condition_holds(g))
     }
 
     fn record_active(&self, a: Activation) -> bool {
@@ -762,6 +935,97 @@ mod tests {
         c.replace_records(&[]).unwrap();
         assert_eq!(c.records().len(), 0);
         assert_eq!(c.render(3).frame[3], Rgb::OFF);
+    }
+
+    // --- Conditions and gates ---------------------------------------------
+
+    #[test]
+    fn ungated_record_is_unchanged_by_state() {
+        // Back-compat: a record with no gate composes exactly as before,
+        // regardless of the firmware-state inputs.
+        let mut c = comp_with(&[record(Activation::Always, &[(0, solid(RED))])]);
+        assert_eq!(c.render(0).frame[0], RED);
+        c.set_usb_connected(true);
+        c.set_charging(true);
+        c.set_split_link(true);
+        let out = c.render(1);
+        assert_eq!(out.frame[0], RED);
+        assert!(!out.changed, "an ungated record does not react to state flips");
+    }
+
+    #[test]
+    fn gate_suppresses_until_condition_holds() {
+        // A gate is a pure AND with the activation: the base record only
+        // composes while USB is connected.
+        let gated = Record::with_cells(Activation::Always, &[(0, solid(RED))])
+            .unwrap()
+            .gated(Condition::UsbConnected);
+        let mut c = comp_with(&[gated]);
+        assert_eq!(c.render(0).frame[0], Rgb::OFF, "gate false -> record suppressed");
+        assert_eq!(c.render(0).next_wake_ms, None);
+
+        c.set_usb_connected(true);
+        let out = c.render(1);
+        assert_eq!(out.frame[0], RED, "gate true -> record composes");
+        assert!(out.changed, "flipping a gate's input re-renders the frame");
+
+        c.set_usb_connected(false);
+        assert_eq!(c.render(2).frame[0], Rgb::OFF, "gate false again -> suppressed");
+    }
+
+    #[test]
+    fn every_gate_kind_gates_its_input() {
+        let cases: &[(Condition, fn(&mut Compositor<N>, bool))] = &[
+            (Condition::Charging, |c, on| c.set_charging(on)),
+            (Condition::SplitLinkUp, |c, on| c.set_split_link(on)),
+            (Condition::UsbConnected, |c, on| c.set_usb_connected(on)),
+            (Condition::Toggle(4), |c, on| c.set_toggle(4, on)),
+            (Condition::LayerActive(2), |c, on| c.set_active_layer(if on { 2 } else { 0 })),
+        ];
+        for (gate, set) in cases {
+            let r = Record::with_cells(Activation::Always, &[(0, solid(GREEN))]).unwrap().gated(*gate);
+            let mut c = comp_with(&[r]);
+            assert_eq!(c.render(0).frame[0], Rgb::OFF, "{gate:?} starts unmet");
+            set(&mut c, true);
+            assert_eq!(c.render(1).frame[0], GREEN, "{gate:?} met -> composes");
+            set(&mut c, false);
+            assert_eq!(c.render(2).frame[0], Rgb::OFF, "{gate:?} unmet again -> suppressed");
+        }
+    }
+
+    #[test]
+    fn gate_ands_with_activation() {
+        // Layer-indicator-style: a layer record gated on the Magic layer.
+        // Composes only when BOTH the record's own layer is active AND the
+        // gate layer is active. Gate and activation on the same layer is the
+        // press-and-hold status pattern.
+        let magic = 2u8;
+        let indicator = Record::with_cells(Activation::LayerActive(magic), &[(0, solid(BLUE))])
+            .unwrap()
+            .gated(Condition::LayerActive(magic));
+        let mut c = comp_with(&[indicator]);
+        assert_eq!(c.render(0).frame[0], Rgb::OFF, "neither active");
+        c.set_active_layer(magic);
+        assert_eq!(c.render(1).frame[0], BLUE, "both active -> composes");
+        c.set_active_layer(1);
+        assert_eq!(c.render(2).frame[0], Rgb::OFF, "left the layer -> suppressed");
+    }
+
+    #[test]
+    fn gate_wire_roundtrips_and_rejects_unknown() {
+        for cond in [
+            Condition::LayerActive(3),
+            Condition::Toggle(31),
+            Condition::UsbConnected,
+            Condition::Charging,
+            Condition::SplitLinkUp,
+        ] {
+            let (kind, arg) = cond.to_wire();
+            assert_eq!(Condition::from_gate_wire(kind, arg), Ok(Some(cond)));
+        }
+        assert_eq!(gate_to_wire(None), (0, 0), "no gate is the all-zero reserved field");
+        assert_eq!(Condition::from_gate_wire(0, 0), Ok(None));
+        assert_eq!(Condition::from_gate_wire(9, 0), Err(UnknownCondition(9)));
     }
 
     // --- Blink ------------------------------------------------------------
