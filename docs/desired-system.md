@@ -173,11 +173,21 @@ Host operations must support:
 - unsetting selected cells;
 - clearing the complete overlay;
 - querying capabilities and physical key count;
+- reading back the complete current overlay, including effect parameters and
+  remaining TTLs;
+- atomically replacing the complete overlay with a supplied sparse map, so a
+  client can force the keyboard into a known state in one idempotent
+  operation;
 - reporting partial application when a split peripheral is unavailable.
 
-The overlay survives until explicit clear or keyboard reboot. A daemon crash
-does not trigger a short timeout that unexpectedly changes the keyboard's
-appearance.
+A cell write may carry an optional firmware-enforced TTL; when it expires the
+cell reverts to transparent. The default is no TTL. Expiry is handled by the
+firmware, not the host, so an indicator written by a crashed client cannot
+outlive the state it describes when its writer opted into expiry.
+
+Cells without a TTL survive until explicit clear or keyboard reboot. A daemon
+crash does not trigger an implicit timeout that unexpectedly changes the
+keyboard's appearance.
 
 ### Split rendering
 
