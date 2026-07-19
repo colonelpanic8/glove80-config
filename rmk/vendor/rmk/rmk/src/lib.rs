@@ -62,8 +62,13 @@ pub mod ble;
 pub mod boot;
 pub mod channel;
 pub mod config;
+// GLOVE80 PATCH: shared flash access for the application's runtime-config
+// partition (persistent lighting, Phase 4).
+#[cfg(feature = "storage")]
+pub mod config_flash;
 pub mod core_traits;
-#[cfg(feature = "dfu_split")]
+// GLOVE80 PATCH: crc32 was gated behind dfu_split; the Glove80 runtime-config
+// slot headers use it too, so it is always available now.
 pub mod crc32;
 pub mod debounce;
 #[cfg(feature = "dfu")]
