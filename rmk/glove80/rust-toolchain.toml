@@ -1,6 +1,0 @@
-[toolchain]
-# Pinned to a concrete toolchain: the machine's "stable" channel install is in
-# a broken state (untracked target files that make every channel sync fail),
-# and a pinned version keeps firmware builds reproducible anyway.
-channel = "1.97.0"
-targets = ["thumbv7em-none-eabihf"]

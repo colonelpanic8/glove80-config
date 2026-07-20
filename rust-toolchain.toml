@@ -1,8 +1,0 @@
-[toolchain]
-# Pinned like protocol/glove80-host-protocol and rmk/glove80: this machine's
-# rustup "stable" channel install is broken (channel sync fails), and a
-# concrete version keeps builds reproducible. Nested rust-toolchain.toml
-# files (rmk/, protocol/) still take precedence for builds run inside them.
-channel = "1.97.0"
-components = ["clippy", "rust-src", "rustfmt"]
-targets = ["thumbv7em-none-eabihf"]

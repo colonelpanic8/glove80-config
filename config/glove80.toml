@@ -1,0 +1,92 @@
+# Ivan's Glove80 keymap for the current glove80-rmk firmware.
+#
+# This matches the compiled-in layers in
+# dependencies/glove80-rmk/firmware/glove80-rmk/keyboard.toml and is applied
+# at runtime through RMK's native Rynk protocol:
+#
+#   make check
+#   make apply
+#   make show
+#
+# Keymap model:
+# - A [[layer]]'s position in this file is its firmware layer slot (0-7).
+# - `id` and `name` are host-side labels. The firmware stores neither; an
+#   export synthesizes layer0..N.
+# - `keys` is the 6x14 grid, row-major, whitespace-separated, one row per
+#   line. Tokens are the same QMK-style names `keymap read`/`keymap set`
+#   use (see `keymap find`); `--` is an unbound key (KC_NO) and marks the
+#   four physical holes at r0c5, r0c8, r5c5, r5c8. `#` comments run to the
+#   end of the line. Columns 0-6 are the left half (col 6 = left thumbs),
+#   columns 7-13 the right half (col 7 = right thumbs).
+#
+# Apply semantics: writes are batched with read-back verification, but are not
+# atomic across the whole keymap. A failure reports exactly what was written.
+
+# --- Layer 0: Base -----------------------------------------------------------
+[[layer]]
+id = "base"
+name = "Base"
+keys = """
+KC_F1    KC_F2    KC_F3   KC_F4    KC_F5    --       LT(1,KC_ESC)  KC_BSPC  --       KC_F6  KC_F7    KC_F8    KC_F9          KC_F10
+KC_EQL   KC_1     KC_2    KC_3     KC_4     KC_5     KC_DEL        TG(4)    KC_6     KC_7   KC_8     KC_9     KC_0           KC_MINS
+KC_TAB   KC_Q     KC_W    KC_E     KC_R     KC_T     MO(2)         KC_LGUI  KC_Y     KC_U   KC_I     KC_O     KC_P           KC_BSLS
+KC_LCTL  KC_A     KC_S    KC_D     KC_F     KC_G     KC_BSPC       KC_SPC   KC_H     KC_J   KC_K     KC_L     LT(1,KC_SCLN)  KC_QUOT
+KC_LSFT  KC_Z     KC_X    KC_C     KC_V     KC_B     KC_LGUI       KC_ENT   KC_N     KC_M   KC_COMM  KC_DOT   KC_SLSH        KC_RSFT
+KC_GRV   KC_HOME  KC_END  KC_LEFT  KC_RGHT  --       KC_LALT       KC_RGUI  --       KC_UP  KC_DOWN  KC_LBRC  KC_RBRC        TG(3)
+"""
+
+# --- Layer 1: Lower (symbols + media) ---------------------------------------
+[[layer]]
+id = "lower"
+name = "Lower"
+keys = """
+_______  _______       _______       _______        _______        --       _______  _______  --            _______       _______       _______       _______       _______
+_______  _______       _______       _______        _______        _______  _______  _______  _______       _______       _______       _______       _______       _______
+_______  LSFT(KC_EQL)  LSFT(KC_MINS) LSFT(KC_9)     LSFT(KC_0)     _______  TO(0)    _______  _______       _______       _______       _______       _______       _______
+KC_CAPS  LSFT(KC_1)    LSFT(KC_2)    LSFT(KC_3)     LSFT(KC_4)     LSFT(KC_5)  _______  KC_MPLY  LSFT(KC_6)  LSFT(KC_7)   LSFT(KC_8)    LSFT(KC_9)    LSFT(KC_0)    _______
+_______  KC_LBRC       KC_RBRC       LSFT(KC_LBRC)  LSFT(KC_RBRC)  _______  _______  _______  _______       _______       _______       _______       _______       _______
+_______  _______       _______       KC_MPRV        KC_MNXT        --       _______  _______  --            KC_VOLU       KC_VOLD       _______       _______       _______
+"""
+
+# --- Layer 2: Magic (system controls) ---------------------------------------
+# USER(0)-USER(3) select BLE profiles 0-3; USER(10)/USER(11) clear the
+# current/all profiles. USER(12) forwards the bootloader request to the right
+# half. The compiled keymap's "switch output to USB" action has no VIA keycode
+# encoding, so its key (r5c6) remains unbound in this runtime representation.
+[[layer]]
+id = "magic"
+name = "Magic"
+keys = """
+USER(10)  --  --  --  --  --  USER(2)  --  --  --  --  --  --  USER(11)
+--        --  --  --  --  --  USER(3)  --  --  --  --  --  --  --
+--        --  --  --  --  --  --       --  --  --  --  --  --  --
+QK_BOOT   --  --  --  --  --  USER(0)  --  --  --  --  --  --  USER(12)
+QK_RBT    --  --  --  --  --  USER(1)  --  --  --  --  --  --  QK_RBT
+--        --  --  --  --  --  --       --  --  --  --  --  --  TO(3)
+"""
+
+# --- Layer 3: Games (left-hand WASD) ----------------------------------------
+[[layer]]
+id = "games"
+name = "Games"
+keys = """
+_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+_______  _______  KC_W     _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+_______  KC_A     KC_S     KC_D     _______  _______  KC_SPC   _______  _______  _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
+"""
+
+# --- Layer 4: Mac Hyper ------------------------------------------------------
+[[layer]]
+id = "mac_hyper"
+name = "Mac Hyper"
+keys = """
+_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  _______  _______  TG(4)    _______  _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  --       _______  LALT(LGUI(KC_LCTL))  --  _______  _______  _______  _______  _______
+"""
