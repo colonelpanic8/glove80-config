@@ -59,7 +59,8 @@ intentional-commit comment before committing regenerated output.
   all-layer reads coexist and pass on hardware.
 - The PR's CDC-ACM transport failed on the Glove80's nRF52840 specifically at
   CDC IN; the qualified fork reuses Rynk's existing 32-byte HID framing for
-  wired USB. Report this matrix on #962 before proposing an upstream option.
+  wired USB. The result is reported on #962; wait for maintainer direction
+  before extracting an upstream transport patch.
 - Rynk starts locked. Hold physical positions `(0,0)` and `(0,13)` (the outer
   top-row F1/F10 keys on the base layer) to authorize dangerous Rynk actions.
 - Interactive browser chooser, native BLE, persistence/write/readback, and
@@ -73,7 +74,8 @@ intentional-commit comment before committing regenerated output.
 ## Upstream posture
 
 Do not upstream the retired keymap bridge or the overlapping transport hook as
-they stand. Report the Glove80 hardware matrix on #962 and propose only gaps
-demonstrated by that qualification. Independently upstream the split-DFU race
-fix and shared-flash feature; coordinate split messaging with upstream's
-forward-split-message work. See `upstream/RMK-UPSTREAMING-PROPOSAL.md`.
+they stand. The Glove80 hardware matrix is now on #962; propose only gaps
+demonstrated by that qualification. The split-DFU race fix is in #978. Wait for
+that review before submitting shared flash, and coordinate split messaging
+with upstream's forward-split-message work. See
+`upstream/RMK-UPSTREAMING-PROPOSAL.md`.

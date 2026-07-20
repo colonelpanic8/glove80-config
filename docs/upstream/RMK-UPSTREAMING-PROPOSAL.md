@@ -1,8 +1,11 @@
 # RMK downstream changes and upstreaming proposal
 
-Status: active proposal. The hardware-qualified production candidate is
+Status: active campaign. The hardware-qualified production candidate is
 `glove80-rynk` at `75d0edc3`; the known-good pre-Rynk rollback is `glove80` at `8089822e`.
-Upstream Rynk PR #962 was still open, non-draft, and clean on 2026-07-19.
+Upstream Rynk PR #962 was still open and ready for review on 2026-07-19. The
+nRF52840 CDC/HID hardware result has been reported there. The BLE split-DFU
+fix is open as #978, and the CI shebang portability cleanup discovered while
+validating it is open as #981.
 
 ## Execution board
 
@@ -10,23 +13,22 @@ Verified against GitHub and the local object database on 2026-07-19:
 
 - upstream `main` is `a0ebb564`;
 - Rynk PR #962 is open, ready for review, mergeable, and points to
-  `aa3398ea`;
+  `e3480dec`;
 - upstream `feat/forward_split_message` exists at `4181965f` but is not yet a
   replacement for the Glove80 split contract;
 - the generic shared-flash commits `ddad3826` and `ed6bd38d` are present and
   already based directly on `a0ebb564`, but no standalone fork branch has been
   published;
-- the previously documented DFU race-fix commit/ref is absent from both the
-  current local object database and the fork, so it must be reconstructed from
-  `ISSUE-dfu-hash.md` and current upstream code; and
-- no existing upstream issue or PR was found for shared application flash,
-  the BLE split-DFU announcement race, or the Glove80 split requirements.
+- the BLE split-DFU race is documented in #977 and its one-file fix is open as
+  #978 at `d996dd3b`; and
+- no existing upstream issue or PR was found for shared application flash or
+  the remaining Glove80 split requirements.
 
 The concrete submission order is:
 
 | Order | Work item | Starting point | Exit gate | Upstream action |
 | ---: | --- | --- | --- | --- |
-| 1 | BLE split-DFU hash announcement race | New `fix/dfu-split-hash-announce` branch from `a0ebb564`; reconstruct the minimal BLE-only readiness barrier and fake-driver tests | Focused tests plus the complete RMK test/format scripts pass; patch changes no serial behavior | File the prepared issue, then open one linked ready-for-review bug-fix PR |
+| 1 | BLE split-DFU hash announcement race | `fix/dfu-split-hash-announce` at `d996dd3b` | Focused BLE/serial tests and the complete format/check/Clippy/test/doctest scripts pass | **Submitted:** issue #977 and ready-for-review PR #978 |
 | 2 | Shared application/RMK flash | New `feat/shared-flash` branch at `ed6bd38d` (commits `ddad3826`, `ed6bd38d`) | Re-run fake-flash, macro/config, docs, formatting, and full RMK matrix on the normal Nix host | Push the branch and open one ready-for-review PR, preserving the two-commit implementation/safety split |
 | 3 | Split application forwarding | Compare `f84ac245` with upstream `4181965f`; do not publish `f84ac245` as a competing PR | Maintainer agrees on readiness, routing, queue-admission, and link-state semantics | Open a design issue or comment on the maintainer's eventual PR; contribute narrow deltas to their branch |
 | 4 | Rynk application extension seam | Design against PR #962, not `main` | A vendor namespace and application handler can carry lighting/config/version/bootloader messages without a second transport stack | Propose the API on #962, then submit a small coordinated PR against `feat/rynk` if invited |
@@ -47,7 +49,7 @@ No matching upstream issue or PR was found during the 2026-07-19 audit.
 
 | Candidate | Proposed review unit | Dependency / disposition |
 | --- | --- | --- |
-| USB transport choice on nRF52840 | The PR's CDC-ACM OUT path received frames on Glove80, but CDC IN never completed a host URB. DTR, a host read pending before the request, direct libusb, interface reordering, and endpoint-number changes did not alter the failure. Reusing Rynk's existing 32-byte HID framing passed on the same hardware. | **Report the evidence on #962 first.** Propose an additive/configurable USB HID transport rather than globally replacing serial until CDC is reproduced on another nRF board. The downstream fork uses HID now. |
+| USB transport choice on nRF52840 | The PR's CDC-ACM OUT path received frames on Glove80, but CDC IN never completed a host URB. DTR, a host read pending before the request, direct libusb, interface reordering, and endpoint-number changes did not alter the failure. Reusing Rynk's existing 32-byte HID framing passed on the same hardware. | **Reported on #962.** Await maintainer direction; if requested, propose an additive/configurable USB HID transport rather than globally replacing serial. The downstream fork uses HID now. |
 | Shared VIA action conversion | First move RMK's private `u16` VIA ↔ typed `KeyAction` converter into a shared, tested Rust module without behavior changes. In a second Rynk PR, expose that converter through `rynk-wasm`. | Avoids the downstream 323-line TypeScript mirror and gives existing VIA-based configurators a canonical migration adapter. Confirm module/crate placement with the maintainer before coding. |
 | Raw vendor command client surface | Reserve an application/vendor request range and topic range; add raw request/response/topic methods to native and WASM clients while retaining one-request-in-flight and payload-size checks. | **Design issue after #962 settles.** This is the protocol half of extensibility and must not silently weaken command typing or lock policy. |
 | Instance-owned firmware extension handler | Let a constructed `RynkService` delegate only reserved-range messages to an application-owned handler; make unlock policy explicit and keep handler state/session ownership unambiguous. | Separate PR after the namespace/client surface. Do not use global request/reply channels, which recreate the concurrency problem fixed in shared flash. |
@@ -245,7 +247,8 @@ migration.
 
 ### 5. BLE split-DFU hash announcement race
 
-Branch: `fix/dfu-split-hash-announce`, commit `9375920e`.
+Branch: `fix/dfu-split-hash-announce`, commit `d996dd3b`; upstream issue #977
+and ready-for-review PR #978.
 
 The split peripheral proactively announces its firmware hash. On BLE, the
 write could occur before the central had subscribed to the characteristic, so
@@ -255,14 +258,12 @@ the notification was silently lost. The patch:
   announcement;
 - retains immediate announcement for serial transports;
 - marks the announcement complete only after a successful write; and
-- tests pre-read behavior, read failure, single announcement, retry after
-  write failure, and serial behavior.
+- tests BLE readiness, retry after write failure, single-announcement behavior,
+  and immediate serial behavior.
 
-**Disposition:** upstream this as the first submission because it is a small,
-isolated correctness fix to an existing upstream feature. File the prepared
-reproducer as an issue, then immediately open the one-commit PR and link them.
-Rebase before submission and run both the focused tests and RMK's full test
-script.
+**Disposition:** submitted. The final PR is a one-file, one-commit correctness
+fix. Its focused BLE/serial tests and RMK's complete format, check, Clippy,
+test, and doctest scripts pass.
 
 ### 6. Public CRC-32 availability
 
@@ -307,6 +308,8 @@ The upstream repository now contains the Nix flake development environment
 that was needed to run the same toolchain and checks reproducibly.
 
 **Disposition:** complete upstream; do not carry or submit another change.
+The separate absolute-`/bin/bash` portability problem found while running the
+CI scripts on NixOS is addressed by ready-for-review PR #981.
 
 ## Things that belong only in Glove80
 
@@ -334,15 +337,14 @@ Use the published `glove80-rynk` branch as the production candidate and retain
 `glove80`/`8089822e` as the pre-Rynk rollback while #962 is open. Never use
 either merge branch as a PR head. Before each
 submission, recreate or rebase the corresponding feature branch from current
-upstream `main`; currently only the integration branch is published on the
-fork, so each PR branch still needs to be pushed.
+upstream `main`. Never stack a feature PR on an integration branch or another
+open PR.
 
 ### Stage 1: submit the two independent changes
 
-1. File the split-DFU issue and open `fix/dfu-split-hash-announce` as a
-   one-commit PR.
-2. After the first PR is in review, open `feat/shared-flash` as its existing
-   two-commit series.
+1. Split-DFU issue #977 and one-commit PR #978 are open.
+2. Wait for initial maintainer feedback before opening `feat/shared-flash` as
+   its existing two-commit series.
 
 These PRs should not depend on each other. Submit them sequentially to keep
 maintainer attention focused, but continue to rebase each directly on
@@ -350,9 +352,9 @@ upstream `main`.
 
 ### Stage 2: qualify and contribute to Rynk
 
-1. Report the nRF52840 CDC-IN failure and successful USB-HID qualification on
-   #962 with the compact reproduction matrix above.
-2. Ask whether upstream wants USB HID as a selectable transport, an nRF
+1. The nRF52840 CDC-IN failure and successful USB-HID qualification are
+   reported on #962.
+2. Await whether upstream wants USB HID as a selectable transport, an nRF
    default, or a CDC bug investigation before code is submitted.
 3. Ask where the canonical VIA/action converter should live; then submit the
    behavior-preserving shared-Rust refactor and WASM exposure as separate PRs.
