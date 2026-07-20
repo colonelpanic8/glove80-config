@@ -55,6 +55,12 @@ Artifacts are written under `dependencies/glove80-rmk/dist/`. The firmware's
 compiled defaults currently match this keymap, while this repository remains
 the editable source of truth for subsequent runtime changes.
 
+The build embeds three independently checkable identities in the Rynk firmware
+label: this configuration repository's commit, the pinned `glove80-rmk` commit
+and semver, and RMK's structured version. The release manifest also records the
+full configuration, product, and RMK commits. A dirty working tree is marked in
+both places.
+
 ## Updating `glove80-rmk`
 
 Update deliberately, inspect the upstream changes, and then commit the new

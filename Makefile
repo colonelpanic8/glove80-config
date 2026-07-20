@@ -20,4 +20,10 @@ devices:
 	$(CONTROL) devices
 
 firmware:
-	$(MAKE) -C $(GLOVE80_RMK) firmware
+	@config_dirty=false; \
+	if test -n "$$(git status --porcelain --untracked-files=normal)"; then \
+		config_dirty=true; \
+	fi; \
+	GLOVE80_CONFIG_GIT_COMMIT="$$(git rev-parse HEAD)" \
+	GLOVE80_CONFIG_GIT_DIRTY="$$config_dirty" \
+		$(MAKE) -C $(GLOVE80_RMK) firmware
