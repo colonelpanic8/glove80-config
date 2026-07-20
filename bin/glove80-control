@@ -9,6 +9,6 @@ if [[ ! -f "$product_root/Cargo.toml" ]]; then
   exit 1
 fi
 
-exec nix develop "$product_root" --command \
+exec nix develop "path:$product_root" --command \
   cargo run --quiet --manifest-path "$product_root/Cargo.toml" \
   -p glove80-control -- "$@"
