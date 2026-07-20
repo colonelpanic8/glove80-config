@@ -16,9 +16,8 @@ active firmware or control path.
 
 ## Runtime configuration
 
-- Keymap operations use RMK's native Rynk protocol: USB CDC serial for the CLI,
-  native GATT for the CLI over BLE, Web Serial in Lightbench, and Rynk's BLE
-  WebHID collection in Lightbench.
+- Keymap operations use RMK's native Rynk protocol: USB HID or native BLE GATT
+  for the CLI, and Rynk's WebHID collection in Lightbench over USB or BLE.
 - Lighting, persistent lighting config, version, and bootloader operations
   continue to use the Glove80 host protocol over USB vendor raw HID or its
   custom encrypted BLE GATT service.

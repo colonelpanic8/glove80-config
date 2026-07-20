@@ -8,9 +8,9 @@ cutover.)
 
 ## Transports
 
-- `--usb` — Linux hidraw for Glove80 commands; Rynk keymaps use the matching
-  `/dev/ttyACM*` CDC serial interface. `--device /dev/ttyACM…` can select it
-  directly for `keymap` commands.
+- `--usb` — Linux hidraw for Glove80 commands and the sibling Rynk HID
+  interface. `--device /dev/ttyACM…` remains available for older serial-based
+  Rynk firmware.
 - `--ble` — BlueZ over D-Bus. Glove80 commands use the custom GATT service;
   keymaps use Rynk's native GATT service.
 - Default is auto: USB when present, otherwise BLE.

@@ -11,8 +11,8 @@ the Glove80 host protocol for lighting plus Rynk for keymaps. It drives:
 - the **keymap**: live bindings read and written through Rynk.
 
 The ZMK-era Studio path has been retired. Lighting uses WebHID (USB) or Web
-Bluetooth; Rynk keymaps use Web Serial (USB) or Rynk's WebHID collection
-(Bluetooth). The two sessions are intentionally separate for now.
+Bluetooth; Rynk keymaps use Rynk's WebHID collection over USB or Bluetooth.
+The two sessions are intentionally separate for now.
 
 ## Run locally
 
@@ -36,8 +36,8 @@ Chromium browser; `localhost` counts as a secure context).
   (bonded) with the OS; the `fc550001-…` GATT service requires an encrypted
   link and is claimed via `optionalServices`. Requests go out as
   write-without-response chunks; responses arrive as notifications.
-- **Connect Rynk USB** (Keymap tab) — Web Serial to the firmware's CDC
-  interface. The baud rate is nominal; Rynk frames the byte stream itself.
+- **Connect Rynk USB** (Keymap tab) — WebHID usage page `0xFF60`, usage
+  `0x61`, on the firmware's dedicated Rynk interface.
 - **Connect Rynk Bluetooth** (Keymap tab) — WebHID usage page `0xFF60`, usage
   `0x61`, exposed by the already paired BLE keyboard.
 - **Demo mode** — an in-memory keyboard (`src/lib/mock-device.ts`)
@@ -136,7 +136,7 @@ without hardware.
   search), mirroring `tools/glove80-control/src/keycodes.rs` so the web UI
   and the CLI speak the same names.
 - `src/lib/rynk-keycode.ts` / `rynk-web-client.ts` — the transitional typed
-  action converter and Web Serial/WebHID Rynk client, backed by the generated
+  action converter and WebHID Rynk client, backed by the generated
   `src/vendor/rynk-wasm` package.
 - `src/lib/glove80-layout.ts` — the LED chain order, plus the 6×14 keymap
   grid ↔ physical key mapping (from `rmk/glove80/vial.json`).

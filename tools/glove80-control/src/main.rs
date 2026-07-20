@@ -22,9 +22,9 @@ mod version;
                    persistent config, version, and bootloader entry over the \
                    Glove80 host protocol")]
 struct Cli {
-    /// Device to talk to: a /dev/hidraw* path for Glove80 commands, a
-    /// /dev/ttyACM* path for Rynk-only keymap commands, or a BLE address.
-    /// Combined config commands discover the sibling Rynk CDC interface.
+    /// Device to talk to: a /dev/hidraw* path for Glove80/Rynk HID, an older
+    /// Rynk firmware's /dev/ttyACM* path, or a BLE address. Combined config
+    /// commands discover the sibling Rynk HID interface.
     #[arg(long, global = true)]
     device: Option<PathBuf>,
 

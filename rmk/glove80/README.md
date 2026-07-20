@@ -313,8 +313,8 @@ the compositor, split state, store, and session keep exactly one owner.
 
 ## Keymap over Rynk
 
-Rynk is the production keymap owner. The firmware enables its USB CDC serial,
-native BLE GATT, 32-byte HID/WebHID, bulk keymap, and persistence paths over the
+Rynk is the production keymap owner. The qualified firmware enables USB HID,
+native BLE GATT/WebHID, bulk keymap, and persistence paths over the
 6×14 matrix and eight layers. The Glove80 host protocol deliberately leaves
 its historical v1.2 keymap feature bit clear and no longer dispatches
 `KEYMAP_READ`/`KEYMAP_WRITE`; lighting and configuration remain on that

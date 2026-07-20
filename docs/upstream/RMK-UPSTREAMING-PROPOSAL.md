@@ -168,8 +168,8 @@ WASM bridge. A second standalone transport abstraction would be expensive for
 RMK to maintain.
 
 The integration is now implemented on `glove80-rynk`: firmware keymaps use
-Rynk; the native CLI uses USB CDC serial/native BLE GATT; Lightbench uses Web
-Serial/BLE WebHID. The Glove80 product protocol remains in parallel for
+Rynk; the qualified native CLI uses USB HID/native BLE GATT; Lightbench uses
+WebHID. The Glove80 product protocol remains in parallel for
 lighting, transactional lighting configuration, version, and bootloader.
 
 The remaining question is extension, not transport. Rynk's command table and

@@ -431,8 +431,8 @@ fn select_serial(requested: Option<&str>) -> Result<SerialDevice> {
     if let Some(path) = requested {
         if path.starts_with("/dev/hidraw") {
             // Combined config operations use the hidraw path for the Glove80
-            // lighting transport. Rynk is a sibling CDC interface, so select
-            // it by its immutable RYNK serial marker.
+            // lighting transport. Older Rynk firmware exposes a sibling CDC
+            // interface, so select it by its immutable RYNK serial marker.
             return one_device(
                 devices,
                 "Rynk USB serial associated with the selected hidraw device",

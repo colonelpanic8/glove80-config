@@ -283,8 +283,7 @@ export function KeymapPanel({
         <div className="keymap-gate">
           <strong>Keymaps are owned by Rynk.</strong>
           <span>
-            USB uses the keyboard&apos;s Web Serial interface. Bluetooth uses Rynk&apos;s WebHID
-            collection on an already paired keyboard.
+            USB and Bluetooth use Rynk&apos;s WebHID collection. Bluetooth must already be paired.
           </span>
           <div className="connect-actions">
             <button

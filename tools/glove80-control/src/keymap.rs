@@ -16,7 +16,7 @@ use crate::hostproto::HostClient;
 use crate::keycodes;
 use crate::transport::Selector;
 
-/// Edit the keymap over Rynk (USB CDC serial or native BLE GATT).
+/// Edit the keymap over Rynk (USB HID, serial fallback, or native BLE GATT).
 #[derive(Subcommand)]
 pub enum KeymapCommand {
     /// Read a layer (default 0) — or every layer — as a keycode grid.
