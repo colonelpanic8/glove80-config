@@ -135,16 +135,16 @@ The host protocol (`protocol/glove80-host-protocol/PROTOCOL.md`, including
 its "Transports" addendum) is exposed on the **central (left) half** over
 both USB and BLE. Protocol work is split three ways:
 
-- **Vendored RMK patches** (`../vendor/rmk`, every site marked
-  `GLOVE80 PATCH`): a vendor raw-HID interface on the USB composite
-  (`HostProtocolReport`, usage page `0xFF88` / usage `0x01`, 32-byte IN/OUT
+- **RMK extension APIs** (`../../dependencies/rmk`, pinned submodule): a vendor
+  raw-HID interface on the USB composite (`VendorHidReport`, usage page
+  `0xFF88` / usage `0x01`, 32-byte IN/OUT
   reports — deliberately not multiplexed onto Vial's `0xFF60` interface,
   whose opcodes collide) and a custom GATT service
   (`fc550001-f8e0-459f-b421-c254fc42b138`; request characteristic
   `fc550002-…` write-without-response, response characteristic `fc550003-…`
   notify — not a HID service, so Web Bluetooth can reach it via
   `optionalServices`). The patches contain zero protocol knowledge: they
-  only shuttle opaque chunks through `rmk::host_proto_pipe` channels and
+  only shuttle opaque chunks through `rmk::vendor_transport` channels and
   publish the negotiated ATT payload size.
 - **Transport pumps** (`src/host_pump.rs`, central only, registered as one
   extra RMK processor): reassemble chunks (`Reassembler<1536>` per
@@ -174,11 +174,10 @@ forwarded over the Phase 3 split application channel as a magic-guarded
 dispatched to a connected peripheral, `BUSY` = peripheral offline, nothing
 happened).
 
-RMK is now consumed as a **vendored git subtree** at the previously pinned
-revision `1156f82` (`rmk/vendor/rmk`; implementation-plan.md expected this at
-Phase 3) because both the USB composite and the trouble-host GATT server are
-assembled inside RMK with no extension hook. `git log --grep=git-subtree-dir`
-shows the subtree provenance; keep patches minimal and marked.
+RMK is consumed as a **git submodule** at `dependencies/rmk`, pinned to the
+consolidated `glove80` branch of `colonelpanic8/rmk`. That branch carries the
+generic extension hooks needed by the firmware while keeping their upstream
+feature histories independently reviewable.
 
 ## Split lighting transfer (Phase 3)
 
@@ -186,9 +185,9 @@ Host writes to keys 40-79 now light the right half. The central's
 compositor state stays authoritative for all 80 keys; the peripheral is a
 mirror that renders its 40. Three layers:
 
-- **Vendored split hook** (`GLOVE80 PATCH` sites): a bounded
-  application-message hook on the split protocol, written to be
-  upstreamable. `rmk/src/split_app_pipe.rs` (opaque `SplitAppData` payload
+- **RMK split hook**: a bounded application-message hook on the split
+  protocol, written to be upstreamable. `rmk/src/split_app.rs` (opaque
+  `SplitAppData` payload
   ≤ 26 bytes, bounded `SPLIT_APP_TX`/`SPLIT_APP_RX` channels, and a
   state-based `SPLIT_APP_LINK` watch for link edges); a final
   `SplitMessage::Application` variant (`rmk/src/split/mod.rs`, appended last
@@ -262,13 +261,12 @@ a malformed write at ANY byte leaves the previous slot untouched and still
 winning; there is no state in which a torn save validates.
 
 Flash access shares the radio-safe `nrf_mpsl::Flash` singleton with RMK's
-storage task through a vendored patch (`rmk::config_flash` +
-the macro's flash init, both marked `GLOVE80 PATCH`): the driver lives in an
-async mutex, RMK storage gets a locking `SharedFlash` wrapper, and a small
-service task executes the application's bounded requests (256-byte chunks,
-one erase page per lock) against a registered address window — so a bug
-cannot touch flash outside the partition, and no flash work ever blocks key
-scanning.
+storage task through the opt-in `shared_flash` feature. The driver lives in an
+async mutex; RMK storage uses the internal locking adapter, while this
+firmware uniquely acquires an `rmk::shared_flash::SharedFlash` client scoped
+to the reserved partition. A service task executes bounded requests
+(256-byte chunks, one erase page per lock), so every operation stays inside
+that immutable window and no flash work blocks key scanning.
 
 ### Boot
 
@@ -313,20 +311,15 @@ Capabilities now advertise feature bit 6 with
 `max_config_blob_len = 7148`. All of this runs inside the lighting task —
 the compositor, split state, store, and session keep exactly one owner.
 
-## Keymap over the host protocol (v1.2, Phase 6)
+## Keymap over Rynk
 
-`KEYMAP_READ` (0x50) / `KEYMAP_WRITE` (0x51) edit the keymap over both our
-transports (USB and BLE — the thing Vial cannot do on Linux). Actions travel
-as VIA/Vial 16-bit keycodes over the 6×14 grid
-(`key = row * 14 + col`; the four holes read back as `KC_NO`). The lighting
-task routes these requests through the vendored keymap-ops pipe
-(`rmk::keymap_ops_pipe`, GLOVE80 PATCH) to RMK's Vial service task — the
-keymap's single owner — which converts with the exact
-`from_via_keycode`/`to_via_keycode` pair Vial uses, updates the live keymap,
-and persists each key through the same `FLASH_CHANNEL` path as a Vial edit.
-Vial-made edits and host-protocol edits are therefore fully interchangeable.
-Capabilities advertise feature bit 7 with the keymap extension
-(`keymap_rows = 6`, `keymap_cols = 14`, `max_keymap_entries_per_op = 84`).
+Rynk is the production keymap owner. The firmware enables its USB CDC serial,
+native BLE GATT, 32-byte HID/WebHID, bulk keymap, and persistence paths over the
+6×14 matrix and eight layers. The Glove80 host protocol deliberately leaves
+its historical v1.2 keymap feature bit clear and no longer dispatches
+`KEYMAP_READ`/`KEYMAP_WRITE`; lighting and configuration remain on that
+protocol. The CLI and Lightbench convert their existing QMK/VIA-style u16 text
+format to Rynk's typed actions at the host boundary.
 
 ## Build identity over the host protocol (v1.3)
 
@@ -340,9 +333,8 @@ firmware sources — marks the build dirty). `src/version.rs` exposes the
 embedded constants to both halves.
 
 The peripheral announces its identity to the central once per split
-link-up edge, as a `PeripheralVersion` sync message over the vendored
-split app pipe (peripheral → central direction, `SPLIT_APP_PERIPH_TX` —
-a generic opaque-payload channel, GLOVE80 PATCH; retried briefly if the
+link-up edge, as a `PeripheralVersion` sync message over RMK's split app
+channel (peripheral → central direction, `SPLIT_APP_PERIPH_TX`; retried briefly if the
 bounded queue is momentarily full). The central caches the announcement
 in `CentralSplit`: while the link is down the last-known version is
 retained and reported with `present = 0`; all-zero fields mean the
@@ -353,14 +345,15 @@ can warn about a half-flashed keyboard.
 ## Building
 
 ```sh
-./build.sh
+nix develop --command ./build.sh
 ```
 
 produces `glove80_lh_rmk.uf2` and `glove80_rh_rmk.uf2`. The toolchain is
-pinned in `rust-toolchain.toml`; RMK is consumed from the vendored subtree at
-`../vendor/rmk` (frozen at the previously pinned upstream revision, plus the
-marked Glove80 patches) and nrf-sdc stays pinned to an exact revision in
-`Cargo.toml`.
+pinned in the repository's `rust-toolchain.toml` and supplied with libclang
+by its flake; RMK is pinned by `../../dependencies/rmk`
+submodule to the fork's Rynk integration branch `glove80-rynk` at `67f444b2`
+(rollback: `glove80` at `8089822e`), and nrf-sdc stays
+pinned to an exact revision in `Cargo.toml`.
 
 The compositor's contract tests run on the host:
 
@@ -416,8 +409,9 @@ uses the explicit `start_addr = 0xec000`. The warnings are cosmetic.
       Central exposes the host protocol over a USB vendor raw-HID interface
       and a custom GATT service, feeding the compositor's host overlay (see
       "Host protocol transports" above); the Phase 1 hardcoded overlay
-      placeholders are removed. RMK vendored as a subtree under
-      `rmk/vendor/rmk` with marked patches. UF2 ranges after the change:
+      placeholders are removed. RMK was initially vendored as a subtree
+      under `dependencies/rmk`; it is now a pinned submodule. UF2 ranges after
+      the change:
       left `0x26000`-`0x98da4`, right `0x26000`-`0x6f89c`.
 - [ ] Phase 3: split lighting transfer (built, awaiting hardware test).
       Host writes to keys 40-79 forward to the right half over a bounded

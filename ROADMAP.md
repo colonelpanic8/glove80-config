@@ -1,4 +1,10 @@
-# Glove80 Host Integration Roadmap
+# Glove80 Host Integration Roadmap (historical)
+
+This file records the path from the former ZMK Studio firmware to the RMK
+stack. The RMK firmware, host protocol, CLI, Lightbench, transactional lighting
+configuration, keymap editing, and split-aware control described here are now
+implemented. Current qualification and remaining hardware checks live in
+`docs/qualification.md`; this checklist is retained as design provenance.
 
 The detailed architecture and phased implementation plan now lives in
 [`docs/runtime-configuration-plan.md`](./docs/runtime-configuration-plan.md).
@@ -7,9 +13,9 @@ The firmware-independent requirements are captured in
 assessment and hardware spike plan in
 [`docs/rmk-evaluation.md`](./docs/rmk-evaluation.md).
 
-An RMK replacement firmware is being evaluated through the staged spike in
-[`rmk/glove80/`](./rmk/glove80/README.md); Stage 1 (compile-only board
-skeleton with verified UF2 address ranges) is complete.
+The active replacement firmware lives in
+[`rmk/glove80/`](./rmk/glove80/README.md) and is consumed against the pinned RMK
+fork submodule.
 
 The keyboard must always remain a complete standalone keyboard. Host software
 may enhance lighting and configuration, but typing, the stock keymap, and saved

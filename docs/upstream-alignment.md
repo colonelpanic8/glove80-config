@@ -1,5 +1,10 @@
 # RMK upstream-alignment memo
 
+> Historical design comparison. For the current per-change decisions and PR
+> sequence, see `docs/upstream/RMK-UPSTREAMING-PROPOSAL.md`. In particular,
+> Rynk PR #962 now contains working host transports and keymap operations, so
+> this memo's earlier host-service status is no longer current.
+
 - Scope: `origin/feat/forward_split_message` at `4181965f`,
   `glove80-import/split-app-messages` at `8f80acb5`,
   `origin/feat/host_service` at `3083dbd6`, and

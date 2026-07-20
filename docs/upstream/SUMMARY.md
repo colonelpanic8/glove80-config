@@ -1,8 +1,12 @@
 # RMK upstreaming verification summary
 
-Verified on 2026-07-19. No remote was modified: no pushes, pull requests, or
-GitHub mutations were performed. The RMK source branches were not edited or
-rebuilt by changing code; only checkouts and test build artifacts were used.
+The first verification pass below was completed on 2026-07-19 without remote
+mutations. Since then, the feature branches were consolidated on upstream
+`a0ebb564`, the `glove80` integration branch was pushed to
+`colonelpanic8/rmk`, and this repository first cut over at `8089822e`. It now
+uses the Rynk integration `glove80-rynk` at `67f444b2`, while `8089822e`
+remains the rollback. `PATCHES.md` is the authoritative current inventory; the older
+branch hashes and test narrative retained here are provenance.
 
 ## Document index
 
@@ -17,7 +21,9 @@ rebuilt by changing code; only checkouts and test build artifacts were used.
   `c21b1239` and proposed `NotSubscribed` result.
 - `BUG-rmk-dfu-hash.md` — RMK proactive split-DFU hash startup race and proposed
   first-inbound-message gate.
-- `test-logs/*.log` — complete valid test output for each tested branch.
+- Historical branch-test totals are summarized below. The disposable
+  `rmk-upstreaming/test-logs` copies were removed with that workspace after
+  consolidation; current tests are reproducible from the fork flake.
 
 ## Branches
 
@@ -33,19 +39,31 @@ rebuilt by changing code; only checkouts and test build artifacts were used.
 | PR source | `shared-flash-main` | `9c54e35e` | rebased on upstream `main` `5feaf8b1` |
 | PR source | `keymap-ops-main` | `cb0e03a5` | rebased on upstream `main` `5feaf8b1` |
 
-The `-main` branches are the branches to publish and open PRs from. Do not use
-the historical feature branches for PRs, and do not publish `glove80` as an
-upstream proposal.
+The table above is historical provenance, not the current PR campaign. Do not
+publish `glove80` or `glove80-rynk` as upstream proposals. The current
+per-change dispositions and ordering are in `RMK-UPSTREAMING-PROPOSAL.md`.
+
+## Rynk integration addendum
+
+The active fork branch `glove80-rynk` contains:
+
+- `b13e6dd7` — merge upstream `feat/rynk` into the Glove80 integration;
+- `4136f2ee` — retire the downstream keymap-operation bridge; and
+- `67f444b2` — cover Rynk plus shared flash in the RMK feature matrix.
+
+Firmware and both host clients now use Rynk for keymaps. The Glove80 vendor
+transport remains for product-specific lighting/config/version/bootloader
+commands until Rynk has an accepted application extension seam.
 
 ## Test results
 
-| Branch | Status | Log |
-| --- | --- | --- |
-| `split-app-messages` | **PASS** — all 17 harness commands | `test-logs/split-app-messages.log` |
-| `host-transport-hooks` | **PASS** — all 17 harness commands | `test-logs/host-transport-hooks.log` |
-| `shared-flash` | **PASS** — all 17 harness commands | `test-logs/shared-flash.log` |
-| `keymap-ops` | **PASS** — all 17 harness commands | `test-logs/keymap-ops.log` |
-| `glove80` | **PASS** — all 17 harness commands | `test-logs/glove80.log` |
+| Branch | Historical status |
+| --- | --- |
+| `split-app-messages` | **PASS** — all 17 harness commands |
+| `host-transport-hooks` | **PASS** — all 17 harness commands |
+| `shared-flash` | **PASS** — all 17 harness commands |
+| `keymap-ops` | **PASS** — all 17 harness commands |
+| `glove80` | **PASS** — all 17 harness commands |
 
 The initial `run-tests.sh` invocation could not execute because the file lacks
 an executable bit. Invoking it with Bash then hit sandbox infrastructure:
@@ -107,27 +125,26 @@ deferred to round 2.
 
 ## Publish runbook
 
-This is a future manual runbook; none of it was executed during verification.
+The fork and integration branch now exist. The remaining manual publication
+work is to push the final generic feature branches as needed and open the
+upstream issue/PR waves described in `docs/upstream-alignment.md`.
 
-1. Create the RMK fork under the user's GitHub account (`colonelpanic8`) and add
-   it as a distinct local remote, for example `fork`. Preserve the existing
-   upstream remote.
-2. Re-fetch upstream and confirm upstream `main` has not advanced in a way that
+1. Re-fetch upstream and confirm upstream `main` has not advanced in a way that
    requires another rebase. The four `-main` branches currently target
    `5feaf8b1`.
-3. Push only one `-main` branch at a time, beginning with
+2. Push only one feature branch at a time, beginning with
    `split-app-messages-main`. Never push `glove80` as an upstream PR branch.
-4. Open the split-app-messages PR first using
+3. Open the split-app-messages PR first using
    `PR-split-app-messages.md`. This change touches the shared split driver and
    peripheral loop, so landing/reviewing it first reduces adjacent-code churn
    for later work.
-5. After it lands—or after the maintainer establishes the desired base—refresh
+4. After it lands—or after the maintainer establishes the desired base—refresh
    the remaining `-main` branches onto the then-current upstream `main`, rerun
    the harness, and push/open PRs in this order:
    `host-transport-hooks-main`, `shared-flash-main`, `keymap-ops-main`.
-6. Use the corresponding `PR-*.md` body for each PR. Keep the four proposals
+5. Use the corresponding `PR-*.md` body for each PR. Keep the four proposals
    logically separate; do not include the crc32 ungating commit.
-7. File the trouble-host and RMK DFU reports separately with their respective
+6. File the trouble-host and RMK DFU reports separately with their respective
    upstreams. The RMK report can cite split-app-messages' first-inbound-message
    gate as an implementation model without making the feature PR depend on DFU
    changes.
@@ -140,7 +157,7 @@ shared flash, and keymap ops. Keep `glove80` and its crc32 commit local.
 
 ## Workspace note
 
-The workspace root is intentionally not a Git repository, while these required
-documents live at that root. They therefore cannot be committed locally without
-creating an unrelated new repository. No such repository was created, and the
-RMK branch histories were left untouched.
+The disposable `/home/imalison/Projects/rmk-upstreaming` workspace was removed
+after its durable documents moved here and its branch work was consolidated in
+`/home/imalison/Projects/rmk`. The fork repository and this monorepo are now the
+two authoritative local workspaces.

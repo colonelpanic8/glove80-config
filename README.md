@@ -1,45 +1,42 @@
-# Glove80 ZMK Studio Config
+# Glove80 RMK Firmware and Control Stack
 
-Custom Glove80 firmware for Ivan's layout, generated from the MoErgo layout
-`34957465-9943-4236-852c-d88044706dcb`.
+Custom Glove80 firmware for Ivan's layout, now running on RMK. The repository
+contains the two-half firmware, the Rust control CLI and protocol codec, and
+the browser-based Lightbench editor.
 
-This is a monorepo: the MoErgo Glove80 ZMK source is vendored as a Git subtree
-under [`zmk/`](./zmk/), and the custom firmware code is maintained there as
-ordinary source changes. There is no source-patching layer or separate firmware
-fork to coordinate.
+RMK is pinned as a submodule under `dependencies/rmk` to `glove80-rynk` at
+`67f444b2` in `colonelpanic8/rmk`. This integrates the still-open upstream
+Rynk PR with the Glove80 split-app, vendor-transport, shared-flash, and
+VBUS-state extensions. The pre-Rynk rollback branch remains published as
+`glove80` at `8089822e`.
 
-The keyboard remains fully functional with the generated keymap when Studio is
-not connected, while Studio can edit and persist bindings at runtime over USB
-or Bluetooth. The host-lighting protocol is protobuf over ZMK Studio RPC; it
-does not depend on the JavaScript keymap generator.
+The old MoErgo ZMK tree and its build inputs remain under `zmk/`, `config/`,
+`host-lighting/`, and `maintenance/` as a recovery baseline. They are not the
+active firmware or control path.
 
-## ZMK Studio
+## Runtime configuration
 
-- Studio configuration is intentionally unlocked whenever connected; no
-  physical unlock chord is required.
-- USB Studio communication uses the CDC/ACM serial transport on the left half.
-- Bluetooth Studio communication uses ZMK's GATT transport.
-- The firmware has a configurable total capacity of eight runtime layers.
+- Keymap operations use RMK's native Rynk protocol: USB CDC serial for the CLI,
+  native GATT for the CLI over BLE, Web Serial in Lightbench, and Rynk's BLE
+  WebHID collection in Lightbench.
+- Lighting, persistent lighting config, version, and bootloader operations
+  continue to use the Glove80 host protocol over USB vendor raw HID or its
+  custom encrypted BLE GATT service.
+- Lightbench and `glove80-control` can edit the live keymap, lighting records,
+  toggles, and host overlay without reflashing.
+- Rynk owns live keymap mutation and persistence. The CLI and Lightbench retain
+  the existing QMK/VIA-style text editor through an explicit compatibility
+  conversion at their boundary.
+- Persistent lighting configuration uses transactional A/B records in the
+  reserved runtime-config partition.
+- Configuration is intentionally unlocked; no physical unlock chord is
+  required.
 
-Open [ZMK Studio](https://zmk.studio/) after connecting the keyboard. If both
-USB and Bluetooth are connected, select the same keyboard output transport that
-Studio is using.
+## Host lighting
 
-ZMK allocates its keymap as a fixed-size array at build time, so Studio cannot
-grow beyond the firmware-provided capacity. Occupied slots all use the same
-mutable runtime representation; empty capacity is not exposed as a separate
-kind of layer.
-
-Studio changes are stored on the keyboard. Later changes to the generated
-`glove80.keymap` become the new stock configuration, but do not replace saved
-Studio settings until **Restore Stock Settings** is used in Studio.
-
-## Experimental host lighting
-
-The firmware now contains the first roadmap implementation: a versioned,
-ephemeral RPC for setting individual key LEDs. It works through Studio's USB or
-Bluetooth transport, never writes live frames to flash, and restores ordinary
-firmware lighting when the host clears the override or its timeout expires.
+The versioned host protocol can set individual key LEDs over USB or Bluetooth.
+Live overlays remain in RAM, compose over firmware-managed lighting, and clear
+explicitly, on TTL expiry, or at reboot.
 
 See [`docs/host-lighting-protocol.md`](./docs/host-lighting-protocol.md) for the
 wire contract and current limitations. Static lighting has been exercised on
@@ -48,8 +45,8 @@ both halves over USB, including simultaneous blink and breathe effects.
 ## Manual lighting editor
 
 [`ui/`](./ui/) contains **Glove80 Lightbench**, a standalone per-key lighting
-editor. It connects directly through the standard ZMK Studio USB or BLE
-transport and does not depend on a daemon or any Codex integration.
+and keymap editor. It connects directly to the firmware (Glove80 protocol for
+lighting, Rynk for keymaps) and does not depend on a daemon.
 
 ```sh
 cd ui
@@ -61,14 +58,15 @@ Open the printed localhost URL in Chrome or Edge, connect the keyboard, select a
 color, and click or drag across keys. See [`ui/README.md`](./ui/README.md) for
 browser support, architecture, and connection details.
 
-For terminal control, use the Rust CLI (no daemon required). It speaks the
-RMK host protocol over USB raw HID or BLE — see
+For terminal control, use the Rust CLI (no daemon required). It uses Rynk for
+keymaps and the Glove80 host protocol for the remaining commands — see
 [`tools/glove80-control/README.md`](./tools/glove80-control/README.md):
 
 ```sh
 cargo run --quiet -- lighting caps
 cargo run --quiet -- lighting set 0-5,12 ff0066
 cargo run --quiet -- lighting clear
+cargo run --quiet -- keymap read --layer 0
 cargo run --quiet -- config validate path/to/config.json --layer-capacity 8
 cargo run --quiet -- version
 ```
@@ -101,32 +99,39 @@ timing resolution. Both fit a default BLE ATT payload and also work over the
 wired split transport. A partial-result response indicates that the peripheral
 half was unavailable for at least one batch.
 
-## Build
+## Build the RMK firmware
+
+```sh
+git submodule update --init
+cd rmk/glove80
+nix develop --command ./build.sh
+```
+
+The build produces the two half-specific images:
+
+```sh
+rmk/glove80/glove80_lh_rmk.uf2
+rmk/glove80/glove80_rh_rmk.uf2
+```
+
+Flash the RH image first, then the LH image. The physical Magic-layer
+bootloader keys now route to their respective halves; the CLI routes the same
+requests programmatically.
+
+## Legacy ZMK recovery build
+
+The prior ZMK recovery baseline can still be built with:
 
 ```sh
 nix run .#generate-keymap
 nix build .#firmware
 ```
 
-The build produces half-specific images plus a combined archival artifact:
+It produces the historical normal, settings-reset, and combined archival UF2
+artifacts under `result/`. These images are recovery tools, not the active RMK
+release path.
 
-```sh
-result/glove80-left.uf2
-result/glove80-right.uf2
-result/glove80-left-settings-reset.uf2
-result/glove80-right-settings-reset.uf2
-result/glove80.uf2
-```
-
-Flash `glove80-left.uf2` to the left bootloader and `glove80-right.uf2` to the
-right bootloader. Do not use the combined artifact for routine flashing.
-
-The settings-reset images are recovery tools. Flash the matching reset image,
-allow it to boot once and erase persistent state, then return that half to its
-bootloader and flash the matching normal image. Reset both halves together when
-repairing their split bond.
-
-## Updating From MoErgo
+## Updating the legacy MoErgo baseline
 
 To merge a newer MoErgo ZMK revision into the vendored subtree:
 

@@ -1,18 +1,18 @@
 # glove80-control
 
-CLI for the Glove80. It speaks the RMK host protocol (`PROTOCOL.md` in
-`protocol/glove80-host-protocol/`) over USB raw HID or BLE: lighting,
-keymap editing, persistent config, build identity, and bootloader entry.
+CLI for the Glove80. Keymap editing uses RMK's native Rynk protocol. Lighting,
+persistent lighting config, build identity, and bootloader entry use the
+Glove80 protocol (`PROTOCOL.md` in `protocol/glove80-host-protocol/`).
 (The legacy ZMK Studio serial commands were retired after the RMK
 cutover.)
 
 ## Transports
 
-- `--usb` — Linux hidraw. Enumerates `/dev/hidraw*`, matches VID `16c0`
-  PID `27db`, and picks the interface whose report descriptor carries the
-  protocol's vendor usage page.
-- `--ble` — BlueZ over D-Bus. Discovers by the custom GATT service UUID;
-  requests go via write-without-response, responses via notifications.
+- `--usb` — Linux hidraw for Glove80 commands; Rynk keymaps use the matching
+  `/dev/ttyACM*` CDC serial interface. `--device /dev/ttyACM…` can select it
+  directly for `keymap` commands.
+- `--ble` — BlueZ over D-Bus. Glove80 commands use the custom GATT service;
+  keymaps use Rynk's native GATT service.
 - Default is auto: USB when present, otherwise BLE.
 - `--device` disambiguates: a `/dev/hidraw*` path or a BLE address
   (`AA:BB:CC:DD:EE:FF`).
@@ -57,10 +57,9 @@ validated against what the device advertises.
 
 ## Canonical configuration file (keymap + lighting)
 
-One TOML file configures the whole keyboard — keymap layers and persistent
-lighting — over either transport, with one apply flow. Nothing here waits
-on firmware: keymap editing (v1.2) and lighting sessions (v1.1) are both
-live. `examples/glove80.toml` is the full-keyboard starting point (the
+One TOML file configures the whole keyboard — keymap layers through Rynk and
+persistent lighting through the product protocol — with one apply flow.
+`examples/glove80.toml` is the full-keyboard starting point (the
 stock Base/Lower/Magic/Games/Mac-Hyper keymap plus the default lighting);
 `examples/lighting-default.toml` remains a lighting-only example, and such
 files keep working unchanged.
@@ -135,20 +134,17 @@ KC_F1   KC_F2  ...     # 6 rows x 14 columns, whitespace-separated
   CONFIG_DATA → CONFIG_COMMIT session; the keyboard activates and persists
   either the complete new lighting config or keeps the old one, never a
   hybrid.
-- **Keymap apply is best-effort per batch.** Each KEYMAP_WRITE batch is
-  all-or-nothing device-side and verified by read-back (lossy stores are
-  reported per key), but a multi-batch apply interrupted midway leaves the
-  earlier batches written — there is no firmware-level keymap transaction.
-  The CLI is explicit about this: a failed batch aborts every remaining
-  batch and the error states exactly which layers and key ranges were
-  stored and that nothing is rolled back.
+- **Keymap apply is best-effort per Rynk page.** Bulk-capable firmware writes
+  one Rynk page at a time; other builds write individual keys. Every key is
+  read back and lossy conversions are reported, but an interrupted multi-page
+  apply leaves earlier pages written — there is no whole-keymap transaction.
 - The keymap section is applied **first**, so a keymap failure stops the
   run before the lighting config is touched.
 
 Partial application (peripheral half offline) is reported, never hidden:
 overlay writes print the keys still pending on the peripheral.
 
-## Keymap editing (host protocol v1.2)
+## Keymap editing (Rynk)
 
 - `keymap read` dumps layer 0 as a 6x14 grid of QMK-style keycode names;
   `--layer N` picks another layer, `--all` dumps every layer, `--raw`
@@ -162,8 +158,8 @@ overlay writes print the keys still pending on the peripheral.
   Examples:
   - `glove80-control keymap set 0 28 KC_A`
   - `glove80-control keymap set 0 2,0 LCTL_T(KC_ESC) 1 2,0 KC_TRNS`
-- Writes are validated all-or-nothing per batch, applied to the live
-  keymap immediately (no reboot), and persisted per key. The firmware
+- Writes are applied to the live keymap immediately (no reboot), persisted by
+  RMK, and read back through Rynk. The firmware
   echoes what it actually stored; the CLI prints that canonical read-back
   and flags any entry stored differently than requested (`LOSSY`) — some
   actions have no exact VIA encoding.
@@ -171,12 +167,11 @@ overlay writes print the keys still pending on the peripheral.
   aliases, case-insensitive), e.g. `keymap find vol`.
 - Unknown/unnameable codes always print as hex (`0x1234`) and can be
   entered the same way; nothing round-trips through the CLI lossily.
-- Vial interop: these commands and Vial edit the same runtime keymap and
-  the same storage — an edit made in either is immediately visible to the
-  other, byte-for-byte (the wire format is the VIA 16-bit keycode
-  encoding Vial itself uses).
-- Gated on capability feature bit 7; the CLI refuses cleanly when the
-  firmware does not advertise keymap editing.
+- The CLI's QMK/VIA-style u16 names are a compatibility editing format. At the
+  transport boundary they are converted to Rynk's typed `KeyAction`; actions
+  with no exact u16 representation are reported as lossy instead of hidden.
+- Capabilities, matrix size, layer count, and bulk support come from the Rynk
+  handshake rather than product-protocol feature bit 7.
 
 ## Build identity (host protocol v1.3)
 

@@ -22,17 +22,12 @@ final phase.
 - **Layer lighting scope**: the sparse model supports both accents and
   full scenes; no schema decision needed. Lightbench starts with per-key
   editing either way.
-- **RMK vendoring**: vendored as a git subtree (rmk/vendor/rmk) at the
-  pinned revision, with every modification marked `GLOVE80 PATCH` (~775
-  added / 15 changed lines across 14 files; most are new self-contained
-  pipe modules). This is deliberately nonstandard RMK usage: the features
-  in these docs need internals RMK does not expose. Exit strategy: after
-  cutover, upstream the generic hooks (split application messages, extra
-  USB interface / GATT service registration, shared flash, the
-  link-down-on-cancellation fix) so the patch set shrinks toward zero and
-  the dependency returns to a plain pinned crate. A PATCHES.md inventory
-  in the vendor directory keeps the fork surface reviewable.
-- **Patch style rule**: any new vendored-RMK patch is written as a generic
+- **RMK dependency**: the original git subtree has been replaced by the
+  `dependencies/rmk` submodule, pinned to the fork's `glove80-rynk`
+  integration branch. Generic extensions remain split into independently reviewable fork
+  branches; `docs/upstream/PATCHES.md` records their provenance and current
+  disposition.
+- **Patch style rule**: any new fork-side RMK patch is written as a generic
   RMK extension point (a hook, channel, or registration mechanism any
   keyboard could use), never as Glove80-specific logic inside RMK. Glove80
   specifics live in our crates on top. This keeps every patch a candidate
@@ -114,15 +109,15 @@ One protocol, three transports, one codec.
 - Exit: every lighting-design.md host operation is exercisable from both
   Lightbench and the CLI.
 
-## Phase 6 — Unified keymap + lighting configuration
+## Phase 6 — Unified keymap + lighting configuration (historical implementation)
 
-One protocol, one editor, one config file for the whole keyboard; Vial
-becomes optional rather than load-bearing (and keymap editing finally works
-over BLE, which Vial cannot do on Linux).
+The original Phase 6 used product-protocol v1.2 as a keymap bridge. The current
+implementation keeps one editor/config file but uses Rynk for keymaps and the
+product protocol for lighting. The v1.2 codec remains compatibility material,
+not a production firmware capability.
 
-- Protocol v1.2: batched keymap read/write by (layer, position),
-  capability-gated; firmware writes RMK's runtime keymap through the same
-  persistence path Vial uses (Vial stays compatible).
+- Rynk: typed keymap read/write by (layer, row, column), capability discovery,
+  bulk pages, persistence, native USB/BLE clients, and browser WASM.
 - Layer names and stable layer IDs live in the canonical config, not the
   firmware slots.
 - Lightbench: keymap panel beside the lighting panels, same board
@@ -130,7 +125,7 @@ over BLE, which Vial cannot do on Linux).
 - CLI + canonical schema: the config file grows to cover bindings + layers
   + lighting; transactional apply covers it all; export round-trips.
 - Exit: a fresh keyboard is fully configured (keymap + lighting) from one
-  file over either transport; Vial-made edits still read back correctly.
+  file, with explicit Rynk and product-protocol sessions.
 
 ## Phase 7 — Qualification and cutover
 
@@ -151,20 +146,24 @@ Bluetooth glue, and the browser build must remain first-class. The
 current React app keeps all substance in framework-agnostic lib modules,
 so a later port stays cheap.
 
-## Phase 8 — Fork cleanup and upstreaming (final)
+## Phase 8 — Fork cleanup and upstreaming (final; cutover complete)
 
 Deliberately last: only after the system works the way we want it, so the
 hooks we upstream are the ones reality validated.
 
-- Restructure the vendored subtree into a proper fork + submodule: our own
+- [x] Restructure the vendored subtree into a proper fork + submodule: our own
   RMK fork repo, one logical branch per extension (split app messages,
   transport hooks, shared flash, bugfixes) off the pinned base, an
   integration branch merging them, and the monorepo consuming it as a
   submodule. `git subtree split` can extract the existing patch history so
   nothing needs rewriting from scratch.
-- Write PATCHES.md: every `GLOVE80 PATCH` site, what/why, upstreamability.
+- [x] Write and refresh PATCHES.md: historical marker sites, what/why,
+  upstreamability, fork branches, and the post-cutover pin.
 - Upstream PRs straight from the per-feature branches; as they merge,
   rebase the integration branch and drop local patches.
-- Exit: the vendored tree carries zero (or near-zero, documented) local
+- [x] Integrate open Rynk PR #962, migrate firmware/CLI/Lightbench keymap
+  ownership, and retire the downstream keymap bridge. Hardware qualification
+  remains before release; rollback stays pinned at `8089822e`.
+- [x] Exit: the vendored tree carries zero (or near-zero, documented) local
   patches, or is replaced outright by a plain pinned dependency; the repo
   reads like a standard RMK consumer with its own crates on top.

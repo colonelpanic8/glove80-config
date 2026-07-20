@@ -1,7 +1,10 @@
 # Deglove rename map and equivalence check
 
 The comparison source is monorepo commit `b1ae2b2c`, path `rmk/vendor/rmk`.
-The comparison target is fork branch `glove80` at `165e4720`.
+The historical comparison target was fork branch `glove80` at `165e4720`.
+The pre-Rynk rollback is pinned at `8089822e`, which additionally contains the
+polished shared-flash API and VBUS hook. The active candidate is
+`glove80-rynk` at `67f444b2`; it merges Rynk and removes `keymap_ops`.
 
 ## Verified renames
 
@@ -46,9 +49,10 @@ was therefore correct.
 | `host_proto_rw` | `vendor_rw` |
 
 Log text using `host-proto` was likewise generalized to `vendor`. The split
-application and keymap-operation public APIs (`SplitAppData`, `SPLIT_APP_*`,
-`KeymapOp`, `KEYMAP_OPS`, and `KEYMAP_OP_RESULTS`) did not change names; only
-their containing modules did.
+application public APIs (`SplitAppData`, `SPLIT_APP_*`) did not change names.
+The historical keymap-operation APIs (`KeymapOp`, `KEYMAP_OPS`, and
+`KEYMAP_OP_RESULTS`) were renamed during extraction and later removed from the
+active integration after the Rynk migration.
 
 ## Comment changes
 
@@ -63,10 +67,11 @@ are explicitly described as consumer-selectable defaults in the fork.
 difference.** After applying the verified renames above and disregarding
 marker/comment generalization, the snapshot and fork `glove80` trees have the
 same functional patch code. The one intentional non-rename code difference is
-fork commit `165e4720`, which exposes `crc32` without `dfu_split`; it exists only
-on `glove80` and is documented in `PATCHES.md`. The current monorepo vendor tree
-also contains the separately enumerated post-snapshot VBUS hook; it is not
-present in the fork and was deliberately not ported.
+the original fork commit `165e4720` (rebased as `e26faf69`), which exposes
+`crc32` without `dfu_split`; it exists only on `glove80` and is documented in
+`PATCHES.md`. The historical monorepo vendor tree also contained the separately
+enumerated post-snapshot VBUS hook. That hook was subsequently ported to the
+fork in `8089822e` before the submodule cutover.
 
 Evidence:
 
@@ -91,9 +96,10 @@ There is exactly **one post-snapshot commit to `rmk/vendor/rmk`**:
   `rmk-macro/src/codegen/chip/comm.rs`,
   `rmk-macro/src/codegen/split/peripheral.rs`, and `rmk/src/usb/mod.rs`.
 
-It adds five marker sites, listed in `PATCHES.md`, and is round-2 future work.
-It was not ported. The handoff's example `c7e53891` is real, but its only changed
-path is `rmk/glove80-compositor/src/sync.rs`; it does not modify vendored RMK.
+It added five historical marker sites, listed in `PATCHES.md`, and was later
+ported to the fork as `8089822e`. The handoff's example `c7e53891` is real, but
+its only changed path is `rmk/glove80-compositor/src/sync.rs`; it does not
+modify vendored RMK.
 
 Other post-snapshot monorepo commits are downstream protocol, compositor, CLI,
 example, or documentation changes rather than additional vendored-RMK commits:

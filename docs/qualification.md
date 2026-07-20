@@ -42,7 +42,7 @@ RMK. Run from the repository root on branch `codex/rmk-evaluation`.
 - [ ] **AUTO, build only:** build both RMK images:
 
   ```sh
-  (cd rmk/glove80 && ./build.sh)
+  (cd rmk/glove80 && nix develop --command ./build.sh)
   test -f rmk/glove80/glove80_lh_rmk.uf2
   test -f rmk/glove80/glove80_rh_rmk.uf2
   ```
