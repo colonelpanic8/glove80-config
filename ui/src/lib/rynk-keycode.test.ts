@@ -18,7 +18,11 @@ describe("Rynk/VIA compatibility conversion", () => {
       0x52e3,
       0x5702,
       0x7704,
+      0x7780,
+      0x7784,
+      0x7786,
       0x7c00,
+      0x7c02,
       0x7c18,
       0x7c1e,
       0x7c77,
@@ -33,6 +37,6 @@ describe("Rynk/VIA compatibility conversion", () => {
 
   it("maps unsupported values to KC_NO", () => {
     expect(fromViaKeycode(0xffff)).toBe("No");
-    expect(toViaKeycode({ Single: { KeyboardControl: "OutputBluetooth" } })).toBe(0);
+    expect(toViaKeycode({ Single: { KeyboardControl: "ComboToggle" } })).toBe(0x7c52);
   });
 });

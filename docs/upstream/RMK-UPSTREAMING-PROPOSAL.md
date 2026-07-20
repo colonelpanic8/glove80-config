@@ -1,8 +1,80 @@
 # RMK downstream changes and upstreaming proposal
 
-Status: active proposal. The production candidate is `glove80-rynk` at
-`67f444b2`; the known-good pre-Rynk rollback is `glove80` at `8089822e`.
+Status: active proposal. The hardware-qualified production candidate is
+`glove80-rynk` at `75d0edc3`; the known-good pre-Rynk rollback is `glove80` at `8089822e`.
 Upstream Rynk PR #962 was still open, non-draft, and clean on 2026-07-19.
+
+## Execution board
+
+Verified against GitHub and the local object database on 2026-07-19:
+
+- upstream `main` is `a0ebb564`;
+- Rynk PR #962 is open, ready for review, mergeable, and points to
+  `aa3398ea`;
+- upstream `feat/forward_split_message` exists at `4181965f` but is not yet a
+  replacement for the Glove80 split contract;
+- the generic shared-flash commits `ddad3826` and `ed6bd38d` are present and
+  already based directly on `a0ebb564`, but no standalone fork branch has been
+  published;
+- the previously documented DFU race-fix commit/ref is absent from both the
+  current local object database and the fork, so it must be reconstructed from
+  `ISSUE-dfu-hash.md` and current upstream code; and
+- no existing upstream issue or PR was found for shared application flash,
+  the BLE split-DFU announcement race, or the Glove80 split requirements.
+
+The concrete submission order is:
+
+| Order | Work item | Starting point | Exit gate | Upstream action |
+| ---: | --- | --- | --- | --- |
+| 1 | BLE split-DFU hash announcement race | New `fix/dfu-split-hash-announce` branch from `a0ebb564`; reconstruct the minimal BLE-only readiness barrier and fake-driver tests | Focused tests plus the complete RMK test/format scripts pass; patch changes no serial behavior | File the prepared issue, then open one linked ready-for-review bug-fix PR |
+| 2 | Shared application/RMK flash | New `feat/shared-flash` branch at `ed6bd38d` (commits `ddad3826`, `ed6bd38d`) | Re-run fake-flash, macro/config, docs, formatting, and full RMK matrix on the normal Nix host | Push the branch and open one ready-for-review PR, preserving the two-commit implementation/safety split |
+| 3 | Split application forwarding | Compare `f84ac245` with upstream `4181965f`; do not publish `f84ac245` as a competing PR | Maintainer agrees on readiness, routing, queue-admission, and link-state semantics | Open a design issue or comment on the maintainer's eventual PR; contribute narrow deltas to their branch |
+| 4 | Rynk application extension seam | Design against PR #962, not `main` | A vendor namespace and application handler can carry lighting/config/version/bootloader messages without a second transport stack | Propose the API on #962, then submit a small coordinated PR against `feat/rynk` if invited |
+| 5 | nRF physical VBUS state | Fresh branch from the then-current upstream `main`; extract only the behavior now embedded in `8089822e` | RMK-native API/name, documented initial/edge semantics, tests or a minimal nRF example | Design issue first, isolated PR second |
+| 6 | Downstream retirement | Glove80 repository and fork integration branch | Local CRC replaces the public-RMK CRC patch; Rynk/split upstream facilities replace compatibility transports only after hardware qualification | No upstream PR for CRC, retired keymap bridge, or the Glove80 lighting protocol itself |
+
+Only one code PR should be opened at a time until maintainers respond. The DFU
+fix is deliberately first: it is a small correctness change to an existing
+feature, has a concrete hardware reproducer, introduces no public API, and
+lets us establish review expectations before asking maintainers to evaluate
+the larger shared-flash API.
+
+### Additional Rynk follow-ups discovered during integration
+
+These are separate from the fork-extraction campaign. They are gaps found by
+actually integrating the open Rynk branch into a native CLI and browser UI.
+No matching upstream issue or PR was found during the 2026-07-19 audit.
+
+| Candidate | Proposed review unit | Dependency / disposition |
+| --- | --- | --- |
+| USB transport choice on nRF52840 | The PR's CDC-ACM OUT path received frames on Glove80, but CDC IN never completed a host URB. DTR, a host read pending before the request, direct libusb, interface reordering, and endpoint-number changes did not alter the failure. Reusing Rynk's existing 32-byte HID framing passed on the same hardware. | **Report the evidence on #962 first.** Propose an additive/configurable USB HID transport rather than globally replacing serial until CDC is reproduced on another nRF board. The downstream fork uses HID now. |
+| Shared VIA action conversion | First move RMK's private `u16` VIA ↔ typed `KeyAction` converter into a shared, tested Rust module without behavior changes. In a second Rynk PR, expose that converter through `rynk-wasm`. | Avoids the downstream 323-line TypeScript mirror and gives existing VIA-based configurators a canonical migration adapter. Confirm module/crate placement with the maintainer before coding. |
+| Raw vendor command client surface | Reserve an application/vendor request range and topic range; add raw request/response/topic methods to native and WASM clients while retaining one-request-in-flight and payload-size checks. | **Design issue after #962 settles.** This is the protocol half of extensibility and must not silently weaken command typing or lock policy. |
+| Instance-owned firmware extension handler | Let a constructed `RynkService` delegate only reserved-range messages to an application-owned handler; make unlock policy explicit and keep handler state/session ownership unambiguous. | Separate PR after the namespace/client surface. Do not use global request/reply channels, which recreate the concurrency problem fixed in shared flash. |
+| Split-targeted reboot/bootloader | Add a new additive endpoint that selects central or peripheral instead of changing the frozen `BootloaderJump = ()` request. Require physical unlock and return delivery failure. | Depends on target-aware upstream split routing and admission reporting; do not build it on the current broadcast-only forwarding branch. |
+| Application build identity | Add an additive endpoint for the keyboard application's semver/build id, distinct from `DeviceInfo.rmk_version`; later extend it to query split targets. | Useful for detecting half-flashed keyboards, but lower priority than split routing and the extension seam. Do not append fields to existing response types within protocol major 0. |
+| Standard RMK lighting endpoints | Implement the existing `lighting_enabled` capability TODO around RMK's eventual standard lighting state and actions. | Coordinate with the Rynk author. Keep Glove80 overlays, gates, transactional records, and compositor semantics behind the vendor extension rather than declaring them RMK standard behavior. |
+| WASM package distribution | Publish/version the generated `rynk-wasm` package so consumers do not vendor generated JS, declarations, and WASM binaries. | Useful after the protocol and PR layout stabilize; not a merge blocker for #962. |
+
+The local five-second connection timeout remains application policy, not an
+upstream requirement: Rynk deliberately relies on the caller to supervise and
+cancel a session. DTR was investigated and disproved as the Glove80 failure;
+do not submit the abandoned DTR change.
+
+### Glove80 hardware qualification result
+
+Both halves were flashed and verified on 2026-07-19. The central and
+peripheral reported the same application build, the split link remained
+connected, product-protocol lighting capabilities and ping passed, and Rynk
+read all eight 6×14 keymap layers over the new USB HID link. The full read also
+found and fixed missing VIA compatibility mappings for QMK output-selection
+and debug keycodes. The native CLI's 89 tests, Lightbench's 184 tests and
+production build, four focused HID loopbacks, and the 659-test RMK Rynk feature
+set all pass.
+
+Browser code now uses the same WebHID link for wired and BLE Rynk. Its build and
+unit tests pass; an interactive browser chooser and BLE-only hardware session
+remain manual follow-ups, not blockers for the wired firmware qualification.
 
 ## Recommendation
 
@@ -246,7 +318,9 @@ wire formats, not RMK features. They should remain in this repository:
 - the remote-bootloader magic value and physical `User12` routing;
 - the transactional runtime-configuration record format and flash layout;
 - Glove80 host command meanings, events, and compatibility rules;
-- build identity/version payloads; and
+- the current Glove80 build-identity wire layout and half-mismatch policy (a
+  future additive Rynk application-build endpoint may reuse the requirement,
+  not this payload); and
 - keymap batching and configurator UI behavior.
 
 Keeping this boundary explicit will prevent otherwise generic PRs from being
@@ -267,7 +341,7 @@ fork, so each PR branch still needs to be pushed.
 
 1. File the split-DFU issue and open `fix/dfu-split-hash-announce` as a
    one-commit PR.
-2. After the first PR is in review, open `shared-flash` as its existing
+2. After the first PR is in review, open `feat/shared-flash` as its existing
    two-commit series.
 
 These PRs should not depend on each other. Submit them sequentially to keep
@@ -276,12 +350,17 @@ upstream `main`.
 
 ### Stage 2: qualify and contribute to Rynk
 
-1. Flash and test the implemented #962 integration on the Glove80
-   hardware/browser matrix.
-2. Report results on #962 with a compact list of confirmed gaps.
-3. Submit only the smallest extension-hook or transport-adapter PRs the Rynk
+1. Report the nRF52840 CDC-IN failure and successful USB-HID qualification on
+   #962 with the compact reproduction matrix above.
+2. Ask whether upstream wants USB HID as a selectable transport, an nRF
+   default, or a CDC bug investigation before code is submitted.
+3. Ask where the canonical VIA/action converter should live; then submit the
+   behavior-preserving shared-Rust refactor and WASM exposure as separate PRs.
+4. Report the remaining results on #962 and propose the reserved vendor
+   namespace/client surface before implementing a firmware handler.
+5. Submit only the smallest extension-hook or transport-adapter PRs the Rynk
    maintainers agree to accept.
-4. Keep keymap access on Rynk. Delete the local host transport only if Rynk
+6. Keep keymap access on Rynk. Delete the local host transport only if Rynk
    gains an accepted application-command seam covering the product protocol.
 
 ### Stage 3: converge on upstream split events
@@ -290,7 +369,9 @@ Coordinate around `feat/forward_split_message`, starting with the
 deliverability/session semantics. Migrate only after the requirements in
 section 1 are covered and tested. If that work does not progress, ask whether
 maintainers prefer the existing Glove80 implementation as a smaller fallback
-before opening a competing PR.
+before opening a competing PR. Add targeted peripheral reboot/bootloader
+control only after destination routing and queue-admission failure are part of
+that contract.
 
 ### Stage 4: reduce the remaining fork
 

@@ -5,7 +5,7 @@
 Adopt Rynk for keymap configuration, but do not pretend it is stable upstream
 yet. [HaoboGu/rmk PR #962](https://github.com/HaoboGu/rmk/pull/962) was open,
 non-draft, and mergeable when verified on 2026-07-19. The evaluated integration
-is published as `colonelpanic8/rmk` branch `glove80-rynk` at `67f444b2`; the
+is published as `colonelpanic8/rmk` branch `glove80-rynk` at `75d0edc3`; the
 pre-Rynk rollback is branch `glove80` at `8089822e`.
 
 Rynk is worth adopting because it supplies the missing native configuration
@@ -17,7 +17,7 @@ libraries, serial and BLE transports, browser-compatible HID, and WASM.
 
 | Capability | Owner | Transport |
 | --- | --- | --- |
-| Keymap read/write and persistence | Rynk | CLI: USB CDC serial or native BLE GATT; Lightbench: Web Serial or BLE WebHID |
+| Keymap read/write and persistence | Rynk | CLI: USB HID or native BLE GATT; Lightbench: USB/BLE WebHID |
 | Lighting overlay and toggles | Glove80 protocol | USB vendor raw HID or custom encrypted BLE GATT |
 | Transactional lighting config | Glove80 protocol | USB vendor raw HID or custom encrypted BLE GATT |
 | Build identity and bootloader | Glove80 protocol | USB vendor raw HID or custom encrypted BLE GATT |
@@ -53,18 +53,21 @@ RUSTUP_TOOLCHAIN=1.97.0 wasm-pack build --release --target web \
 `wasm-pack` writes a catch-all `.gitignore`; replace it with the repository's
 intentional-commit comment before committing regenerated output.
 
-## Remaining qualification and risk
+## Qualification and remaining risk
 
-- Flash both halves (right/peripheral first), then verify Rynk capability,
-  layer read, write, persistence, and readback over all four host paths.
-- Verify product-protocol lighting and Rynk can coexist over USB and BLE,
-  including reconnects and right-half outages.
-- Rynk currently uses `insecure = true` in `keyboard.toml`. Select and test a
-  deliberate unlock policy before final release.
+- Both halves are flashed and match. USB product-protocol lighting and Rynk
+  all-layer reads coexist and pass on hardware.
+- The PR's CDC-ACM transport failed on the Glove80's nRF52840 specifically at
+  CDC IN; the qualified fork reuses Rynk's existing 32-byte HID framing for
+  wired USB. Report this matrix on #962 before proposing an upstream option.
+- Rynk starts locked. Hold physical positions `(0,0)` and `(0,13)` (the outer
+  top-row F1/F10 keys on the base layer) to authorize dangerous Rynk actions.
+- Interactive browser chooser, native BLE, persistence/write/readback, and
+  reconnect/right-half-outage checks remain follow-up qualification.
 - Lightbench currently opens separate lighting and keymap sessions. A single
   connection requires an upstream Rynk application-command/topic extension,
   not another ad hoc transport.
-- Track #962 rebases carefully. Keep `67f444b2` pinned and reproducible until a
+- Track #962 rebases carefully. Keep `75d0edc3` pinned and reproducible until a
   reviewed upstream commit replaces it; keep `8089822e` available for rollback.
 
 ## Upstream posture

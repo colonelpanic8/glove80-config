@@ -223,8 +223,12 @@ export function fromViaKeycode(code: number): KeyAction {
   if (code >= 0x52e0 && code <= 0x52ff) return keyAction({ PersistentDefaultLayer: code & 0x0f });
   if (code >= 0x5700 && code <= 0x57ff) return { Morse: code & 0xff };
   if (code >= 0x7700 && code <= 0x771f) return keyAction({ TriggerMacro: code & 0x1f });
+  if (code === 0x7780) return keyAction({ KeyboardControl: "OutputAuto" });
+  if (code === 0x7784) return keyAction({ KeyboardControl: "OutputUsb" });
+  if (code === 0x7786) return keyAction({ KeyboardControl: "OutputBluetooth" });
   if (code === 0x7c00) return keyAction({ KeyboardControl: "Bootloader" });
   if (code === 0x7c01) return keyAction({ KeyboardControl: "Reboot" });
+  if (code === 0x7c02) return keyAction({ KeyboardControl: "DebugToggle" });
   if (code === 0x7c03) return keyAction({ KeyboardControl: "ClearEeprom" });
   if (code === 0x7c16) return keyAction({ Special: "GraveEscape" });
   if (code === 0x7c18) return spaceCadet("Kc9", modifiers(0x01));
@@ -272,7 +276,11 @@ function actionToVia(action: Action): number {
     const keycodes: Partial<Record<KeyboardAction, number>> = {
       Bootloader: 0x7c00,
       Reboot: 0x7c01,
+      DebugToggle: 0x7c02,
       ClearEeprom: 0x7c03,
+      OutputAuto: 0x7780,
+      OutputUsb: 0x7784,
+      OutputBluetooth: 0x7786,
       ComboOn: 0x7c50,
       ComboOff: 0x7c51,
       ComboToggle: 0x7c52,

@@ -124,9 +124,11 @@ enabled = true
 [host]
 vial_enabled = false
 rynk_enabled = true
-# Preserve the existing no-physical-unlock development policy during the
-# migration. This must be revisited before treating the firmware as production.
-insecure = true
+# Dangerous Rynk operations require deliberate physical presence. Hold the
+# two outer top-row keys (F1 and F10 positions) to satisfy the challenge;
+# ordinary keymap/config reads and writes remain available without unlocking.
+insecure = false
+unlock_keys = [[0, 0], [0, 13]]
 
 [split]
 connection = "ble"

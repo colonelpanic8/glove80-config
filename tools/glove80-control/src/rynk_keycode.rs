@@ -40,7 +40,11 @@ pub fn to_via_keycode(key_action: KeyAction) -> u16 {
             Action::KeyboardControl(action) => match action {
                 KeyboardAction::Bootloader => 0x7c00,
                 KeyboardAction::Reboot => 0x7c01,
+                KeyboardAction::DebugToggle => 0x7c02,
                 KeyboardAction::ClearEeprom => 0x7c03,
+                KeyboardAction::OutputAuto => 0x7780,
+                KeyboardAction::OutputUsb => 0x7784,
+                KeyboardAction::OutputBluetooth => 0x7786,
                 KeyboardAction::ComboOn => 0x7c50,
                 KeyboardAction::ComboOff => 0x7c51,
                 KeyboardAction::ComboToggle => 0x7c52,
@@ -124,8 +128,12 @@ pub fn from_via_keycode(code: u16) -> KeyAction {
         0x5700..=0x57ff => KeyAction::Morse((code & 0xff) as u8),
         0x7000..=0x701f | 0x7800..=0x783f => KeyAction::No,
         0x7700..=0x771f => KeyAction::Single(Action::TriggerMacro(code as u8 & 0x1f)),
+        0x7780 => KeyAction::Single(Action::KeyboardControl(KeyboardAction::OutputAuto)),
+        0x7784 => KeyAction::Single(Action::KeyboardControl(KeyboardAction::OutputUsb)),
+        0x7786 => KeyAction::Single(Action::KeyboardControl(KeyboardAction::OutputBluetooth)),
         0x7c00 => KeyAction::Single(Action::KeyboardControl(KeyboardAction::Bootloader)),
         0x7c01 => KeyAction::Single(Action::KeyboardControl(KeyboardAction::Reboot)),
+        0x7c02 => KeyAction::Single(Action::KeyboardControl(KeyboardAction::DebugToggle)),
         0x7c03 => KeyAction::Single(Action::KeyboardControl(KeyboardAction::ClearEeprom)),
         0x7c16 => KeyAction::Single(Action::Special(SpecialKey::GraveEscape)),
         0x7c18 => space_cadet(HidKeyCode::Kc9, ModifierCombination::LCTRL),
@@ -168,7 +176,7 @@ mod tests {
     fn representative_via_actions_round_trip() {
         for code in [
             0x0000, 0x0001, 0x0004, 0x0104, 0x2104, 0x4304, 0x5223, 0x5264, 0x5283, 0x52a2, 0x52e3,
-            0x5702, 0x7704, 0x7c00, 0x7c18, 0x7c79, 0x7e10,
+            0x5702, 0x7704, 0x7780, 0x7784, 0x7786, 0x7c00, 0x7c02, 0x7c18, 0x7c79, 0x7e10,
         ] {
             assert_eq!(to_via_keycode(from_via_keycode(code)), code, "0x{code:04x}");
         }
