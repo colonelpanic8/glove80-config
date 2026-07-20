@@ -74,6 +74,11 @@ pub const NUM_LEDS: usize = 40;
 /// what the compositor renders into and what [`Ws2812Chain::write`] encodes.
 pub type Frame = [Rgb; NUM_LEDS];
 
+/// Coalescing wake-up from the central's physical remote-boot action
+/// processor to this task, which owns split-link state.
+pub static REMOTE_BOOT_REQUESTS: embassy_sync::channel::Channel<rmk::RawMutex, (), 1> =
+    embassy_sync::channel::Channel::new();
+
 /// SPI byte encoding a WS2812 "1" bit at 4 MHz (matches ZMK's
 /// `spi-one-frame`).
 const ONE_FRAME: u8 = 0x70;
@@ -135,7 +140,11 @@ impl Ws2812Chain {
                 // Hard current clamp -- keep this in the driver.
                 let clamped = channel.min(CHANNEL_CEILING);
                 for bit in (0..8).rev() {
-                    self.buf[i] = if clamped & (1 << bit) != 0 { ONE_FRAME } else { ZERO_FRAME };
+                    self.buf[i] = if clamped & (1 << bit) != 0 {
+                        ONE_FRAME
+                    } else {
+                        ZERO_FRAME
+                    };
                     i += 1;
                 }
             }
@@ -186,7 +195,13 @@ fn default_compositor() -> Compositor<NUM_LEDS> {
     let mut base = Record::new(Activation::Always);
     for key in 0..6u8 {
         // Static counts within fixed capacities; unwrap is unreachable.
-        base.set(key, Cell::Solid { color: BASE_THUMB_COLOR }).unwrap();
+        base.set(
+            key,
+            Cell::Solid {
+                color: BASE_THUMB_COLOR,
+            },
+        )
+        .unwrap();
     }
     c.add_record(base).unwrap();
 
@@ -310,7 +325,11 @@ impl LightingProcessor {
         }
         let store = crate::config_store::ConfigStore::open().await;
         let blob_buf = BLOB_BUF.init([0; crate::config_store::CONFIG_BLOB_MAX]);
-        let config = CentralConfig { store, blob_buf, session: None };
+        let mut config = CentralConfig {
+            store,
+            blob_buf,
+            session: None,
+        };
         if config.store.active_len().is_some() {
             match config.store.read_active(config.blob_buf).await {
                 Ok(len) => {
@@ -357,7 +376,7 @@ impl LightingProcessor {
         let response = if crate::host_proto::is_keymap_request(&req.request) {
             // Keymap requests don't touch the compositor: they are serviced
             // by the keymap's owner (RMK's Vial service task) through the
-            // vendored keymap-ops pipe, one operation at a time.
+            // RMK keymap-ops channel, one operation at a time.
             crate::host_proto::apply_keymap(req.request_id, &req.request).await
         } else if crate::host_proto::is_config_request(&req.request) {
             match &mut self.config {
@@ -461,7 +480,7 @@ impl Processor for LightingProcessor {
     /// armed at all (the no-ticker-when-static guarantee).
     ///
     /// Host requests arrive from the transport pumps (`src/host_pump.rs`)
-    /// and split messages from the vendored split pipe; both are applied
+    /// and split messages from RMK's split app channel; both are applied
     /// HERE, so this task stays the single owner of the compositor and the
     /// split-role state. Per half:
     ///
@@ -473,11 +492,12 @@ impl Processor for LightingProcessor {
     async fn process_loop(&mut self) -> ! {
         let mut sub = Self::subscriber();
         // Watch capacity is 2; each binary takes exactly one receiver.
-        let mut link = rmk::split_app_pipe::SPLIT_APP_LINK
+        let mut link = rmk::split_app::SPLIT_APP_LINK
             .receiver()
             .expect("split link watch has a free receiver slot");
         let requests = crate::host_proto::HOST_REQUESTS.receiver();
-        let app_rx = rmk::split_app_pipe::SPLIT_APP_RX.receiver();
+        let app_rx = rmk::split_app::SPLIT_APP_RX.receiver();
+        let remote_boot = REMOTE_BOOT_REQUESTS.receiver();
         let mut connection = ConnectionStatusChangeEvent::subscriber();
         let mut vbus = rmk::usb::USB_VBUS_DETECTED
             .receiver()
@@ -502,7 +522,10 @@ impl Processor for LightingProcessor {
                 requests.receive(),
                 select(
                     select(link.changed(), app_rx.receive()),
-                    select(connection.next_event(), vbus.changed()),
+                    select(
+                        connection.next_event(),
+                        select(vbus.changed(), remote_boot.receive()),
+                    ),
                 ),
             )
             .await
@@ -524,22 +547,34 @@ impl Processor for LightingProcessor {
                 }
                 Either4::Fourth(Either::First(Either::Second(msg))) => {
                     let now = now_ms();
-                    self.role.apply_message(&mut self.compositor, msg.payload(), now);
+                    self.role
+                        .apply_message(&mut self.compositor, msg.payload(), now);
                     // Drain any burst (e.g. a resync) before rendering so a
                     // full overlay push costs one frame, not one per message.
                     while let Ok(more) = app_rx.try_receive() {
-                        self.role.apply_message(&mut self.compositor, more.payload(), now);
+                        self.role
+                            .apply_message(&mut self.compositor, more.payload(), now);
                     }
                     self.render_at(now).await;
                 }
                 Either4::Fourth(Either::Second(Either::First(event))) => {
                     use rmk::types::connection::UsbState;
 
-                    let connected = matches!(event.0.usb, UsbState::Configured | UsbState::Suspended);
+                    let connected =
+                        matches!(event.0.usb, UsbState::Configured | UsbState::Suspended);
                     self.set_usb_connected(connected).await;
                 }
-                Either4::Fourth(Either::Second(Either::Second(charging))) => {
+                Either4::Fourth(Either::Second(Either::Second(Either::First(charging)))) => {
                     self.set_charging(charging).await;
+                }
+                Either4::Fourth(Either::Second(Either::Second(Either::Second(())))) => {
+                    let dispatched = self
+                        .role
+                        .central_mut()
+                        .is_some_and(|split| split.request_peripheral_bootloader());
+                    if !dispatched {
+                        defmt::warn!("remote-boot: peripheral is offline or split queue is full");
+                    }
                 }
             }
         }

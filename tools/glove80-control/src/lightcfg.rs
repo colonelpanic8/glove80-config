@@ -1,15 +1,16 @@
 //! The canonical configuration file — the keyboard's whole personality in
 //! one TOML: `[[layer]]` keymap entries (see [`crate::keymapcfg`]) plus the
 //! persistent lighting config, and the `config apply/export/show/validate`
-//! subcommands that move both over the host protocol.
+//! subcommands that move them through Rynk and the Glove80 host protocol.
 //!
 //! The two sections travel differently, and the CLI is explicit about it:
 //!
 //! - **lighting** is one blob applied through the v1.1 CONFIG session —
 //!   atomic: the keyboard ends up with the whole new lighting config or
 //!   keeps the old one;
-//! - **keymap** goes through batched v1.2 KEYMAP_WRITE calls — best-effort
-//!   per batch with read-back verification; a failed batch aborts the rest
+//! - **keymap** goes through Rynk bulk pages (or individual writes when bulk
+//!   is unavailable) — best-effort per page with read-back verification; a
+//!   failed page aborts the rest
 //!   and the CLI reports exactly what was written.
 //!
 //! Either section may be omitted: no `[[layer]]` keys = lighting-only
@@ -182,9 +183,9 @@ impl ActivationSpec {
     fn from_config(activation: ConfigActivation) -> ActivationSpec {
         match activation {
             ConfigActivation::Always => ActivationSpec::Named(NamedActivation::Always),
-            ConfigActivation::LayerActive(layer) => {
-                ActivationSpec::Layer { layer: LayerRef::Index(layer) }
-            }
+            ConfigActivation::LayerActive(layer) => ActivationSpec::Layer {
+                layer: LayerRef::Index(layer),
+            },
             ConfigActivation::Toggle(toggle) => ActivationSpec::Toggle { toggle },
         }
     }
@@ -213,7 +214,9 @@ impl GateSpec {
 
     fn from_config(gate: ConfigGate) -> GateSpec {
         match gate {
-            ConfigGate::LayerActive(layer) => GateSpec::Layer { layer: LayerRef::Index(layer) },
+            ConfigGate::LayerActive(layer) => GateSpec::Layer {
+                layer: LayerRef::Index(layer),
+            },
             ConfigGate::Toggle(toggle) => GateSpec::Toggle { toggle },
             ConfigGate::UsbConnected => GateSpec::Named(NamedGate::Usb),
             ConfigGate::Charging => GateSpec::Named(NamedGate::Charging),
@@ -296,7 +299,11 @@ pub fn file_to_config(file: &ConfigFile) -> Result<LightingConfig> {
             .with_context(|| format!("record {record_index} gate"))?;
         config
             .records
-            .push(ConfigRecord { activation, gate, cells })
+            .push(ConfigRecord {
+                activation,
+                gate,
+                cells,
+            })
             .map_err(|_| anyhow!("too many [[record]] entries"))?;
     }
     Ok(config)
@@ -334,7 +341,11 @@ fn format_run(start: u8, end: u8) -> String {
 fn effect_to_spec(keys: String, effect: &Effect) -> CellSpec {
     let color = format!("#{:02x}{:02x}{:02x}", effect.r, effect.g, effect.b);
     match effect.kind {
-        EffectKind::Solid => CellSpec { keys, color, ..CellSpec::default() },
+        EffectKind::Solid => CellSpec {
+            keys,
+            color,
+            ..CellSpec::default()
+        },
         EffectKind::Blink => CellSpec {
             keys,
             color,
@@ -365,7 +376,12 @@ pub fn config_to_file(config: &LightingConfig) -> ConfigFile {
         let persist = config.toggle_persist_mask & bit != 0;
         let initial_on = config.toggle_initial_state & bit != 0;
         if persist || initial_on {
-            toggles.push(ToggleEntry { id, name: None, persist, initial_on });
+            toggles.push(ToggleEntry {
+                id,
+                name: None,
+                persist,
+                initial_on,
+            });
         }
     }
     let records = config
@@ -399,7 +415,11 @@ pub fn config_to_file(config: &LightingConfig) -> ConfigFile {
             }
         })
         .collect();
-    ConfigFile { layers: Vec::new(), toggles, records }
+    ConfigFile {
+        layers: Vec::new(),
+        toggles,
+        records,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -425,8 +445,8 @@ pub fn parse_toml(text: &str) -> Result<ConfigFile> {
 
 /// Serialize a canonical file with the export header.
 pub fn to_toml_file(file: &ConfigFile) -> Result<String> {
-    let body = toml::to_string_pretty(file)
-        .context("could not serialize the canonical config as TOML")?;
+    let body =
+        toml::to_string_pretty(file).context("could not serialize the canonical config as TOML")?;
     Ok(format!(
         "# Glove80 canonical configuration (keymap + lighting), exported from\n\
          # the device. Comments, toggle names, and layer IDs/names are host-side\n\
@@ -462,8 +482,8 @@ pub struct Loaded {
 /// detected by content (the "G80L" magic) or a `.bin` extension; anything
 /// else is parsed as canonical TOML (keymap + lighting).
 pub fn load_config(path: &Path) -> Result<Loaded> {
-    let bytes = std::fs::read(path)
-        .with_context(|| format!("could not read {}", path.display()))?;
+    let bytes =
+        std::fs::read(path).with_context(|| format!("could not read {}", path.display()))?;
     let is_bin_ext = path
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("bin"));
@@ -527,8 +547,16 @@ pub fn render_summary(config: &LightingConfig, blob_len: usize) -> String {
                 .map(GateSpec::from_config)
                 .map_or_else(|| "-".into(), |gate| gate.describe()),
             record.cells.len().to_string(),
-            if keys.is_empty() { "-".into() } else { format_key_list(&keys) },
-            if kinds.is_empty() { "-".into() } else { kinds.join(", ") },
+            if keys.is_empty() {
+                "-".into()
+            } else {
+                format_key_list(&keys)
+            },
+            if kinds.is_empty() {
+                "-".into()
+            } else {
+                kinds.join(", ")
+            },
         ]);
     }
     let mut widths = [0usize; 6];
@@ -551,8 +579,14 @@ pub fn render_summary(config: &LightingConfig, blob_len: usize) -> String {
         .collect::<Vec<_>>()
         .join("\n");
     let mask_list = |mask: u32| {
-        let ids: Vec<u8> = (0..CONFIG_TOGGLE_COUNT).filter(|id| mask & (1 << id) != 0).collect();
-        if ids.is_empty() { "none".to_string() } else { format_key_list(&ids) }
+        let ids: Vec<u8> = (0..CONFIG_TOGGLE_COUNT)
+            .filter(|id| mask & (1 << id) != 0)
+            .collect();
+        if ids.is_empty() {
+            "none".to_string()
+        } else {
+            format_key_list(&ids)
+        }
     };
     format!(
         "{} record(s), {blob_len}-byte blob\n{table}\n\
@@ -600,15 +634,54 @@ pub fn run_validate(path: &Path) -> Result<()> {
 /// `config apply FILE [--dry-run]`.
 pub fn run_apply(selector: &Selector, path: &Path, dry_run: bool) -> Result<()> {
     let loaded = load_config(path)?;
-    println!("parsed {} ({}); client-side validation passed", path.display(), loaded.source);
+    println!(
+        "parsed {} ({}); client-side validation passed",
+        path.display(),
+        loaded.source
+    );
     print_loaded_summary(&loaded);
     if dry_run {
         println!("dry run: not touching the device");
         return Ok(());
     }
-    let transport = transport::connect(selector)?;
-    let mut client = HostClient::new(transport);
-    apply_loaded(&mut client, &loaded)
+    if !loaded.plans.is_empty() {
+        println!(
+            "applying the keymap through Rynk ({} layer(s)) — verified by read-back, NOT atomic across batches",
+            loaded.plans.len()
+        );
+        let report =
+            crate::rynk_client::apply_plans(selector, &loaded.plans, |stage| match stage {
+                keymapcfg::KeymapStage::LayerBegun { slot, id } => {
+                    println!("  layer {slot} \"{id}\":")
+                }
+                keymapcfg::KeymapStage::Batch { written, total, .. } => {
+                    println!("    wrote {written}/{total} positions");
+                }
+                keymapcfg::KeymapStage::LayerDone { lossy, .. } if lossy > 0 => {
+                    println!("    {lossy} position(s) stored differently than requested");
+                }
+                keymapcfg::KeymapStage::LayerDone { .. } => {}
+            })?;
+        println!(
+            "keymap applied through Rynk: {} positions written across {} layer(s); changes are live and persisted",
+            report.entries_written,
+            loaded.plans.len()
+        );
+        for (layer, key, requested, stored) in &report.lossy {
+            println!(
+                "  LOSSY: layer {layer} key {key}: wrote {} (0x{requested:04X}) but the firmware stored {} (0x{stored:04X})",
+                crate::keycodes::format_keycode(*requested),
+                crate::keycodes::format_keycode(*stored),
+            );
+        }
+    }
+    if loaded.apply_lighting {
+        let transport = transport::connect(selector)?;
+        let mut client = HostClient::new(transport);
+        println!("applying the lighting config through the Glove80 protocol (one atomic session)");
+        apply_blob(&mut client, &loaded.blob)?;
+    }
+    Ok(())
 }
 
 /// Transport-independent unified apply (unit-tested on the mock transport).
@@ -617,6 +690,7 @@ pub fn run_apply(selector: &Selector, path: &Path, dry_run: bool) -> Result<()> 
 /// (one atomic session). Ordering is deliberate: if a keymap batch fails,
 /// the apply stops before touching the lighting config, so the error
 /// describes the only thing that changed.
+#[cfg(test)]
 pub fn apply_loaded(client: &mut HostClient, loaded: &Loaded) -> Result<()> {
     if !loaded.plans.is_empty() {
         println!(
@@ -667,7 +741,10 @@ pub fn apply_blob(client: &mut HostClient, blob: &[u8]) -> Result<()> {
         client.config_gate_capabilities()?;
     }
     let result = client.apply_config(blob, |stage| match stage {
-        ApplyStage::Begun { total_len, blob_crc32 } => {
+        ApplyStage::Begun {
+            total_len,
+            blob_crc32,
+        } => {
             println!("session opened: {total_len} bytes, crc32 {blob_crc32:08x}");
         }
         ApplyStage::Sent { bytes, total } => {
@@ -693,11 +770,7 @@ pub fn apply_blob(client: &mut HostClient, blob: &[u8]) -> Result<()> {
 /// Build a canonical TOML fragment containing one layer-indicator record per
 /// key/color. Layer slots are assigned in order from 0; `gate_on_magic`
 /// attaches the conventional Magic-layer (slot 2) press-and-hold gate.
-pub fn generate_layer_indicators(
-    keys: &str,
-    gate_on_magic: bool,
-    colors: &str,
-) -> Result<String> {
+pub fn generate_layer_indicators(keys: &str, gate_on_magic: bool, colors: &str) -> Result<String> {
     let keys = parse_key_list(keys).context("invalid --keys list")?;
     let colors: Vec<&str> = colors
         .split(',')
@@ -724,8 +797,12 @@ pub fn generate_layer_indicators(
         // records, but retain the friendly input spelling in generated TOML.
         parse_color(color).with_context(|| format!("invalid --colors entry {layer}"))?;
         file.records.push(RecordEntry {
-            activation: ActivationSpec::Layer { layer: LayerRef::Index(layer as u8) },
-            gate: gate_on_magic.then_some(GateSpec::Layer { layer: LayerRef::Index(2) }),
+            activation: ActivationSpec::Layer {
+                layer: LayerRef::Index(layer as u8),
+            },
+            gate: gate_on_magic.then_some(GateSpec::Layer {
+                layer: LayerRef::Index(2),
+            }),
             cells: vec![CellSpec {
                 keys: key.to_string(),
                 color: color.to_string(),
@@ -762,6 +839,7 @@ fn read_active_config(client: &mut HostClient) -> Result<Vec<u8>> {
 /// - no keymap capability → lighting-only export (with a note);
 /// - no stored lighting config (compiled-in defaults) → keymap-only export
 ///   (with a note), so applying the file leaves lighting untouched.
+#[cfg(test)]
 pub fn export_file(client: &mut HostClient) -> Result<ConfigFile> {
     let layers = match keymapcfg::read_all_layers(client) {
         Ok(layers) => keymapcfg::layers_to_entries(&layers),
@@ -811,7 +889,23 @@ pub fn run_export(selector: &Selector, path: &Path, raw: bool) -> Result<()> {
         );
         return Ok(());
     }
-    let file = export_file(&mut client)?;
+    let layers = crate::rynk_client::read_all_layers(selector)?;
+    let layers = keymapcfg::layers_to_entries(&layers);
+    let mut file = match client.read_config() {
+        Ok(blob) if blob.is_empty() => {
+            println!(
+                "note: no stored lighting config (compiled-in defaults); exporting the Rynk keymap only"
+            );
+            ConfigFile::default()
+        }
+        Ok(blob) => {
+            let config = decode_lighting_config(&blob)
+                .map_err(|error| anyhow!("device returned an invalid config blob: {error}"))?;
+            config_to_file(&config)
+        }
+        Err(error) => return Err(error.context("could not read the active lighting config")),
+    };
+    file.layers = layers;
     std::fs::write(path, to_toml_file(&file)?)
         .with_context(|| format!("could not write {}", path.display()))?;
     println!(
@@ -824,22 +918,16 @@ pub fn run_export(selector: &Selector, path: &Path, raw: bool) -> Result<()> {
 }
 
 pub fn run_show(selector: &Selector) -> Result<()> {
+    let layers = crate::rynk_client::read_all_layers(selector)?;
+    let entries = keymapcfg::layers_to_entries(&layers);
+    let plans = keymapcfg::build_layer_plans(&entries)?;
+    println!("keymap via Rynk ({} populated layer(s)):", plans.len());
+    if !plans.is_empty() {
+        println!("{}", keymapcfg::render_keymap_summary(&plans));
+    }
+
     let transport = transport::connect(selector)?;
     let mut client = HostClient::new(transport);
-    match keymapcfg::read_all_layers(&mut client) {
-        Ok(layers) => {
-            let entries = keymapcfg::layers_to_entries(&layers);
-            let plans = keymapcfg::build_layer_plans(&entries)?;
-            println!("keymap ({} populated layer(s)):", plans.len());
-            if !plans.is_empty() {
-                println!("{}", keymapcfg::render_keymap_summary(&plans));
-            }
-        }
-        Err(error) if client.lacks_feature(glove80_host_protocol::feature::KEYMAP) => {
-            println!("keymap: not readable ({error:#})");
-        }
-        Err(error) => return Err(error),
-    }
     println!("lighting:");
     let blob = read_active_config(&mut client)?;
     let config = decode_lighting_config(&blob).expect("validated in read_active_config");
@@ -852,8 +940,8 @@ mod tests {
     use super::*;
     use glove80_host_protocol::{
         crc32, Capabilities, Command, Request, Response, ResponsePayload, Status,
-        MAX_CELLS_PER_RECORD, MAX_CONFIG_RECORDS, MAX_MESSAGE_LEN, PROTOCOL_VERSION_MAJOR,
-        MAX_CONFIG_DATA_PER_MESSAGE,
+        MAX_CELLS_PER_RECORD, MAX_CONFIG_DATA_PER_MESSAGE, MAX_CONFIG_RECORDS, MAX_MESSAGE_LEN,
+        PROTOCOL_VERSION_MAJOR,
     };
 
     use crate::transport::mock::MockTransport;
@@ -900,11 +988,21 @@ mod tests {
     }
 
     fn empty_ok(request_id: u8, command: Command) -> Response {
-        Response { request_id, command, status: Status::Ok, payload: ResponsePayload::Empty }
+        Response {
+            request_id,
+            command,
+            status: Status::Ok,
+            payload: ResponsePayload::Empty,
+        }
     }
 
     fn empty_err(request_id: u8, command: Command, status: Status) -> Response {
-        Response { request_id, command, status, payload: ResponsePayload::Empty }
+        Response {
+            request_id,
+            command,
+            status,
+            payload: ResponsePayload::Empty,
+        }
     }
 
     const SAMPLE_TOML: &str = r##"
@@ -976,8 +1074,14 @@ gate = { toggle = 7 }
         assert_eq!(config.records[0].activation, ConfigActivation::Always);
         assert_eq!(config.records[0].cells.len(), 12);
         assert_eq!(config.records[0].cells[6].key, 40);
-        assert_eq!(config.records[0].cells[0].effect, Effect::solid(0x18, 0x18, 0x18));
-        assert_eq!(config.records[1].activation, ConfigActivation::LayerActive(1));
+        assert_eq!(
+            config.records[0].cells[0].effect,
+            Effect::solid(0x18, 0x18, 0x18)
+        );
+        assert_eq!(
+            config.records[1].activation,
+            ConfigActivation::LayerActive(1)
+        );
         assert_eq!(config.records[1].cells[7].key, 12);
         assert_eq!(
             config.records[1].cells[7].effect,
@@ -995,14 +1099,22 @@ gate = { toggle = 7 }
     /// and the two blob generations are byte-identical.
     #[test]
     fn toml_round_trip_is_stable() {
-        for toml_text in [SAMPLE_TOML, GATED_TOML, "", "[[record]]\nactivation = \"always\"\n"] {
+        for toml_text in [
+            SAMPLE_TOML,
+            GATED_TOML,
+            "",
+            "[[record]]\nactivation = \"always\"\n",
+        ] {
             let config = file_to_config(&parse_toml(toml_text).unwrap()).unwrap();
             let blob = file_to_blob(&parse_toml(toml_text).unwrap()).unwrap();
             let decoded = decode_lighting_config(&blob).unwrap();
             assert_eq!(decoded, config);
             let exported = to_toml(&decoded).unwrap();
             let config2 = file_to_config(&parse_toml(&exported).unwrap()).unwrap();
-            assert_eq!(config2, config, "export not semantically stable:\n{exported}");
+            assert_eq!(
+                config2, config,
+                "export not semantically stable:\n{exported}"
+            );
             let blob2 = file_to_blob(&config_to_file(&config2)).unwrap();
             assert_eq!(blob2, blob, "blob-level round trip not byte-stable");
         }
@@ -1052,7 +1164,10 @@ gate = { toggle = 7 }
         assert_eq!(format_key_list(&[0, 1, 2, 6, 7, 8, 9, 12]), "0-2,6-9,12");
         // Non-ascending order is preserved, never coalesced across breaks.
         assert_eq!(format_key_list(&[5, 4, 3]), "5,4,3");
-        assert_eq!(parse_key_list(&format_key_list(&[5, 4, 3])).unwrap(), vec![5, 4, 3]);
+        assert_eq!(
+            parse_key_list(&format_key_list(&[5, 4, 3])).unwrap(),
+            vec![5, 4, 3]
+        );
     }
 
     #[test]
@@ -1097,17 +1212,24 @@ gate = { toggle = 7 }
         // Layer out of range.
         let toml_text = "[[record]]\nactivation = { layer = 8 }\n";
         let error = file_to_blob(&parse_toml(toml_text).unwrap()).unwrap_err();
-        assert!(error.to_string().contains("layer 8 out of range"), "{error}");
+        assert!(
+            error.to_string().contains("layer 8 out of range"),
+            "{error}"
+        );
 
         // Gate arguments use the same protocol bounds.
-        let toml_text =
-            "[[record]]\nactivation = \"always\"\ngate = { layer = 8 }\n";
+        let toml_text = "[[record]]\nactivation = \"always\"\ngate = { layer = 8 }\n";
         let error = file_to_blob(&parse_toml(toml_text).unwrap()).unwrap_err();
-        assert!(error.to_string().contains("gate layer 8 out of range"), "{error}");
-        let toml_text =
-            "[[record]]\nactivation = \"always\"\ngate = { toggle = 32 }\n";
+        assert!(
+            error.to_string().contains("gate layer 8 out of range"),
+            "{error}"
+        );
+        let toml_text = "[[record]]\nactivation = \"always\"\ngate = { toggle = 32 }\n";
         let error = file_to_blob(&parse_toml(toml_text).unwrap()).unwrap_err();
-        assert!(error.to_string().contains("gate toggle 32 out of range"), "{error}");
+        assert!(
+            error.to_string().contains("gate toggle 32 out of range"),
+            "{error}"
+        );
 
         // Toggle id out of range (checked while building the masks).
         let toml_text = "[[toggle]]\nid = 32\npersist = true\n";
@@ -1115,7 +1237,8 @@ gate = { toggle = 7 }
         assert!(error.to_string().contains("out of range"), "{error}");
 
         // Duplicate toggle entry.
-        let toml_text = "[[toggle]]\nid = 2\npersist = true\n[[toggle]]\nid = 2\ninitial_on = true\n";
+        let toml_text =
+            "[[toggle]]\nid = 2\npersist = true\n[[toggle]]\nid = 2\ninitial_on = true\n";
         let error = file_to_config(&parse_toml(toml_text).unwrap()).unwrap_err();
         assert!(error.to_string().contains("listed twice"), "{error}");
 
@@ -1183,16 +1306,20 @@ gate = { toggle = 7 }
         let expected_crc = crc32(&blob);
         let mock = MockTransport::new();
         let requests = mock.requests_handle();
-        let mut mock = mock
-            .expect(caps_handler(test_capabilities()))
-            .expect(move |request_id, request| {
-                let Request::ConfigBegin { total_len, blob_crc32 } = request else {
-                    panic!("expected ConfigBegin, got {request:?}");
-                };
-                assert_eq!(*blob_crc32, expected_crc);
-                assert!(*total_len > 0);
-                vec![empty_ok(request_id, Command::ConfigBegin)]
-            });
+        let mut mock =
+            mock.expect(caps_handler(test_capabilities()))
+                .expect(move |request_id, request| {
+                    let Request::ConfigBegin {
+                        total_len,
+                        blob_crc32,
+                    } = request
+                    else {
+                        panic!("expected ConfigBegin, got {request:?}");
+                    };
+                    assert_eq!(*blob_crc32, expected_crc);
+                    assert!(*total_len > 0);
+                    vec![empty_ok(request_id, Command::ConfigBegin)]
+                });
         // The mock advertises max_message_len = MAX_MESSAGE_LEN (1536), so
         // chunks are bounded by MAX_CONFIG_DATA_PER_MESSAGE = 1024; the
         // sample blob needs exactly one chunk.
@@ -1209,17 +1336,21 @@ gate = { toggle = 7 }
         let mut client = HostClient::new(Box::new(mock));
         apply_blob(&mut client, &blob).unwrap();
         let requests = requests.lock().unwrap();
-        let Request::ConfigData { data, .. } = &requests[2] else { panic!() };
+        let Request::ConfigData { data, .. } = &requests[2] else {
+            panic!()
+        };
         assert_eq!(data.as_slice(), blob.as_slice());
     }
 
     #[test]
     fn gated_apply_and_read_back_preserve_the_gate() {
-        let blob = file_to_blob(&parse_toml(
-            "[[record]]\nactivation = \"always\"\ngate = { toggle = 7 }\n\
+        let blob = file_to_blob(
+            &parse_toml(
+                "[[record]]\nactivation = \"always\"\ngate = { toggle = 7 }\n\
              cells = [{ keys = \"0\", color = \"red\" }]\n",
+            )
+            .unwrap(),
         )
-        .unwrap())
         .unwrap();
         let returned = blob.clone();
         let total_len = returned.len() as u32;
@@ -1249,10 +1380,9 @@ gate = { toggle = 7 }
 
     #[test]
     fn gated_apply_requires_the_config_gates_feature() {
-        let blob = file_to_blob(&parse_toml(
-            "[[record]]\nactivation = \"always\"\ngate = \"usb\"\n",
+        let blob = file_to_blob(
+            &parse_toml("[[record]]\nactivation = \"always\"\ngate = \"usb\"\n").unwrap(),
         )
-        .unwrap())
         .unwrap();
         let mock = MockTransport::new().expect(caps_handler(test_capabilities()));
         let mut client = HostClient::new(Box::new(mock));
@@ -1269,7 +1399,10 @@ gate = { toggle = 7 }
         let config = file_to_config(&parse_toml(&text).unwrap()).unwrap();
         assert_eq!(config.records.len(), 3);
         for (layer, record) in config.records.iter().enumerate() {
-            assert_eq!(record.activation, ConfigActivation::LayerActive(layer as u8));
+            assert_eq!(
+                record.activation,
+                ConfigActivation::LayerActive(layer as u8)
+            );
             assert_eq!(record.gate, Some(ConfigGate::LayerActive(2)));
             assert_eq!(record.cells[0].key, 10 + layer as u8);
         }
@@ -1312,7 +1445,11 @@ gate = { toggle = 7 }
         let mut reassembled = Vec::new();
         for request in requests.iter() {
             if let Request::ConfigData { offset, data } = request {
-                assert_eq!(*offset as usize, reassembled.len(), "chunks must be sequential");
+                assert_eq!(
+                    *offset as usize,
+                    reassembled.len(),
+                    "chunks must be sequential"
+                );
                 assert!(data.len() <= MAX_CONFIG_DATA_PER_MESSAGE);
                 reassembled.extend_from_slice(data);
             }
@@ -1328,13 +1465,20 @@ gate = { toggle = 7 }
             .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigBegin)])
             .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigData)])
             .expect(|request_id, _| {
-                vec![empty_err(request_id, Command::ConfigCommit, Status::CrcMismatch)]
+                vec![empty_err(
+                    request_id,
+                    Command::ConfigCommit,
+                    Status::CrcMismatch,
+                )]
             });
         let mut client = HostClient::new(Box::new(mock));
         let error = apply_blob(&mut client, &blob).unwrap_err();
         let chain = format!("{error:#}");
         assert!(chain.contains("CRC_MISMATCH"), "{chain}");
-        assert!(chain.contains("previous lighting configuration untouched"), "{chain}");
+        assert!(
+            chain.contains("previous lighting configuration untouched"),
+            "{chain}"
+        );
     }
 
     #[test]
@@ -1345,13 +1489,20 @@ gate = { toggle = 7 }
             .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigBegin)])
             .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigData)])
             .expect(|request_id, _| {
-                vec![empty_err(request_id, Command::ConfigCommit, Status::InvalidConfig)]
+                vec![empty_err(
+                    request_id,
+                    Command::ConfigCommit,
+                    Status::InvalidConfig,
+                )]
             });
         let mut client = HostClient::new(Box::new(mock));
         let error = apply_blob(&mut client, &blob).unwrap_err();
         let chain = format!("{error:#}");
         assert!(chain.contains("INVALID_CONFIG"), "{chain}");
-        assert!(chain.contains("previous lighting configuration untouched"), "{chain}");
+        assert!(
+            chain.contains("previous lighting configuration untouched"),
+            "{chain}"
+        );
     }
 
     /// Session interrupted mid-transfer: the device answers BAD_OFFSET, the
@@ -1375,7 +1526,11 @@ gate = { toggle = 7 }
             .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigData)])
             .expect(|request_id, _| {
                 // e.g. the session was replaced/interrupted device-side.
-                vec![empty_err(request_id, Command::ConfigData, Status::BadOffset)]
+                vec![empty_err(
+                    request_id,
+                    Command::ConfigData,
+                    Status::BadOffset,
+                )]
             })
             .expect(|request_id, request| {
                 assert!(matches!(request, Request::ConfigAbort));
@@ -1385,7 +1540,10 @@ gate = { toggle = 7 }
         let error = apply_blob(&mut client, &blob).unwrap_err();
         let chain = format!("{error:#}");
         assert!(chain.contains("BAD_OFFSET"), "{chain}");
-        assert!(chain.contains("previous lighting configuration untouched"), "{chain}");
+        assert!(
+            chain.contains("previous lighting configuration untouched"),
+            "{chain}"
+        );
         // No COMMIT was ever sent; the last request is the ABORT.
         let requests = requests.lock().unwrap();
         assert!(matches!(requests.last(), Some(Request::ConfigAbort)));
@@ -1400,11 +1558,18 @@ gate = { toggle = 7 }
             .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigBegin)])
             .expect(|request_id, _| vec![empty_ok(request_id, Command::ConfigData)])
             .expect(|request_id, _| {
-                vec![empty_err(request_id, Command::ConfigCommit, Status::ConfigIncomplete)]
+                vec![empty_err(
+                    request_id,
+                    Command::ConfigCommit,
+                    Status::ConfigIncomplete,
+                )]
             });
         let mut client = HostClient::new(Box::new(mock));
         let error = apply_blob(&mut client, &blob).unwrap_err();
-        assert!(format!("{error:#}").contains("CONFIG_INCOMPLETE"), "{error:#}");
+        assert!(
+            format!("{error:#}").contains("CONFIG_INCOMPLETE"),
+            "{error:#}"
+        );
     }
 
     #[test]
@@ -1426,8 +1591,10 @@ gate = { toggle = 7 }
         );
 
         // Advertised blob ceiling smaller than the blob: rejected client-side.
-        let capabilities =
-            Capabilities { max_config_blob_len: 16, ..test_capabilities() };
+        let capabilities = Capabilities {
+            max_config_blob_len: 16,
+            ..test_capabilities()
+        };
         let mock = MockTransport::new().expect(caps_handler(capabilities));
         let mut client = HostClient::new(Box::new(mock));
         let error = apply_blob(&mut client, &blob).unwrap_err();
@@ -1517,7 +1684,11 @@ gate = { toggle = 7 }
     }
 
     fn layer(id: &str, keys: Option<String>) -> LayerEntry {
-        LayerEntry { id: id.into(), name: None, keys }
+        LayerEntry {
+            id: id.into(),
+            name: None,
+            keys,
+        }
     }
 
     /// A small unified file: two keymap layers plus a lighting record that
@@ -1530,7 +1701,9 @@ gate = { toggle = 7 }
             ],
             toggles: Vec::new(),
             records: vec![RecordEntry {
-                activation: ActivationSpec::Layer { layer: LayerRef::Id("lower".into()) },
+                activation: ActivationSpec::Layer {
+                    layer: LayerRef::Id("lower".into()),
+                },
                 gate: None,
                 cells: vec![CellSpec {
                     keys: "0-3".into(),
@@ -1572,7 +1745,10 @@ gate = { toggle = 7 }
     #[test]
     fn layer_ids_resolve_to_slots_in_the_lighting_blob() {
         let config = file_to_config(&unified_file()).unwrap();
-        assert_eq!(config.records[0].activation, ConfigActivation::LayerActive(1));
+        assert_eq!(
+            config.records[0].activation,
+            ConfigActivation::LayerActive(1)
+        );
 
         let toml_text = r#"
 [[layer]]
@@ -1589,12 +1765,19 @@ cells = [{ keys = "0", color = "red" }]
 activation = { layer = 7 }
 "#;
         let config = file_to_config(&parse_toml(toml_text).unwrap()).unwrap();
-        assert_eq!(config.records[0].activation, ConfigActivation::LayerActive(1));
-        assert_eq!(config.records[1].activation, ConfigActivation::LayerActive(7));
+        assert_eq!(
+            config.records[0].activation,
+            ConfigActivation::LayerActive(1)
+        );
+        assert_eq!(
+            config.records[1].activation,
+            ConfigActivation::LayerActive(7)
+        );
 
         let mut file = unified_file();
-        file.records[0].activation =
-            ActivationSpec::Layer { layer: LayerRef::Id("upper".into()) };
+        file.records[0].activation = ActivationSpec::Layer {
+            layer: LayerRef::Id("upper".into()),
+        };
         let error = file_to_config(&file).unwrap_err();
         let chain = format!("{error:#}");
         assert!(chain.contains("record 0 activation"), "{chain}");
@@ -1641,8 +1824,14 @@ activation = { layer = 7 }
         // Every grid position of both layers written, in order.
         assert_eq!(layer0.len(), GRID_SIZE);
         assert_eq!(layer1.len(), GRID_SIZE);
-        assert!(layer0.iter().enumerate().all(|(i, &(k, c))| k as usize == i && c == 0x0004));
-        assert!(layer1.iter().enumerate().all(|(i, &(k, c))| k as usize == i && c == 0x0005));
+        assert!(layer0
+            .iter()
+            .enumerate()
+            .all(|(i, &(k, c))| k as usize == i && c == 0x0004));
+        assert!(layer1
+            .iter()
+            .enumerate()
+            .all(|(i, &(k, c))| k as usize == i && c == 0x0005));
         assert!(matches!(requests[9], Request::ConfigBegin { .. }));
         assert!(matches!(requests[11], Request::ConfigCommit));
     }
@@ -1744,7 +1933,11 @@ activation = { layer = 7 }
                 for _ in 0..3 {
                     let codes = device_layer(layer);
                     mock = mock.expect(move |request_id, request: &Request| {
-                        let Request::KeymapRead { layer, start_key, max_count } = request
+                        let Request::KeymapRead {
+                            layer,
+                            start_key,
+                            max_count,
+                        } = request
                         else {
                             panic!("expected KeymapRead, got {request:?}");
                         };
@@ -1757,8 +1950,7 @@ activation = { layer = 7 }
                             payload: ResponsePayload::KeymapActions {
                                 layer: *layer,
                                 start_key: *start_key,
-                                keycodes: heapless::Vec::from_slice(&codes[start..end])
-                                    .unwrap(),
+                                keycodes: heapless::Vec::from_slice(&codes[start..end]).unwrap(),
                             },
                         }]
                     });
@@ -1780,7 +1972,11 @@ activation = { layer = 7 }
 
         let mut client = HostClient::new(Box::new(mock_device(lighting_blob.clone())));
         let exported = export_file(&mut client).unwrap();
-        assert_eq!(exported.layers.len(), 2, "trailing empty layers must be dropped");
+        assert_eq!(
+            exported.layers.len(),
+            2,
+            "trailing empty layers must be dropped"
+        );
         assert_eq!(exported.layers[0].id, "layer0");
         assert_eq!(exported.layers[1].id, "layer1");
 
@@ -1815,10 +2011,7 @@ activation = { layer = 7 }
         let loaded = load_config(&dir.join("glove80.toml")).unwrap();
         assert_eq!(loaded.plans.len(), 5);
         assert!(loaded.apply_lighting);
-        let file = parse_toml(
-            &std::fs::read_to_string(dir.join("glove80.toml")).unwrap(),
-        )
-        .unwrap();
+        let file = parse_toml(&std::fs::read_to_string(dir.join("glove80.toml")).unwrap()).unwrap();
         let config = file_to_config(&file).unwrap();
         // "base".."mac_hyper" resolved to slots 0..4; slots 5-7 literal.
         let layers: Vec<u8> = config

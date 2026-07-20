@@ -47,7 +47,12 @@ fn managed_objects(connection: &Connection) -> Result<ManagedObjects> {
 }
 
 fn device_proxy(connection: &Connection, path: &str) -> Result<Proxy<'static>> {
-    Ok(Proxy::new(connection, BLUEZ.to_owned(), path.to_owned(), DEVICE_IFACE.to_owned())?)
+    Ok(Proxy::new(
+        connection,
+        BLUEZ.to_owned(),
+        path.to_owned(),
+        DEVICE_IFACE.to_owned(),
+    )?)
 }
 
 fn characteristic_proxy(connection: &Connection, path: &str) -> Result<Proxy<'static>> {
@@ -72,8 +77,12 @@ fn matching_devices(
         if !interfaces.contains_key(DEVICE_IFACE) {
             continue;
         }
-        let Ok(device) = device_proxy(connection, path.as_str()) else { continue };
-        let Ok(address) = device.get_property::<String>("Address") else { continue };
+        let Ok(device) = device_proxy(connection, path.as_str()) else {
+            continue;
+        };
+        let Ok(address) = device.get_property::<String>("Address") else {
+            continue;
+        };
         if let Some(filter) = address_filter {
             // An explicit address is trusted outright; the characteristic
             // UUIDs are verified after connecting.
@@ -154,7 +163,11 @@ fn discover(connection: &Connection, address_filter: Option<&str>) -> Result<(St
         1 => Ok(found.into_iter().next().unwrap()),
         _ => bail!(
             "multiple matching BLE devices found ({}); pick one with --device <ADDRESS>",
-            found.iter().map(|(_, address)| address.as_str()).collect::<Vec<_>>().join(", ")
+            found
+                .iter()
+                .map(|(_, address)| address.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
     }
 }
@@ -162,7 +175,10 @@ fn discover(connection: &Connection, address_filter: Option<&str>) -> Result<(St
 fn wait_services_resolved(device: &Proxy<'_>) -> Result<()> {
     let deadline = Instant::now() + RESOLVE_TIMEOUT;
     loop {
-        if device.get_property::<bool>("ServicesResolved").unwrap_or(false) {
+        if device
+            .get_property::<bool>("ServicesResolved")
+            .unwrap_or(false)
+        {
             return Ok(());
         }
         if Instant::now() >= deadline {
@@ -173,10 +189,7 @@ fn wait_services_resolved(device: &Proxy<'_>) -> Result<()> {
 }
 
 /// Find the request/response characteristics under `device_path`.
-fn find_characteristics(
-    connection: &Connection,
-    device_path: &str,
-) -> Result<(String, String)> {
+fn find_characteristics(connection: &Connection, device_path: &str) -> Result<(String, String)> {
     let objects = managed_objects(connection)?;
     let mut request_path = None;
     let mut response_path = None;
@@ -185,8 +198,12 @@ fn find_characteristics(
         if !path.as_str().starts_with(&prefix) || !interfaces.contains_key(CHARACTERISTIC_IFACE) {
             continue;
         }
-        let Ok(characteristic) = characteristic_proxy(connection, path.as_str()) else { continue };
-        let Ok(uuid) = characteristic.get_property::<String>("UUID") else { continue };
+        let Ok(characteristic) = characteristic_proxy(connection, path.as_str()) else {
+            continue;
+        };
+        let Ok(uuid) = characteristic.get_property::<String>("UUID") else {
+            continue;
+        };
         if uuid.eq_ignore_ascii_case(ids::BLE_REQUEST_CHAR_UUID) {
             request_path = Some(path.as_str().to_owned());
         } else if uuid.eq_ignore_ascii_case(ids::BLE_RESPONSE_CHAR_UUID) {
@@ -270,9 +287,10 @@ impl BleTransport {
             .spawn(move || {
                 for message in messages {
                     let Ok(message) = message else { break };
-                    let Ok((interface, changed, _invalidated)) = message
-                        .body()
-                        .deserialize::<(String, HashMap<String, OwnedValue>, Vec<String>)>()
+                    let Ok((interface, changed, _invalidated)) =
+                        message
+                            .body()
+                            .deserialize::<(String, HashMap<String, OwnedValue>, Vec<String>)>()
                     else {
                         continue;
                     };
@@ -312,8 +330,7 @@ impl Transport for BleTransport {
 
     fn send_chunk(&mut self, chunk: &[u8]) -> Result<()> {
         // Write-without-response, per PROTOCOL.md.
-        let options: HashMap<&str, Value<'_>> =
-            HashMap::from([("type", Value::from("command"))]);
+        let options: HashMap<&str, Value<'_>> = HashMap::from([("type", Value::from("command"))]);
         self.request_char
             .call::<_, _, ()>("WriteValue", &(chunk, options))
             .context("BLE WriteValue failed")?;
@@ -324,9 +341,9 @@ impl Transport for BleTransport {
         match self.notifications.recv_timeout(timeout) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(mpsc::RecvTimeoutError::Timeout) => Ok(None),
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                Err(anyhow!("BLE notification stream ended (device disconnected?)"))
-            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(anyhow!(
+                "BLE notification stream ended (device disconnected?)"
+            )),
         }
     }
 

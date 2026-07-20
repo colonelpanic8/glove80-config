@@ -1,7 +1,7 @@
 //! Split lighting transfer (Phase 3 of docs/implementation-plan.md): the
 //! firmware glue between the pure-logic sync layer
-//! (`glove80_compositor::sync`) and the vendored split application pipe
-//! (`rmk::split_app_pipe`, a GLOVE80 PATCH).
+//! (`glove80_compositor::sync`) and RMK's split application channel
+//! (`rmk::split_app`).
 //!
 //! Roles (both compiled into `lighting.rs`'s single loop; the binary picks
 //! its role in `central.rs` / `peripheral.rs`):
@@ -29,11 +29,11 @@ use glove80_compositor::sync::{
     SyncKeys, SyncMessage,
 };
 use glove80_compositor::{Cell, Compositor, MAX_RECORDS, Record};
-use rmk::split_app_pipe::{SPLIT_APP_MSG_MAX, SPLIT_APP_PERIPH_TX, SPLIT_APP_TX, SplitAppData};
+use rmk::split_app::{SPLIT_APP_MSG_MAX, SPLIT_APP_PERIPH_TX, SPLIT_APP_TX, SplitAppData};
 
 use crate::lighting::NUM_LEDS;
 
-// The sync codec's payload bound and the vendored pipe's buffer size must
+// The sync codec's payload bound and RMK's split-app buffer size must
 // agree; both are deliberately small (they size every split transfer).
 const _: () = assert!(MAX_SYNC_PAYLOAD == SPLIT_APP_MSG_MAX);
 
@@ -156,7 +156,10 @@ impl CentralSplit {
                 self.peripheral_version = Some(v);
             }
             Ok(_) => defmt::warn!("split-lighting: unexpected app message on the central"),
-            Err(e) => defmt::warn!("split-lighting: dropped message: {}", defmt::Debug2Format(&e)),
+            Err(e) => defmt::warn!(
+                "split-lighting: dropped message: {}",
+                defmt::Debug2Format(&e)
+            ),
         }
     }
 
@@ -179,7 +182,11 @@ impl CentralSplit {
 
     /// Queue a batch of cell writes; on overflow fall back to a resync.
     /// Returns `false` if the cells did not go out as deltas.
-    fn queue_cells<'a>(&mut self, cells: impl Iterator<Item = &'a (u8, Cell)>, now_ms: u64) -> bool {
+    fn queue_cells<'a>(
+        &mut self,
+        cells: impl Iterator<Item = &'a (u8, Cell)>,
+        now_ms: u64,
+    ) -> bool {
         if !self.deltas_flow() {
             return false;
         }
@@ -258,7 +265,12 @@ impl CentralSplit {
 
     /// Atomically replace the right half's overlay with `cells` (store +
     /// forward as clear-then-set).
-    pub fn replace_cells(&mut self, cells: &[(u8, Cell)], ttl_ms: Option<u32>, now_ms: u64) -> bool {
+    pub fn replace_cells(
+        &mut self,
+        cells: &[(u8, Cell)],
+        ttl_ms: Option<u32>,
+        now_ms: u64,
+    ) -> bool {
         self.remote.clear();
         for &(key, cell) in cells {
             self.remote.set(key, cell, ttl_ms, now_ms);
@@ -453,18 +465,29 @@ impl PeripheralSplit {
     // See CentralSplit::new: only the peripheral binary constructs this.
     #[allow(dead_code)]
     pub const fn new() -> Self {
-        Self { clear_at_ms: None, stage: ConfigStage::new(), announce_at_ms: None }
+        Self {
+            clear_at_ms: None,
+            stage: ConfigStage::new(),
+            announce_at_ms: None,
+        }
     }
 
     pub fn on_link_change(&mut self, up: bool, now_ms: u64) {
-        self.clear_at_ms = if up { None } else { Some(now_ms + LINK_LOSS_GRACE_MS) };
+        self.clear_at_ms = if up {
+            None
+        } else {
+            Some(now_ms + LINK_LOSS_GRACE_MS)
+        };
         // Announce the build identity once per link-up edge; a stale owed
         // announcement is dropped on link-down (the next link-up re-arms it).
         self.announce_at_ms = up.then_some(now_ms);
     }
 
     pub fn next_deadline(&self) -> Option<u64> {
-        [self.clear_at_ms, self.announce_at_ms].into_iter().flatten().min()
+        [self.clear_at_ms, self.announce_at_ms]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     /// Deadline housekeeping: drop the authority-less host overlay once the
@@ -500,7 +523,10 @@ impl PeripheralSplit {
                         // == the overlay capacity; guarded anyway.
                         cell => {
                             if comp.host_set(key, cell, None, now_ms).is_err() {
-                                defmt::warn!("split-lighting: host overlay full, dropping key {}", key);
+                                defmt::warn!(
+                                    "split-lighting: host overlay full, dropping key {}",
+                                    key
+                                );
                             }
                         }
                     }
@@ -517,23 +543,34 @@ impl PeripheralSplit {
                     defmt::warn!("split-lighting: config push exceeds record capacity");
                 }
             }
-            Ok(SyncMessage::ConfigRecord { index, activation, cell_count }) => {
+            Ok(SyncMessage::ConfigRecord {
+                index,
+                activation,
+                cell_count,
+            }) => {
                 self.stage.record(index, activation, cell_count);
             }
             Ok(SyncMessage::ConfigGate { record_index, gate }) => {
                 self.stage.gate(record_index, gate);
             }
-            Ok(SyncMessage::ConfigCells { record_index, cells }) => {
+            Ok(SyncMessage::ConfigCells {
+                record_index,
+                cells,
+            }) => {
                 self.stage.cells(record_index, cells.entries());
             }
-            Ok(SyncMessage::ConfigCommit { record_count }) => match self.stage.commit(record_count) {
+            Ok(SyncMessage::ConfigCommit { record_count }) => match self.stage.commit(record_count)
+            {
                 Some(records) => {
                     // Cannot fail: the stage capacity equals the
                     // compositor's; guarded anyway.
                     if comp.replace_records(records).is_err() {
                         defmt::warn!("split-lighting: config commit exceeded compositor capacity");
                     } else {
-                        defmt::info!("split-lighting: persistent records applied ({})", record_count);
+                        defmt::info!(
+                            "split-lighting: persistent records applied ({})",
+                            record_count
+                        );
                     }
                 }
                 // Incomplete stage: keep the previous records; the central
@@ -546,7 +583,12 @@ impl PeripheralSplit {
                 defmt::warn!("split-lighting: entering bootloader by central request");
                 rmk::boot::jump_to_bootloader();
             }
-            Ok(SyncMessage::State { brightness, ceiling, toggles, usb_connected }) => {
+            Ok(SyncMessage::State {
+                brightness,
+                ceiling,
+                toggles,
+                usb_connected,
+            }) => {
                 comp.set_brightness(brightness);
                 // set_ceiling re-clamps to this half's compiled CHANNEL_CEILING.
                 comp.set_ceiling(ceiling);
@@ -561,7 +603,10 @@ impl PeripheralSplit {
             // peripheral — ignore by contract. Anything else is a framing
             // bug worth a log line; dropping is always safe (state heals on
             // the next resync).
-            Err(e) => defmt::warn!("split-lighting: dropped message: {}", defmt::Debug2Format(&e)),
+            Err(e) => defmt::warn!(
+                "split-lighting: dropped message: {}",
+                defmt::Debug2Format(&e)
+            ),
         }
     }
 }

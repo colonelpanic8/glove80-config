@@ -1,5 +1,5 @@
-//! `keymap …` subcommands: read/write the live keymap over the host
-//! protocol (v1.2, KEYMAP_READ/KEYMAP_WRITE) and search the keycode table.
+//! `keymap …` subcommands: read/write the live keymap through Rynk and search
+//! the legacy QMK/VIA keycode table used by the CLI's text format.
 //!
 //! Everything transport-independent (argument parsing, request shaping,
 //! response rendering) is a pure function so it can be unit-tested against
@@ -7,13 +7,16 @@
 
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
-use glove80_host_protocol::{Capabilities, KeymapEntry};
+#[cfg(test)]
+use glove80_host_protocol::Capabilities;
+use glove80_host_protocol::KeymapEntry;
 
+#[cfg(test)]
 use crate::hostproto::HostClient;
 use crate::keycodes;
-use crate::transport::{self, Selector};
+use crate::transport::Selector;
 
-/// Edit the keymap over the RMK host protocol (USB raw HID or BLE).
+/// Edit the keymap over Rynk (USB CDC serial or native BLE GATT).
 #[derive(Subcommand)]
 pub enum KeymapCommand {
     /// Read a layer (default 0) — or every layer — as a keycode grid.
@@ -47,35 +50,34 @@ pub enum KeymapCommand {
 }
 
 /// Grid positions with no physical key on the Glove80's 6x14 matrix.
+#[cfg(test)]
 const GLOVE80_HOLES: [u8; 4] = [5, 8, 75, 78];
-const GLOVE80_ROWS: u8 = 6;
-const GLOVE80_COLS: u8 = 14;
-
-fn holes_for(capabilities: &Capabilities) -> &'static [u8] {
-    if capabilities.keymap_rows == GLOVE80_ROWS && capabilities.keymap_cols == GLOVE80_COLS {
-        &GLOVE80_HOLES
-    } else {
-        &[]
-    }
-}
-
 /// Parse a key position: a flat grid index or "row,col".
 pub fn parse_key_position(text: &str, rows: u8, cols: u8) -> Result<u8> {
     let total = u16::from(rows) * u16::from(cols);
     let key = if let Some((row, col)) = text.split_once(',') {
-        let row: u16 = row.trim().parse().with_context(|| format!("bad row in '{text}'"))?;
-        let col: u16 = col.trim().parse().with_context(|| format!("bad column in '{text}'"))?;
+        let row: u16 = row
+            .trim()
+            .parse()
+            .with_context(|| format!("bad row in '{text}'"))?;
+        let col: u16 = col
+            .trim()
+            .parse()
+            .with_context(|| format!("bad column in '{text}'"))?;
         if row >= u16::from(rows) || col >= u16::from(cols) {
             bail!("position '{text}' is outside the {rows}x{cols} grid");
         }
         row * u16::from(cols) + col
     } else {
-        text.trim().parse().with_context(|| {
-            format!("key '{text}' must be a flat index or row,col")
-        })?
+        text.trim()
+            .parse()
+            .with_context(|| format!("key '{text}' must be a flat index or row,col"))?
     };
     if key >= total {
-        bail!("key {key} is out of range (grid has positions 0..{})", total - 1);
+        bail!(
+            "key {key} is out of range (grid has positions 0..{})",
+            total - 1
+        );
     }
     Ok(key as u8)
 }
@@ -91,11 +93,16 @@ pub fn parse_set_entries(arguments: &[String], rows: u8, cols: u8) -> Result<Vec
     }
     let mut entries = Vec::with_capacity(arguments.len() / 3);
     for triple in arguments.chunks(3) {
-        let layer: u8 =
-            triple[0].parse().with_context(|| format!("bad layer '{}'", triple[0]))?;
+        let layer: u8 = triple[0]
+            .parse()
+            .with_context(|| format!("bad layer '{}'", triple[0]))?;
         let key = parse_key_position(&triple[1], rows, cols)?;
         let keycode = keycodes::parse_keycode(&triple[2])?;
-        entries.push(KeymapEntry { layer, key, keycode });
+        entries.push(KeymapEntry {
+            layer,
+            key,
+            keycode,
+        });
     }
     Ok(entries)
 }
@@ -120,15 +127,17 @@ pub fn render_layer(
             keycodes::format_keycode(code)
         }
     };
-    let cells: Vec<String> =
-        keycodes_flat.iter().enumerate().map(|(index, &code)| cell(index, code)).collect();
+    let cells: Vec<String> = keycodes_flat
+        .iter()
+        .enumerate()
+        .map(|(index, &code)| cell(index, code))
+        .collect();
     let mut widths = vec![0usize; cols];
     for (index, text) in cells.iter().enumerate() {
         let column = index % cols;
         widths[column] = widths[column].max(text.len());
     }
-    let mut out =
-        format!("layer {layer} ({rows}x{cols} grid, key = row*{cols} + col):\n");
+    let mut out = format!("layer {layer} ({rows}x{cols} grid, key = row*{cols} + col):\n");
     for (row_index, row) in cells.chunks(cols).enumerate() {
         let line = row
             .iter()
@@ -144,11 +153,7 @@ pub fn render_layer(
 
 /// Render the outcome of a write: requested vs stored, flagging any entry
 /// the firmware could not represent exactly.
-pub fn render_write_outcome(
-    entries: &[KeymapEntry],
-    readback: &[u16],
-    cols: u8,
-) -> String {
+pub fn render_write_outcome(entries: &[KeymapEntry], readback: &[u16], cols: u8) -> String {
     let mut out = String::new();
     let mut lossy = 0usize;
     for (entry, &stored) in entries.iter().zip(readback) {
@@ -179,7 +184,11 @@ pub fn render_write_outcome(
             "{lossy} of {} entr{} stored differently than requested (no exact VIA \
              representation); the stored value is what the keyboard will do",
             entries.len(),
-            if entries.len() == 1 { "y was" } else { "ies were" },
+            if entries.len() == 1 {
+                "y was"
+            } else {
+                "ies were"
+            },
         ));
     } else {
         out.push_str(&format!(
@@ -197,9 +206,7 @@ pub fn run(selector: &Selector, command: &KeymapCommand) -> Result<()> {
         println!("{}", render_find(fragment));
         return Ok(());
     }
-    let transport = transport::connect(selector)?;
-    let mut client = HostClient::new(transport);
-    run_with_client(&mut client, command)
+    crate::rynk_client::run_keymap(selector, command)
 }
 
 pub fn render_find(fragment: &str) -> String {
@@ -224,53 +231,6 @@ pub fn render_find(fragment: &str) -> String {
          mod-taps, LSFT(kc)-style modifiers, TD(n), MACRO(n), USER(n)",
     );
     out
-}
-
-/// Transport-independent dispatch (unit-tested with the mock transport).
-pub fn run_with_client(client: &mut HostClient, command: &KeymapCommand) -> Result<()> {
-    match command {
-        KeymapCommand::Read { layer, all, raw } => {
-            let capabilities = client.keymap_capabilities()?;
-            let holes = holes_for(&capabilities);
-            let layers: Vec<u8> = if *all {
-                (0..capabilities.layer_capacity).collect()
-            } else {
-                vec![layer.unwrap_or(0)]
-            };
-            for (index, &layer) in layers.iter().enumerate() {
-                if index > 0 {
-                    println!();
-                }
-                let keycodes_flat = client.read_keymap_layer(layer)?;
-                println!(
-                    "{}",
-                    render_layer(
-                        layer,
-                        &keycodes_flat,
-                        capabilities.keymap_rows,
-                        capabilities.keymap_cols,
-                        holes,
-                        *raw,
-                    )
-                );
-            }
-        }
-        KeymapCommand::Set { entries } => {
-            let capabilities = client.keymap_capabilities()?;
-            let parsed = parse_set_entries(
-                entries,
-                capabilities.keymap_rows,
-                capabilities.keymap_cols,
-            )?;
-            let readback = client.write_keymap(&parsed)?;
-            println!(
-                "{}",
-                render_write_outcome(&parsed, &readback, capabilities.keymap_cols)
-            );
-        }
-        KeymapCommand::Find { fragment } => println!("{}", render_find(fragment)),
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -318,8 +278,10 @@ mod tests {
 
     #[test]
     fn missing_keymap_feature_is_refused_client_side() {
-        let capabilities =
-            Capabilities { feature_bits: 0x3F, ..keymap_capabilities() };
+        let capabilities = Capabilities {
+            feature_bits: 0x3F,
+            ..keymap_capabilities()
+        };
         let mock = MockTransport::new().expect(caps_handler(capabilities));
         let mut client = HostClient::new(Box::new(mock));
         let error = client.read_keymap_layer(0).unwrap_err();
@@ -331,7 +293,12 @@ mod tests {
         let mock = MockTransport::new();
         let requests = mock.requests_handle();
         let read_handler = |request_id: u8, request: &Request| {
-            let Request::KeymapRead { layer, start_key, max_count } = request else {
+            let Request::KeymapRead {
+                layer,
+                start_key,
+                max_count,
+            } = request
+            else {
                 panic!("expected KeymapRead, got {request:?}");
             };
             assert_eq!(*layer, 1);
@@ -367,7 +334,12 @@ mod tests {
         for (request, (expected_start, expected_count)) in
             requests[1..].iter().zip([(0u8, 32u8), (32, 32), (64, 20)])
         {
-            let Request::KeymapRead { start_key, max_count, .. } = request else {
+            let Request::KeymapRead {
+                start_key,
+                max_count,
+                ..
+            } = request
+            else {
                 panic!("expected KeymapRead, got {request:?}");
             };
             assert_eq!((*start_key, *max_count), (expected_start, expected_count));
@@ -383,8 +355,22 @@ mod tests {
                     panic!("expected KeymapWrite, got {request:?}");
                 };
                 assert_eq!(entries.len(), 2);
-                assert_eq!(entries[0], KeymapEntry { layer: 0, key: 28, keycode: 0x0004 });
-                assert_eq!(entries[1], KeymapEntry { layer: 1, key: 31, keycode: 0x52C3 });
+                assert_eq!(
+                    entries[0],
+                    KeymapEntry {
+                        layer: 0,
+                        key: 28,
+                        keycode: 0x0004
+                    }
+                );
+                assert_eq!(
+                    entries[1],
+                    KeymapEntry {
+                        layer: 1,
+                        key: 31,
+                        keycode: 0x52C3
+                    }
+                );
                 // Second entry is stored lossily: TT(3) has no RMK
                 // representation and comes back as KC_NO.
                 vec![Response {
@@ -398,7 +384,14 @@ mod tests {
             });
         let mut client = HostClient::new(Box::new(mock));
         let entries = parse_set_entries(
-            &["0".into(), "2,0".into(), "KC_A".into(), "1".into(), "31".into(), "TT(3)".into()],
+            &[
+                "0".into(),
+                "2,0".into(),
+                "KC_A".into(),
+                "1".into(),
+                "31".into(),
+                "TT(3)".into(),
+            ],
             6,
             14,
         )
@@ -407,7 +400,10 @@ mod tests {
         assert_eq!(readback, vec![0x0004, 0x0000]);
 
         let rendered = render_write_outcome(&entries, &readback, 14);
-        assert!(rendered.contains("layer 0 key 28 (r2,c0): KC_A"), "{rendered}");
+        assert!(
+            rendered.contains("layer 0 key 28 (r2,c0): KC_A"),
+            "{rendered}"
+        );
         assert!(rendered.contains("LOSSY"), "{rendered}");
         assert!(rendered.contains("TT(3)"), "{rendered}");
         assert!(rendered.contains("KC_NO"), "{rendered}");
@@ -428,7 +424,11 @@ mod tests {
                 }]
             });
         let mut client = HostClient::new(Box::new(mock));
-        let entries = [KeymapEntry { layer: 0, key: 10, keycode: 0x0004 }];
+        let entries = [KeymapEntry {
+            layer: 0,
+            key: 10,
+            keycode: 0x0004,
+        }];
         let error = client.write_keymap(&entries).unwrap_err();
         assert!(error.to_string().contains("OUT_OF_RANGE"), "{error}");
         assert!(error.to_string().contains("all-or-nothing"), "{error}");
@@ -440,11 +440,19 @@ mod tests {
         let mock = MockTransport::new().expect(caps_handler(keymap_capabilities()));
         let mut client = HostClient::new(Box::new(mock));
         let error = client
-            .write_keymap(&[KeymapEntry { layer: 9, key: 0, keycode: 4 }])
+            .write_keymap(&[KeymapEntry {
+                layer: 9,
+                key: 0,
+                keycode: 4,
+            }])
             .unwrap_err();
         assert!(error.to_string().contains("layer 9"), "{error}");
         let error = client
-            .write_keymap(&[KeymapEntry { layer: 0, key: 84, keycode: 4 }])
+            .write_keymap(&[KeymapEntry {
+                layer: 0,
+                key: 84,
+                keycode: 4,
+            }])
             .unwrap_err();
         assert!(error.to_string().contains("key 84"), "{error}");
         let error = client.read_keymap_layer(4).unwrap_err();
@@ -463,13 +471,34 @@ mod tests {
         assert!(parse_key_position("x", 6, 14).is_err());
 
         let entries = parse_set_entries(
-            &["0".into(), "28".into(), "KC_A".into(), "2".into(), "1,3".into(), "MO(2)".into()],
+            &[
+                "0".into(),
+                "28".into(),
+                "KC_A".into(),
+                "2".into(),
+                "1,3".into(),
+                "MO(2)".into(),
+            ],
             6,
             14,
         )
         .unwrap();
-        assert_eq!(entries[0], KeymapEntry { layer: 0, key: 28, keycode: 0x0004 });
-        assert_eq!(entries[1], KeymapEntry { layer: 2, key: 17, keycode: 0x5222 });
+        assert_eq!(
+            entries[0],
+            KeymapEntry {
+                layer: 0,
+                key: 28,
+                keycode: 0x0004
+            }
+        );
+        assert_eq!(
+            entries[1],
+            KeymapEntry {
+                layer: 2,
+                key: 17,
+                keycode: 0x5222
+            }
+        );
         assert!(parse_set_entries(&["0".into(), "28".into()], 6, 14).is_err());
     }
 

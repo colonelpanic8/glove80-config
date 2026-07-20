@@ -24,8 +24,7 @@
 
 use glove80_compositor::{Activation, Compositor, Condition, MAX_RECORDS, Record};
 use glove80_host_protocol::config::{
-    ConfigActivation, ConfigError as BlobError, ConfigGate, LightingConfig,
-    decode_lighting_config,
+    ConfigActivation, ConfigError as BlobError, ConfigGate, LightingConfig, decode_lighting_config,
 };
 
 use crate::lighting::NUM_LEDS;
@@ -117,7 +116,8 @@ pub fn apply_decoded(
     // One reusable scratch set: build local, swap it in, rebuild as remote.
     let mut half = [Record::new(Activation::Always); MAX_RECORDS];
     let n = build_half(cfg, false, &mut half)?;
-    comp.replace_records(&half[..n]).map_err(|_| ConfigError::Capacity)?;
+    comp.replace_records(&half[..n])
+        .map_err(|_| ConfigError::Capacity)?;
 
     // Persisted toggles keep the runtime state; the rest take their stored
     // initial state (see the module docs for the boot caveat).

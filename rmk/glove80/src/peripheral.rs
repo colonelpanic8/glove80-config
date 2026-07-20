@@ -4,7 +4,7 @@
 // `lighting` selects on the host-request channel, so the module is compiled
 // on both halves; the peripheral registers no transport pump, so the channel
 // never fires here (host transports are central-only). Split lighting
-// forwarding (Phase 3) arrives instead through the vendored split app pipe,
+// forwarding (Phase 3) arrives instead through RMK's split app channel,
 // applied by the lighting task via `split_lighting.rs`.
 mod config_store;
 mod host_proto;

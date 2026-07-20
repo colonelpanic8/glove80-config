@@ -1,7 +1,7 @@
 //! Keymap section of the canonical configuration file: `[[layer]]` entries
 //! with stable IDs, display names, and a keycode grid, plus the apply and
-//! export paths that move them over the v1.2 KEYMAP_READ/KEYMAP_WRITE
-//! commands.
+//! export paths. Production device I/O uses Rynk; the older host-protocol
+//! backend remains here for isolated compatibility tests.
 //!
 //! Layer names and stable IDs are **host-side only**: the firmware knows
 //! plain slot numbers 0..layer_capacity. A layer's position in the file is
@@ -16,8 +16,10 @@
 use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
 use glove80_host_protocol::KeymapEntry;
 
+#[cfg(test)]
 use crate::hostproto::HostClient;
 use crate::keycodes;
 
@@ -280,7 +282,11 @@ pub enum KeymapStage {
     LayerBegun { slot: u8, id: String },
     /// One KEYMAP_WRITE batch acknowledged; `written` of `total` positions
     /// of this layer are now stored.
-    Batch { slot: u8, written: usize, total: usize },
+    Batch {
+        slot: u8,
+        written: usize,
+        total: usize,
+    },
     /// A layer's grid is fully written.
     LayerDone { slot: u8, lossy: usize },
 }
@@ -297,6 +303,7 @@ pub struct KeymapReport {
 
 /// Check the device's advertised keymap shape against the canonical grid
 /// and the file's layer usage.
+#[cfg(test)]
 pub fn check_device_grid(
     capabilities: &glove80_host_protocol::Capabilities,
     plans: &[LayerPlan],
@@ -309,7 +316,10 @@ pub fn check_device_grid(
             capabilities.keymap_cols
         );
     }
-    if let Some(plan) = plans.iter().find(|plan| plan.slot >= capabilities.layer_capacity) {
+    if let Some(plan) = plans
+        .iter()
+        .find(|plan| plan.slot >= capabilities.layer_capacity)
+    {
         bail!(
             "layer \"{}\" occupies slot {} but the keyboard advertises only \
              {} layer(s)",
@@ -327,6 +337,7 @@ pub fn check_device_grid(
 /// device-side, but on a mid-apply failure earlier batches stay written.
 /// The error then states exactly which layers/positions were stored;
 /// nothing after the failed batch is attempted.
+#[cfg(test)]
 pub fn apply_keymap(
     client: &mut HostClient,
     plans: &[LayerPlan],
@@ -345,7 +356,10 @@ pub fn apply_keymap(
     let mut report = KeymapReport::default();
     let mut done: Vec<&str> = Vec::new();
     for plan in plans {
-        stage(KeymapStage::LayerBegun { slot: plan.slot, id: plan.id.clone() });
+        stage(KeymapStage::LayerBegun {
+            slot: plan.slot,
+            id: plan.id.clone(),
+        });
         let entries: Vec<KeymapEntry> = plan
             .codes
             .iter()
@@ -379,7 +393,9 @@ pub fn apply_keymap(
             for (entry, &stored) in batch.iter().zip(&readback) {
                 if stored != entry.keycode {
                     layer_lossy += 1;
-                    report.lossy.push((entry.layer, entry.key, entry.keycode, stored));
+                    report
+                        .lossy
+                        .push((entry.layer, entry.key, entry.keycode, stored));
                 }
             }
             written_in_layer += batch.len();
@@ -390,7 +406,10 @@ pub fn apply_keymap(
                 total: entries.len(),
             });
         }
-        stage(KeymapStage::LayerDone { slot: plan.slot, lossy: layer_lossy });
+        stage(KeymapStage::LayerDone {
+            slot: plan.slot,
+            lossy: layer_lossy,
+        });
         done.push(&plan.id);
     }
     Ok(report)
@@ -398,6 +417,7 @@ pub fn apply_keymap(
 
 /// Read every layer the device advertises, for export. Returns
 /// `(slot, codes)` pairs; the caller synthesizes IDs.
+#[cfg(test)]
 pub fn read_all_layers(client: &mut HostClient) -> Result<Vec<Vec<u16>>> {
     let capabilities = client.keymap_capabilities()?;
     check_device_grid(&capabilities, &[])?;
@@ -444,7 +464,10 @@ pub fn render_keymap_summary(plans: &[LayerPlan]) -> String {
             "layer {} \"{}\"{}: {bound} bound key(s)\n",
             plan.slot,
             plan.id,
-            plan.name.as_deref().map(|name| format!(" ({name})")).unwrap_or_default(),
+            plan.name
+                .as_deref()
+                .map(|name| format!(" ({name})"))
+                .unwrap_or_default(),
         ));
     }
     out.pop();
@@ -479,8 +502,14 @@ mod tests {
         .unwrap();
         assert_eq!(
             tokens,
-            ["KC_A", "LT(1,KC_ESC)", "MT(MOD_LSFT|MOD_LALT,KC_A)", "--", "KC_B"]
-                .map(str::to_string)
+            [
+                "KC_A",
+                "LT(1,KC_ESC)",
+                "MT(MOD_LSFT|MOD_LALT,KC_A)",
+                "--",
+                "KC_B"
+            ]
+            .map(str::to_string)
         );
         assert!(tokenize_grid("LT(1, KC_A").is_err());
         assert!(tokenize_grid("LT 1)").is_err());
@@ -532,15 +561,15 @@ mod tests {
         assert_eq!(plans.len(), 1); // keys-less layers produce no plan
         assert_eq!(plans[0].slot, 0);
 
-        let error =
-            build_layer_plans(&[layer("a", None), layer("a", None)]).unwrap_err();
+        let error = build_layer_plans(&[layer("a", None), layer("a", None)]).unwrap_err();
         assert!(error.to_string().contains("earlier layer"), "{error}");
         let error = build_layer_plans(&[layer("3", None)]).unwrap_err();
         assert!(error.to_string().contains("purely numeric"), "{error}");
         let error = build_layer_plans(&[layer("", None)]).unwrap_err();
         assert!(error.to_string().contains("empty"), "{error}");
-        let nine: Vec<LayerEntry> =
-            (0..9).map(|index| layer(&format!("l{index}"), None)).collect();
+        let nine: Vec<LayerEntry> = (0..9)
+            .map(|index| layer(&format!("l{index}"), None))
+            .collect();
         let error = build_layer_plans(&nine).unwrap_err();
         assert!(error.to_string().contains("capacity"), "{error}");
     }
@@ -548,13 +577,27 @@ mod tests {
     #[test]
     fn layer_refs_resolve_ids_and_pass_integers() {
         let layers = vec![
-            LayerEntry { id: "base".into(), name: None, keys: None },
-            LayerEntry { id: "lower".into(), name: None, keys: None },
+            LayerEntry {
+                id: "base".into(),
+                name: None,
+                keys: None,
+            },
+            LayerEntry {
+                id: "lower".into(),
+                name: None,
+                keys: None,
+            },
         ];
-        assert_eq!(resolve_layer_ref(&LayerRef::Id("lower".into()), &layers).unwrap(), 1);
+        assert_eq!(
+            resolve_layer_ref(&LayerRef::Id("lower".into()), &layers).unwrap(),
+            1
+        );
         assert_eq!(resolve_layer_ref(&LayerRef::Index(7), &layers).unwrap(), 7);
         let error = resolve_layer_ref(&LayerRef::Id("upper".into()), &layers).unwrap_err();
-        assert!(error.to_string().contains("unknown layer id \"upper\""), "{error}");
+        assert!(
+            error.to_string().contains("unknown layer id \"upper\""),
+            "{error}"
+        );
         assert!(error.to_string().contains("\"base\", \"lower\""), "{error}");
         let error = resolve_layer_ref(&LayerRef::Id("x".into()), &[]).unwrap_err();
         assert!(error.to_string().contains("none"), "{error}");
@@ -565,13 +608,7 @@ mod tests {
         let mut used = vec![0u16; GRID_SIZE];
         used[10] = 0x0004;
         let empty = vec![0u16; GRID_SIZE];
-        let entries = layers_to_entries(&[
-            used.clone(),
-            empty.clone(),
-            used,
-            empty.clone(),
-            empty,
-        ]);
+        let entries = layers_to_entries(&[used.clone(), empty.clone(), used, empty.clone(), empty]);
         // Interior empty layer 1 kept (position = slot), trailing dropped.
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].id, "layer0");

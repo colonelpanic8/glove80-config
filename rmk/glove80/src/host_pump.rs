@@ -3,7 +3,7 @@
 //!
 //! One pump per transport, both driven by [`TransportPump`] (registered as an
 //! RMK processor from `central.rs`). Each pump handles one message at a time:
-//! reassemble frames from the vendored raw pipes (`rmk::host_proto_pipe`),
+//! reassemble frames from RMK's raw pipes (`rmk::vendor_transport`),
 //! decode, hand the request to the lighting task, await that request's
 //! response, encode it, and frame it back out. Waiting for the response
 //! before reading further frames enforces the protocol's "one message in
@@ -21,11 +21,11 @@ use glove80_host_protocol::{
     encode_response,
 };
 use rmk::event::{EventSubscriber, LayerChangeEvent, SubscribableEvent};
-use rmk::host_proto_pipe::{
-    BLE_MAX_CHUNK_LEN, BleChunk, HOSTP_BLE_ATT_PAYLOAD, HOSTP_BLE_RX, HOSTP_BLE_TX, HOSTP_USB_RX,
-    HOSTP_USB_TX, USB_REPORT_LEN,
-};
 use rmk::processor::Processor;
+use rmk::vendor_transport::{
+    BLE_MAX_CHUNK_LEN, BleChunk, USB_REPORT_LEN, VENDOR_BLE_ATT_PAYLOAD, VENDOR_BLE_RX,
+    VENDOR_BLE_TX, VENDOR_USB_RX, VENDOR_USB_TX,
+};
 
 use crate::host_proto::{BLE_RESPONSES, HOST_REQUESTS, HostRequest, Transport, USB_RESPONSES};
 
@@ -79,7 +79,11 @@ async fn dispatch(
     match decode_request(msg) {
         Ok((request_id, request)) => {
             HOST_REQUESTS
-                .send(HostRequest { transport, request_id, request })
+                .send(HostRequest {
+                    transport,
+                    request_id,
+                    request,
+                })
                 .await;
             let resp = match transport {
                 Transport::Usb => USB_RESPONSES.receive().await,
@@ -88,7 +92,10 @@ async fn dispatch(
             match encode_response(&resp.response, out) {
                 Ok(len) => Some((len, resp.enter_bootloader)),
                 Err(e) => {
-                    defmt::error!("host-proto: response encode failed: {}", defmt::Debug2Format(&e));
+                    defmt::error!(
+                        "host-proto: response encode failed: {}",
+                        defmt::Debug2Format(&e)
+                    );
                     None
                 }
             }
@@ -127,12 +134,15 @@ async fn usb_pump() -> ! {
     let mut reasm: Reassembler<MAX_MESSAGE_LEN> = Reassembler::new();
     let mut out = [0u8; MAX_MESSAGE_LEN];
     loop {
-        let report = HOSTP_USB_RX.receive().await;
+        let report = VENDOR_USB_RX.receive().await;
         match reasm.push(&report) {
             Ok(Some(msg)) => {
                 if let Some((len, reboot)) = dispatch(Transport::Usb, msg, &mut out).await {
                     if let Err(e) = send_usb_response(&out[..len]).await {
-                        defmt::error!("host-proto: USB framing failed: {}", defmt::Debug2Format(&e));
+                        defmt::error!(
+                            "host-proto: USB framing failed: {}",
+                            defmt::Debug2Format(&e)
+                        );
                     } else if reboot {
                         reboot_to_bootloader().await;
                     }
@@ -150,23 +160,26 @@ async fn send_usb_response(msg: &[u8]) -> Result<(), FrameError> {
     for index in 0..frames {
         let mut report = [0u8; USB_REPORT_LEN];
         write_frame(msg, USB_REPORT_LEN, index, &mut report)?;
-        HOSTP_USB_TX.send(report).await;
+        VENDOR_USB_TX.send(report).await;
     }
     Ok(())
 }
 
 /// BLE pump: variable-length ATT chunks; responses sized to the negotiated
-/// ATT payload the vendored GATT layer reports.
+/// ATT payload RMK's vendor GATT layer reports.
 async fn ble_pump() -> ! {
     let mut reasm: Reassembler<MAX_MESSAGE_LEN> = Reassembler::new();
     let mut out = [0u8; MAX_MESSAGE_LEN];
     loop {
-        let chunk = HOSTP_BLE_RX.receive().await;
+        let chunk = VENDOR_BLE_RX.receive().await;
         match reasm.push(&chunk.data[..chunk.len as usize]) {
             Ok(Some(msg)) => {
                 if let Some((len, reboot)) = dispatch(Transport::Ble, msg, &mut out).await {
                     if let Err(e) = send_ble_response(&out[..len]).await {
-                        defmt::error!("host-proto: BLE framing failed: {}", defmt::Debug2Format(&e));
+                        defmt::error!(
+                            "host-proto: BLE framing failed: {}",
+                            defmt::Debug2Format(&e)
+                        );
                     } else if reboot {
                         reboot_to_bootloader().await;
                     }
@@ -181,14 +194,14 @@ async fn ble_pump() -> ! {
 /// Chunk one encoded response into notify-sized chunks: the frame payload is
 /// `min(negotiated ATT payload - FRAME_HEADER_LEN, 255)` per PROTOCOL.md.
 async fn send_ble_response(msg: &[u8]) -> Result<(), FrameError> {
-    let att_payload = HOSTP_BLE_ATT_PAYLOAD.load(core::sync::atomic::Ordering::Relaxed) as usize;
+    let att_payload = VENDOR_BLE_ATT_PAYLOAD.load(core::sync::atomic::Ordering::Relaxed) as usize;
     let chunk_len = att_payload.clamp(FRAME_HEADER_LEN + 1, BLE_MAX_CHUNK_LEN);
     let frames = frame_count(msg.len(), chunk_len)?;
     for index in 0..frames {
         let mut chunk = BleChunk::empty();
         let used = write_frame(msg, chunk_len, index, &mut chunk.data)?;
         chunk.len = used as u16;
-        HOSTP_BLE_TX.send(chunk).await;
+        VENDOR_BLE_TX.send(chunk).await;
     }
     Ok(())
 }

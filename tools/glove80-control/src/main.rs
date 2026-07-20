@@ -11,16 +11,19 @@ mod keymapcfg;
 mod lightcfg;
 mod lighting;
 pub mod runtime_manifest;
+mod rynk_client;
+mod rynk_keycode;
 mod transport;
 mod version;
 
 #[derive(Parser)]
-#[command(about = "Control Glove80 keyboards over the RMK host protocol \
-                   (USB raw HID / BLE): lighting, keymap, persistent config, \
-                   version, and bootloader entry")]
+#[command(about = "Control Glove80 keyboards: keymaps over Rynk; lighting, \
+                   persistent config, version, and bootloader entry over the \
+                   Glove80 host protocol")]
 struct Cli {
-    /// Device to talk to: a /dev/hidraw* path or a BLE address
-    /// (AA:BB:CC:DD:EE:FF). Default is auto-discovery.
+    /// Device to talk to: a /dev/hidraw* path for Glove80 commands, a
+    /// /dev/ttyACM* path for Rynk-only keymap commands, or a BLE address.
+    /// Combined config commands discover the sibling Rynk CDC interface.
     #[arg(long, global = true)]
     device: Option<PathBuf>,
 
@@ -40,8 +43,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Manage the canonical configuration file — keymap layers + lighting
-    /// in one TOML (apply/export/show/validate over host protocol v1.1
-    /// lighting sessions and v1.2 keymap writes).
+    /// in one TOML (Rynk keymaps plus host-protocol lighting sessions).
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
@@ -57,8 +59,7 @@ enum Command {
         #[command(subcommand)]
         command: lighting::LightingCommand,
     },
-    /// Read and edit the live keymap over USB raw HID or BLE (RMK host
-    /// protocol v1.2). Uses the same store Vial edits.
+    /// Read and edit the live keymap through RMK's native Rynk protocol.
     Keymap {
         #[command(subcommand)]
         command: keymap::KeymapCommand,
@@ -88,9 +89,9 @@ enum ConfigCommand {
     ///
     /// FILE is canonical TOML (start from `examples/glove80.toml`) or a
     /// raw lighting blob (detected by content or a `.bin` extension).
-    /// The keymap section is written first via batched KEYMAP_WRITE with
-    /// read-back verification — best-effort per batch, NOT atomic across
-    /// batches; a failure reports exactly what was written. The lighting
+    /// The keymap section is written first through Rynk with read-back
+    /// verification — best-effort per page, NOT atomic across the whole
+    /// keymap; a failure reports exactly what was written. The lighting
     /// section then goes through one atomic CONFIG session: the device
     /// keeps the complete old lighting config or gets the complete new
     /// one, never a hybrid. Either section may be omitted.

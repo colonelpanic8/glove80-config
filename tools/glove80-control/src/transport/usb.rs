@@ -49,7 +49,11 @@ struct HidrawReportDescriptor {
 }
 
 fn raw_info(fd: libc::c_int) -> Result<(u16, u16)> {
-    let mut info = HidrawDevinfo { bustype: 0, vendor: 0, product: 0 };
+    let mut info = HidrawDevinfo {
+        bustype: 0,
+        vendor: 0,
+        product: 0,
+    };
     // Safety: HIDIOCGRAWINFO writes a HidrawDevinfo into the pointed-to struct.
     let rc = unsafe { libc::ioctl(fd, HIDIOCGRAWINFO, &mut info) };
     if rc < 0 {
@@ -63,7 +67,10 @@ fn report_descriptor(fd: libc::c_int) -> Result<Vec<u8>> {
     // Safety: HIDIOCGRDESCSIZE writes an int.
     let rc = unsafe { libc::ioctl(fd, HIDIOCGRDESCSIZE, &mut size) };
     if rc < 0 {
-        bail!("HIDIOCGRDESCSIZE failed: {}", std::io::Error::last_os_error());
+        bail!(
+            "HIDIOCGRDESCSIZE failed: {}",
+            std::io::Error::last_os_error()
+        );
     }
     let mut descriptor = HidrawReportDescriptor {
         size: size.clamp(0, HID_MAX_DESCRIPTOR_SIZE as libc::c_int) as u32,
@@ -88,7 +95,9 @@ pub fn descriptor_usages(descriptor: &[u8]) -> Vec<(u16, u32)> {
         let prefix = descriptor[position];
         if prefix == 0xFE {
             // Long item: [0xFE, bDataSize, bLongItemTag, data...]
-            let Some(&data_len) = descriptor.get(position + 1) else { break };
+            let Some(&data_len) = descriptor.get(position + 1) else {
+                break;
+            };
             position += 3 + data_len as usize;
             continue;
         }
@@ -122,8 +131,7 @@ pub fn descriptor_usages(descriptor: &[u8]) -> Vec<(u16, u32)> {
 }
 
 fn matches_vendor_usage(descriptor: &[u8]) -> bool {
-    descriptor_usages(descriptor)
-        .contains(&(ids::USB_VENDOR_USAGE_PAGE, ids::USB_VENDOR_USAGE))
+    descriptor_usages(descriptor).contains(&(ids::USB_VENDOR_USAGE_PAGE, ids::USB_VENDOR_USAGE))
 }
 
 pub struct UsbTransport {
@@ -171,7 +179,10 @@ impl UsbTransport {
                 ids::USB_VENDOR_USAGE
             );
         }
-        Ok(UsbTransport { file, path: path.to_path_buf() })
+        Ok(UsbTransport {
+            file,
+            path: path.to_path_buf(),
+        })
     }
 
     /// Enumerate `/dev/hidraw*` and open the Glove80 interface whose report
@@ -207,11 +218,15 @@ impl UsbTransport {
                 continue;
             };
             let fd = file.as_raw_fd();
-            let Ok((vid, pid)) = raw_info(fd) else { continue };
+            let Ok((vid, pid)) = raw_info(fd) else {
+                continue;
+            };
             if (vid, pid) != (ids::USB_VID, ids::USB_PID) {
                 continue;
             }
-            let Ok(descriptor) = report_descriptor(fd) else { continue };
+            let Ok(descriptor) = report_descriptor(fd) else {
+                continue;
+            };
             if matches_vendor_usage(&descriptor) {
                 return Ok(UsbTransport { file, path });
             }
@@ -271,7 +286,11 @@ impl Transport for UsbTransport {
         // Safety: valid pollfd array of length 1.
         let ready = unsafe { libc::poll(&mut poll_fd, 1, millis.max(1)) };
         if ready < 0 {
-            bail!("poll on {} failed: {}", self.path.display(), std::io::Error::last_os_error());
+            bail!(
+                "poll on {} failed: {}",
+                self.path.display(),
+                std::io::Error::last_os_error()
+            );
         }
         if ready == 0 {
             return Ok(None);

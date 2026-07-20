@@ -10,7 +10,10 @@ const fn parse_u8(s: &str) -> u8 {
     let mut value: u8 = 0;
     let mut i = 0;
     while i < bytes.len() {
-        assert!(bytes[i] >= b'0' && bytes[i] <= b'9', "version component is not a number");
+        assert!(
+            bytes[i] >= b'0' && bytes[i] <= b'9',
+            "version component is not a number"
+        );
         value = value * 10 + (bytes[i] - b'0');
         i += 1;
     }
@@ -26,13 +29,19 @@ pub const FW_PATCH: u8 = parse_u8(env!("CARGO_PKG_VERSION_PATCH"));
 /// the build had no git available). See `build.rs::version_embedding`.
 pub const GIT_HASH: [u8; 8] = {
     let s = env!("GLOVE80_GIT_HASH").as_bytes();
-    assert!(s.len() == 8, "GLOVE80_GIT_HASH must be exactly 8 ASCII chars");
+    assert!(
+        s.len() == 8,
+        "GLOVE80_GIT_HASH must be exactly 8 ASCII chars"
+    );
     [s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]]
 };
 
 /// Whether the build tree had uncommitted changes.
 pub const GIT_DIRTY: bool = {
     let s = env!("GLOVE80_GIT_DIRTY").as_bytes();
-    assert!(s.len() == 1 && (s[0] == b'0' || s[0] == b'1'), "GLOVE80_GIT_DIRTY must be 0 or 1");
+    assert!(
+        s.len() == 1 && (s[0] == b'0' || s[0] == b'1'),
+        "GLOVE80_GIT_DIRTY must be 0 or 1"
+    );
     s[0] == b'1'
 };

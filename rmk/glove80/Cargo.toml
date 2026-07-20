@@ -16,13 +16,17 @@ glove80-compositor = { path = "../glove80-compositor" }
 # The host protocol codec (protocol/glove80-host-protocol/PROTOCOL.md),
 # shared read-only with the CLI and (via golden vectors) Lightbench.
 glove80-host-protocol = { path = "../../protocol/glove80-host-protocol" }
-# RMK, vendored as a git subtree at the previously pinned revision
-# (1156f82bddecda6d3bcfce60adb7a6504083b9e8) plus minimal Glove80 patches for
-# the host-protocol transports; every patch site is marked "GLOVE80 PATCH".
-rmk = { path = "../vendor/rmk/rmk", features = [
+# RMK, pinned by the dependencies/rmk submodule to the Glove80 integration fork
+# branch. The branch carries the generic extension APIs this firmware uses.
+rmk = { path = "../../dependencies/rmk/rmk", default-features = false, features = [
+    "defmt",
+    "storage",
+    "rynk",
+    "watchdog",
     "nrf52840_ble",
     "split",
     "async_matrix",
+    "shared_flash",
     "adafruit_bl",
 ] }
 nrf-sdc = { git = "https://github.com/alexmoon/nrf-sdc", rev = "abe49d22ebfc85fae134eb082fbfddf752016a55", features = [

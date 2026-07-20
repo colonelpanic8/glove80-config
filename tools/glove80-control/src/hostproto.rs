@@ -12,12 +12,13 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, bail, Context, Result};
 use glove80_host_protocol::frame::{frame_count, write_frame, Reassembler};
 use glove80_host_protocol::{
-    encode_request, feature, BootTarget, Capabilities, CellState, CellWrite, EffectKind,
-    KeymapEntry, Request, Response, ResponsePayload, Status, BOOTLOADER_MAGIC,
-    MAX_CELLS_PER_MESSAGE, MAX_CONFIG_DATA_PER_MESSAGE, MAX_KEYMAP_ENTRIES_PER_MESSAGE,
-    MAX_MESSAGE_LEN, MAX_PING_LEN, PROTOCOL_VERSION_MAJOR, PROTOCOL_VERSION_MINOR,
-    REQUEST_HEADER_LEN,
+    encode_request, feature, BootTarget, Capabilities, CellState, CellWrite, EffectKind, Request,
+    Response, ResponsePayload, Status, BOOTLOADER_MAGIC, MAX_CELLS_PER_MESSAGE,
+    MAX_CONFIG_DATA_PER_MESSAGE, MAX_MESSAGE_LEN, MAX_PING_LEN, PROTOCOL_VERSION_MAJOR,
+    PROTOCOL_VERSION_MINOR, REQUEST_HEADER_LEN,
 };
+#[cfg(test)]
+use glove80_host_protocol::{KeymapEntry, MAX_KEYMAP_ENTRIES_PER_MESSAGE};
 
 use crate::transport::Transport;
 
@@ -71,9 +72,7 @@ pub fn status_name(status: Status) -> &'static str {
             "BAD_OFFSET (config chunk out of sequence or past the announced length; \
              the session was aborted)"
         }
-        Status::ConfigIncomplete => {
-            "CONFIG_INCOMPLETE (commit before all announced bytes arrived)"
-        }
+        Status::ConfigIncomplete => "CONFIG_INCOMPLETE (commit before all announced bytes arrived)",
         Status::CrcMismatch => "CRC_MISMATCH (assembled config blob failed its CRC check)",
         Status::InvalidConfig => "INVALID_CONFIG (the blob failed structural validation)",
     }
@@ -122,7 +121,11 @@ impl HostClient {
             chunk.fill(0);
             let used = write_frame(&message[..length], chunk_len, index, &mut chunk)
                 .context("could not frame the request")?;
-            let outgoing = if self.transport.pads_chunks() { &chunk[..] } else { &chunk[..used] };
+            let outgoing = if self.transport.pads_chunks() {
+                &chunk[..]
+            } else {
+                &chunk[..used]
+            };
             self.transport.send_chunk(outgoing)?;
         }
 
@@ -183,6 +186,7 @@ impl HostClient {
 
     /// True when capabilities were fetched and the feature bit is absent
     /// (used to distinguish "device cannot" from transport failures).
+    #[cfg(test)]
     pub fn lacks_feature(&self, bit: u32) -> bool {
         self.capabilities
             .is_some_and(|capabilities| capabilities.feature_bits & bit == 0)
@@ -205,7 +209,10 @@ impl HostClient {
         let key_count = self.key_count()?;
         for &key in keys {
             if u16::from(key) >= key_count {
-                bail!("key {key} is out of range (device has keys 0..{})", key_count - 1);
+                bail!(
+                    "key {key} is out of range (device has keys 0..{})",
+                    key_count - 1
+                );
             }
         }
         Ok(())
@@ -217,7 +224,10 @@ impl HostClient {
         for cell in cells {
             let kind = cell.effect.kind;
             if capabilities.effect_mask & (1 << (kind as u16)) == 0 {
-                bail!("the keyboard does not advertise the {} effect", effect_name(kind));
+                bail!(
+                    "the keyboard does not advertise the {} effect",
+                    effect_name(kind)
+                );
             }
             if cell.effect.duty_percent > 100 {
                 bail!("duty must be between 0 and 100 percent");
@@ -246,7 +256,10 @@ impl HostClient {
                 pending_keys: pending_keys.to_vec(),
             }),
             (Status::PartialApply, ResponsePayload::OverlayAck { pending_keys }) => {
-                Ok(ApplyOutcome { partial: true, pending_keys: pending_keys.to_vec() })
+                Ok(ApplyOutcome {
+                    partial: true,
+                    pending_keys: pending_keys.to_vec(),
+                })
             }
             (status, _) => Err(status_error(operation, status)),
         }
@@ -293,7 +306,8 @@ impl HostClient {
         let mut outcome = ApplyOutcome::default();
         for batch in cells.chunks(batch_size) {
             let cells = heapless::Vec::from_slice(batch).expect("batch fits codec capacity");
-            let partial = self.overlay_write("the cell write", &Request::SetCells { ttl_ms, cells })?;
+            let partial =
+                self.overlay_write("the cell write", &Request::SetCells { ttl_ms, cells })?;
             outcome.partial |= partial.partial;
             outcome.pending_keys.extend(partial.pending_keys);
         }
@@ -340,7 +354,10 @@ impl HostClient {
             );
         }
         let cells = heapless::Vec::from_slice(cells).expect("bounded by max_batch");
-        self.overlay_write("the overlay replace", &Request::ReplaceOverlay { ttl_ms, cells })
+        self.overlay_write(
+            "the overlay replace",
+            &Request::ReplaceOverlay { ttl_ms, cells },
+        )
     }
 
     pub fn read_overlay(&mut self) -> Result<Vec<CellState>> {
@@ -427,11 +444,7 @@ impl HostClient {
     /// `stage` is called as each stage completes, for progress reporting.
     /// On any failure after BEGIN a best-effort CONFIG_ABORT is sent; either
     /// way the device keeps its previous configuration.
-    pub fn apply_config(
-        &mut self,
-        blob: &[u8],
-        mut stage: impl FnMut(ApplyStage),
-    ) -> Result<()> {
+    pub fn apply_config(&mut self, blob: &[u8], mut stage: impl FnMut(ApplyStage)) -> Result<()> {
         let capabilities = self.config_capabilities()?;
         if blob.len() > capabilities.max_config_blob_len as usize {
             bail!(
@@ -444,16 +457,25 @@ impl HostClient {
         let crc = glove80_host_protocol::crc32(blob);
         self.config_call(
             "the config session open (CONFIG_BEGIN)",
-            &Request::ConfigBegin { total_len: blob.len() as u32, blob_crc32: crc },
+            &Request::ConfigBegin {
+                total_len: blob.len() as u32,
+                blob_crc32: crc,
+            },
         )?;
-        stage(ApplyStage::Begun { total_len: blob.len(), blob_crc32: crc });
+        stage(ApplyStage::Begun {
+            total_len: blob.len(),
+            blob_crc32: crc,
+        });
 
         let mut sent = 0usize;
         for chunk in blob.chunks(chunk_len) {
             let data = heapless::Vec::from_slice(chunk).expect("chunk fits codec capacity");
             let result = self.config_call(
                 "the config data transfer (CONFIG_DATA)",
-                &Request::ConfigData { offset: sent as u32, data },
+                &Request::ConfigData {
+                    offset: sent as u32,
+                    data,
+                },
             );
             if let Err(error) = result {
                 // Leave no half-open session behind; BAD_OFFSET already
@@ -462,7 +484,10 @@ impl HostClient {
                 return Err(error);
             }
             sent += chunk.len();
-            stage(ApplyStage::Sent { bytes: sent, total: blob.len() });
+            stage(ApplyStage::Sent {
+                bytes: sent,
+                total: blob.len(),
+            });
         }
 
         self.config_call("the config commit (CONFIG_COMMIT)", &Request::ConfigCommit)?;
@@ -512,6 +537,7 @@ impl HostClient {
 
     /// Capability gate for the keymap commands (protocol v1.2): feature
     /// bit 7 must be advertised with a sane keymap extension.
+    #[cfg(test)]
     pub fn keymap_capabilities(&mut self) -> Result<Capabilities> {
         let capabilities =
             self.require_feature(feature::KEYMAP, "keymap editing (host protocol v1.2)")?;
@@ -524,12 +550,14 @@ impl HostClient {
         Ok(capabilities)
     }
 
+    #[cfg(test)]
     fn keymap_grid_size(capabilities: &Capabilities) -> u16 {
         u16::from(capabilities.keymap_rows) * u16::from(capabilities.keymap_cols)
     }
 
     /// KEYMAP_READ loop: fetch one whole layer as VIA keycodes, chunked by
     /// the advertised `max_keymap_entries_per_op`.
+    #[cfg(test)]
     pub fn read_keymap_layer(&mut self, layer: u8) -> Result<Vec<u16>> {
         let capabilities = self.keymap_capabilities()?;
         if layer >= capabilities.layer_capacity {
@@ -539,8 +567,8 @@ impl HostClient {
             );
         }
         let total = Self::keymap_grid_size(&capabilities);
-        let per_op = usize::from(capabilities.max_keymap_entries_per_op)
-            .min(MAX_KEYMAP_ENTRIES_PER_MESSAGE);
+        let per_op =
+            usize::from(capabilities.max_keymap_entries_per_op).min(MAX_KEYMAP_ENTRIES_PER_MESSAGE);
         let mut keycodes: Vec<u16> = Vec::with_capacity(usize::from(total));
         while (keycodes.len() as u16) < total {
             let start = keycodes.len() as u16;
@@ -554,7 +582,11 @@ impl HostClient {
             let chunk = match (response.status, response.payload) {
                 (
                     Status::Ok,
-                    ResponsePayload::KeymapActions { layer: echoed_layer, start_key, keycodes },
+                    ResponsePayload::KeymapActions {
+                        layer: echoed_layer,
+                        start_key,
+                        keycodes,
+                    },
                 ) => {
                     if echoed_layer != layer || u16::from(start_key) != start {
                         bail!("KEYMAP_READ answered for a different layer or start position");
@@ -564,9 +596,7 @@ impl HostClient {
                 (status, _) => return Err(status_error("the keymap read", status)),
             };
             if chunk.is_empty() {
-                bail!(
-                    "KEYMAP_READ stalled at key {start} of {total} (empty chunk before the end)"
-                );
+                bail!("KEYMAP_READ stalled at key {start} of {total} (empty chunk before the end)");
             }
             if usize::from(start) + chunk.len() > usize::from(total) {
                 bail!("KEYMAP_READ returned more keycodes than the grid holds");
@@ -582,6 +612,7 @@ impl HostClient {
     ///
     /// Device-side validation is all-or-nothing per batch; entries are also
     /// validated client-side first so a rejected batch is unexpected.
+    #[cfg(test)]
     pub fn write_keymap(&mut self, entries: &[KeymapEntry]) -> Result<Vec<u16>> {
         let capabilities = self.keymap_capabilities()?;
         let total = Self::keymap_grid_size(&capabilities);
@@ -601,8 +632,8 @@ impl HostClient {
                 );
             }
         }
-        let batch_size = usize::from(capabilities.max_keymap_entries_per_op)
-            .min(MAX_KEYMAP_ENTRIES_PER_MESSAGE);
+        let batch_size =
+            usize::from(capabilities.max_keymap_entries_per_op).min(MAX_KEYMAP_ENTRIES_PER_MESSAGE);
         let mut readback = Vec::with_capacity(entries.len());
         for batch in entries.chunks(batch_size) {
             let entries = heapless::Vec::from_slice(batch).expect("batch fits codec capacity");
@@ -633,7 +664,10 @@ impl HostClient {
     /// if it reset before answering (which the protocol allows).
     pub fn enter_bootloader(&mut self, target: BootTarget) -> Result<bool> {
         self.require_feature(feature::BOOTLOADER_ENTRY, "programmatic bootloader entry")?;
-        let request = Request::EnterBootloader { magic: BOOTLOADER_MAGIC, target };
+        let request = Request::EnterBootloader {
+            magic: BOOTLOADER_MAGIC,
+            target,
+        };
         match self.call(&request) {
             Ok(response) => match response.status {
                 Status::Ok => Ok(true),

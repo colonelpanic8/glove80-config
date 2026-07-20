@@ -4,7 +4,7 @@
 //! decoded [`HostRequest`]s and produces [`HostResponse`]s. The flow:
 //!
 //! ```text
-//!  USB OUT reports ─┐ (rmk::host_proto_pipe, vendored GLOVE80 PATCH)
+//!  USB OUT reports ─┐ (rmk::vendor_transport)
 //!                   ├─> pump: reassemble -> decode ──> HOST_REQUESTS ─┐
 //!  BLE ATT writes ──┘         (host_pump.rs)                         │
 //!                                                    LightingProcessor
@@ -33,9 +33,8 @@ use glove80_host_protocol::config::{
 };
 use glove80_host_protocol::{
     BOOTLOADER_MAGIC, BootTarget, Capabilities, CellState, Effect, EffectKind, HalfVersion,
-    MAX_CELLS_PER_MESSAGE, MAX_CONFIG_DATA_PER_MESSAGE, MAX_KEYMAP_ENTRIES_PER_MESSAGE,
-    MAX_MESSAGE_LEN, PROTOCOL_VERSION_MAJOR, PROTOCOL_VERSION_MINOR, Request, Response,
-    ResponsePayload, Status, VersionInfo, feature,
+    MAX_CELLS_PER_MESSAGE, MAX_CONFIG_DATA_PER_MESSAGE, MAX_MESSAGE_LEN, PROTOCOL_VERSION_MAJOR,
+    PROTOCOL_VERSION_MINOR, Request, Response, ResponsePayload, Status, VersionInfo, feature,
 };
 use rmk::RawMutex;
 
@@ -49,18 +48,6 @@ const TOTAL_KEYS: u8 = LEDS_PER_HALF * 2;
 const LAYER_CAPACITY: u8 = 8;
 /// Toggle ids the compositor's toggle bitmask supports (`0..32`).
 const TOGGLE_ID_LIMIT: u8 = 32;
-/// Keymap grid, matching `[layout] rows/cols` in keyboard.toml. The wire's
-/// keymap key space is `key = row * KEYMAP_COLS + col` over this grid
-/// (84 positions: 80 physical keys + the four holes at 5, 8, 75, 78, which
-/// read back as KC_NO).
-const KEYMAP_ROWS: u8 = 6;
-const KEYMAP_COLS: u8 = 14;
-const KEYMAP_KEY_COUNT: u8 = KEYMAP_ROWS * KEYMAP_COLS;
-/// One full layer fits in one message; also the advertised
-/// `max_keymap_entries_per_op`.
-const MAX_KEYMAP_ENTRIES_PER_OP: u8 = KEYMAP_KEY_COUNT;
-const _: () = assert!(MAX_KEYMAP_ENTRIES_PER_OP as usize <= MAX_KEYMAP_ENTRIES_PER_MESSAGE);
-
 /// Which transport a request arrived on (responses go back the same way).
 // Only the central's pumps (host_pump.rs) construct these; the peripheral
 // compiles this module for the shared request path but never feeds it.
@@ -131,15 +118,16 @@ fn capabilities() -> Capabilities {
             | feature::OVERLAY_READBACK
             | feature::PARTIAL_APPLY
             | feature::PERSISTENT_CONFIG
-            | feature::KEYMAP
             | feature::VERSION_REPORT
             | feature::CONFIG_GATES,
         // The storage slots hold more (config_store::CONFIG_BLOB_MAX), so
         // the protocol's own maximum is the binding limit.
         max_config_blob_len: MAX_CONFIG_BLOB_LEN as u32,
-        keymap_rows: KEYMAP_ROWS,
-        keymap_cols: KEYMAP_COLS,
-        max_keymap_entries_per_op: MAX_KEYMAP_ENTRIES_PER_OP,
+        // Keymap ownership has moved to Rynk. Keep these legacy capability
+        // extension fields zero when the KEYMAP bit is absent.
+        keymap_rows: 0,
+        keymap_cols: 0,
+        max_keymap_entries_per_op: 0,
     }
 }
 const _: () = assert!(MAX_CONFIG_BLOB_LEN <= crate::config_store::CONFIG_BLOB_MAX);
@@ -160,8 +148,10 @@ fn version_info(role: &crate::split_lighting::SplitRole) -> VersionInfo {
     };
     // The pumps only run on the central; answered defensively ("never seen")
     // if this were ever reached on the peripheral.
-    let (last_seen, link_up) =
-        role.as_central().map(|c| c.peripheral_version()).unwrap_or((None, false));
+    let (last_seen, link_up) = role
+        .as_central()
+        .map(|c| c.peripheral_version())
+        .unwrap_or((None, false));
     let peripheral = match last_seen {
         Some(v) => HalfVersion {
             present: link_up,
@@ -177,8 +167,16 @@ fn version_info(role: &crate::split_lighting::SplitRole) -> VersionInfo {
         && peripheral.present
         && (central.git_hash != peripheral.git_hash
             || (central.fw_major, central.fw_minor, central.fw_patch)
-                != (peripheral.fw_major, peripheral.fw_minor, peripheral.fw_patch));
-    VersionInfo { central, peripheral, halves_mismatch }
+                != (
+                    peripheral.fw_major,
+                    peripheral.fw_minor,
+                    peripheral.fw_patch,
+                ));
+    VersionInfo {
+        central,
+        peripheral,
+        halves_mismatch,
+    }
 }
 
 /// Wire effect -> compositor cell. Every wire kind is representable. Shared
@@ -193,7 +191,11 @@ pub fn effect_to_cell(e: &Effect) -> Cell {
             phase_ms: e.phase_ms,
             duty_pct: e.duty_percent,
         },
-        EffectKind::Breathe => Cell::Breathe { color, period_ms: e.period_ms, phase_ms: e.phase_ms },
+        EffectKind::Breathe => Cell::Breathe {
+            color,
+            period_ms: e.period_ms,
+            phase_ms: e.phase_ms,
+        },
     }
 }
 
@@ -204,12 +206,17 @@ fn cell_to_effect(cell: &Cell) -> Option<Effect> {
     Some(match *cell {
         Cell::Transparent => return None,
         Cell::Solid { color } => Effect::solid(color.r, color.g, color.b),
-        Cell::Blink { color, period_ms, phase_ms, duty_pct } => {
-            Effect::blink(color.r, color.g, color.b, period_ms, phase_ms, duty_pct)
-        }
-        Cell::Breathe { color, period_ms, phase_ms } => {
-            Effect::breathe(color.r, color.g, color.b, period_ms, phase_ms)
-        }
+        Cell::Blink {
+            color,
+            period_ms,
+            phase_ms,
+            duty_pct,
+        } => Effect::blink(color.r, color.g, color.b, period_ms, phase_ms, duty_pct),
+        Cell::Breathe {
+            color,
+            period_ms,
+            phase_ms,
+        } => Effect::breathe(color.r, color.g, color.b, period_ms, phase_ms),
     })
 }
 
@@ -244,8 +251,17 @@ fn pending_right_half_keys<'a, I: Iterator<Item = &'a u8>>(
 /// right-half keys accepted on the central but not yet applied on the
 /// (unavailable) peripheral.
 fn overlay_ack(pending: heapless::Vec<u8, MAX_CELLS_PER_MESSAGE>) -> (Status, ResponsePayload) {
-    let status = if pending.is_empty() { Status::Ok } else { Status::PartialApply };
-    (status, ResponsePayload::OverlayAck { pending_keys: pending })
+    let status = if pending.is_empty() {
+        Status::Ok
+    } else {
+        Status::PartialApply
+    };
+    (
+        status,
+        ResponsePayload::OverlayAck {
+            pending_keys: pending,
+        },
+    )
 }
 
 /// Right-half entries of a cell batch, remapped to the peripheral's LOCAL
@@ -278,7 +294,10 @@ pub fn apply(
     let command = req.command();
     let mut enter_bootloader = false;
     let (status, payload) = match req {
-        Request::GetCapabilities { client_major, client_minor: _ } => {
+        Request::GetCapabilities {
+            client_major,
+            client_minor: _,
+        } => {
             if *client_major != PROTOCOL_VERSION_MAJOR {
                 (Status::UnsupportedVersion, ResponsePayload::Empty)
             } else {
@@ -296,7 +315,12 @@ pub fn apply(
                         // Cannot fail while keys < LEDS_PER_HALF <= overlay
                         // capacity (one slot per key); guarded anyway.
                         if comp
-                            .host_set(cell.key, effect_to_cell(&cell.effect), wire_ttl(*ttl_ms), now_ms)
+                            .host_set(
+                                cell.key,
+                                effect_to_cell(&cell.effect),
+                                wire_ttl(*ttl_ms),
+                                now_ms,
+                            )
                             .is_err()
                         {
                             ok = false;
@@ -318,7 +342,11 @@ pub fn apply(
                                 None => false,
                             }
                         };
-                        overlay_ack(if delivered { heapless::Vec::new() } else { right_keys })
+                        overlay_ack(if delivered {
+                            heapless::Vec::new()
+                        } else {
+                            right_keys
+                        })
                     }
                 }
             }
@@ -345,7 +373,11 @@ pub fn apply(
                         None => false,
                     }
                 };
-                overlay_ack(if delivered { heapless::Vec::new() } else { right_keys })
+                overlay_ack(if delivered {
+                    heapless::Vec::new()
+                } else {
+                    right_keys
+                })
             }
         },
         Request::ClearOverlay => {
@@ -358,8 +390,17 @@ pub fn apply(
                 Some(split) => split.clear(now_ms),
                 None => true,
             };
-            let status = if delivered { Status::Ok } else { Status::PartialApply };
-            (status, ResponsePayload::OverlayAck { pending_keys: heapless::Vec::new() })
+            let status = if delivered {
+                Status::Ok
+            } else {
+                Status::PartialApply
+            };
+            (
+                status,
+                ResponsePayload::OverlayAck {
+                    pending_keys: heapless::Vec::new(),
+                },
+            )
         }
         Request::ReadOverlay => {
             let mut cells: heapless::Vec<CellState, MAX_CELLS_PER_MESSAGE> = heapless::Vec::new();
@@ -382,7 +423,11 @@ pub fn apply(
                 };
                 if let Some(effect) = cell_to_effect(&cell) {
                     // Capacity: at most 40 + 40 overlay cells == 80.
-                    let _ = cells.push(CellState { key, effect, remaining_ttl_ms });
+                    let _ = cells.push(CellState {
+                        key,
+                        effect,
+                        remaining_ttl_ms,
+                    });
                 }
             }
             (Status::Ok, ResponsePayload::OverlayState { cells })
@@ -422,7 +467,9 @@ pub fn apply(
                                 // CLEAR_OVERLAY.
                                 (
                                     Status::PartialApply,
-                                    ResponsePayload::OverlayAck { pending_keys: right_keys },
+                                    ResponsePayload::OverlayAck {
+                                        pending_keys: right_keys,
+                                    },
                                 )
                             }
                         }
@@ -431,9 +478,12 @@ pub fn apply(
                 }
             }
         }
-        Request::GetBrightness => {
-            (Status::Ok, ResponsePayload::Brightness { level: comp.brightness() })
-        }
+        Request::GetBrightness => (
+            Status::Ok,
+            ResponsePayload::Brightness {
+                level: comp.brightness(),
+            },
+        ),
         Request::SetBrightness { level } => {
             comp.set_brightness(*level);
             // Mirror shared state to the peripheral (best effort; the
@@ -442,13 +492,24 @@ pub fn apply(
             if let Some(split) = role.central_mut() {
                 split.notify_state(comp, now_ms);
             }
-            (Status::Ok, ResponsePayload::Brightness { level: comp.brightness() })
+            (
+                Status::Ok,
+                ResponsePayload::Brightness {
+                    level: comp.brightness(),
+                },
+            )
         }
         Request::GetToggle { id } => {
             if *id >= TOGGLE_ID_LIMIT {
                 (Status::UnknownToggle, ResponsePayload::Empty)
             } else {
-                (Status::Ok, ResponsePayload::Toggle { id: *id, state: comp.toggle(*id) })
+                (
+                    Status::Ok,
+                    ResponsePayload::Toggle {
+                        id: *id,
+                        state: comp.toggle(*id),
+                    },
+                )
             }
         }
         Request::SetToggle { id, state } => {
@@ -460,7 +521,13 @@ pub fn apply(
                 if let Some(split) = role.central_mut() {
                     split.notify_state(comp, now_ms);
                 }
-                (Status::Ok, ResponsePayload::Toggle { id: *id, state: comp.toggle(*id) })
+                (
+                    Status::Ok,
+                    ResponsePayload::Toggle {
+                        id: *id,
+                        state: comp.toggle(*id),
+                    },
+                )
             }
         }
         // Persistent-config commands are routed to [`apply_config`] and
@@ -504,7 +571,12 @@ pub fn apply(
         }
     };
     HostResponse {
-        response: Response { request_id, command, status, payload },
+        response: Response {
+            request_id,
+            command,
+            status,
+            payload,
+        },
         enter_bootloader,
     }
 }
@@ -550,15 +622,21 @@ pub async fn apply_config(
 ) -> HostResponse {
     let command = req.command();
     let (status, payload) = match req {
-        Request::ConfigBegin { total_len, blob_crc32 } => {
+        Request::ConfigBegin {
+            total_len,
+            blob_crc32,
+        } => {
             // A new BEGIN always replaces any open session (even when it
             // itself is then rejected).
             cfg.session = None;
             if *total_len as usize > MAX_CONFIG_BLOB_LEN {
                 (Status::CapacityExceeded, ResponsePayload::Empty)
             } else {
-                cfg.session =
-                    Some(ConfigSession { total_len: *total_len, blob_crc32: *blob_crc32, received: 0 });
+                cfg.session = Some(ConfigSession {
+                    total_len: *total_len,
+                    blob_crc32: *blob_crc32,
+                    received: 0,
+                });
                 (Status::Ok, ResponsePayload::Empty)
             }
         }
@@ -633,7 +711,10 @@ pub async fn apply_config(
             // No stored config: total_len = 0, no bytes.
             None => (
                 Status::Ok,
-                ResponsePayload::ConfigData { total_len: 0, data: heapless::Vec::new() },
+                ResponsePayload::ConfigData {
+                    total_len: 0,
+                    data: heapless::Vec::new(),
+                },
             ),
             Some(total) => {
                 if *offset as usize > total {
@@ -649,7 +730,10 @@ pub async fn apply_config(
                     match cfg.store.read_active_at(*offset as usize, &mut data).await {
                         Ok(_) => (
                             Status::Ok,
-                            ResponsePayload::ConfigData { total_len: total as u32, data },
+                            ResponsePayload::ConfigData {
+                                total_len: total as u32,
+                                data,
+                            },
                         ),
                         Err(e) => {
                             defmt::error!(
@@ -666,102 +750,35 @@ pub async fn apply_config(
         _ => (Status::UnknownCommand, ResponsePayload::Empty),
     };
     HostResponse {
-        response: Response { request_id, command, status, payload },
+        response: Response {
+            request_id,
+            command,
+            status,
+            payload,
+        },
         enter_bootloader: false,
     }
 }
 
-// --- Keymap editing (protocol v1.2, Phase 6) --------------------------------
+// --- Legacy keymap commands -------------------------------------------------
 
-/// Whether `req` is a keymap command (routed to [`apply_keymap`] instead of
-/// [`apply`]).
-pub fn is_keymap_request(req: &Request) -> bool {
-    matches!(req, Request::KeymapRead { .. } | Request::KeymapWrite { .. })
+/// Keymap ownership has moved to Rynk. Legacy requests remain decodable for
+/// protocol compatibility but are no longer routed to an RMK-side bridge.
+pub fn is_keymap_request(_req: &Request) -> bool {
+    false
 }
 
-/// Wire keymap key (grid position) -> matrix (row, col).
-fn key_to_row_col(key: u8) -> (u8, u8) {
-    (key / KEYMAP_COLS, key % KEYMAP_COLS)
-}
-
-/// Run one keymap operation through the Vial service task (the keymap's
-/// owner) and await its result. See `rmk::keymap_ops_pipe`: the operation is
-/// converted and persisted there via the exact path Vial's own
-/// `DynamicKeymapGet/SetKeyCode` handlers use, so Vial edits and ours are
-/// interchangeable and never race.
-async fn keymap_op(op: rmk::keymap_ops_pipe::KeymapOp) -> u16 {
-    rmk::keymap_ops_pipe::KEYMAP_OPS.send(op).await;
-    rmk::keymap_ops_pipe::KEYMAP_OP_RESULTS.receive().await
-}
-
-/// Apply one keymap request (PROTOCOL.md "Keymap editing"). Called by the
-/// lighting task on the central (the transport pumps' single consumer), so
-/// at most one keymap operation is ever in flight. Reads reflect the live
-/// keymap; writes hit the live keymap immediately and persist to RMK
-/// storage per key, exactly like Vial's writes.
+/// Defensive response for callers that bypass capability negotiation. New
+/// clients must use Rynk's typed keymap endpoints.
 pub async fn apply_keymap(request_id: u8, req: &Request) -> HostResponse {
     let command = req.command();
-    let (status, payload) = match req {
-        Request::KeymapRead { layer, start_key, max_count } => {
-            if *layer >= LAYER_CAPACITY || *start_key >= KEYMAP_KEY_COUNT {
-                (Status::OutOfRange, ResponsePayload::Empty)
-            } else {
-                let count = (*max_count)
-                    .min(MAX_KEYMAP_ENTRIES_PER_OP)
-                    .min(KEYMAP_KEY_COUNT - *start_key);
-                let mut keycodes: heapless::Vec<u16, MAX_KEYMAP_ENTRIES_PER_MESSAGE> =
-                    heapless::Vec::new();
-                for key in *start_key..*start_key + count {
-                    let (row, col) = key_to_row_col(key);
-                    let kc =
-                        keymap_op(rmk::keymap_ops_pipe::KeymapOp::Get { layer: *layer, row, col })
-                            .await;
-                    // Capacity: count <= MAX_KEYMAP_ENTRIES_PER_OP <= the
-                    // Vec's capacity (compile-time assert above).
-                    let _ = keycodes.push(kc);
-                }
-                (
-                    Status::Ok,
-                    ResponsePayload::KeymapActions {
-                        layer: *layer,
-                        start_key: *start_key,
-                        keycodes,
-                    },
-                )
-            }
-        }
-        Request::KeymapWrite { entries } => {
-            if entries.len() > MAX_KEYMAP_ENTRIES_PER_OP as usize {
-                (Status::CapacityExceeded, ResponsePayload::Empty)
-            } else if entries
-                .iter()
-                .any(|e| e.layer >= LAYER_CAPACITY || e.key >= KEYMAP_KEY_COUNT)
-            {
-                // All-or-nothing validation: nothing has been written yet.
-                (Status::OutOfRange, ResponsePayload::Empty)
-            } else {
-                let mut keycodes: heapless::Vec<u16, MAX_KEYMAP_ENTRIES_PER_MESSAGE> =
-                    heapless::Vec::new();
-                for e in entries {
-                    let (row, col) = key_to_row_col(e.key);
-                    let stored = keymap_op(rmk::keymap_ops_pipe::KeymapOp::Set {
-                        layer: e.layer,
-                        row,
-                        col,
-                        keycode: e.keycode,
-                    })
-                    .await;
-                    // Capacity: entries.len() <= MAX_KEYMAP_ENTRIES_PER_OP.
-                    let _ = keycodes.push(stored);
-                }
-                (Status::Ok, ResponsePayload::KeymapWritten { keycodes })
-            }
-        }
-        // Non-keymap requests never reach here (see [`is_keymap_request`]).
-        _ => (Status::UnknownCommand, ResponsePayload::Empty),
-    };
     HostResponse {
-        response: Response { request_id, command, status, payload },
+        response: Response {
+            request_id,
+            command,
+            status: Status::UnknownCommand,
+            payload: ResponsePayload::Empty,
+        },
         enter_bootloader: false,
     }
 }

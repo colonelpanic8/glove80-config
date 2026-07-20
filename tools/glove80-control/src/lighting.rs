@@ -146,7 +146,11 @@ pub fn parse_color(text: &str) -> Result<(u8, u8, u8)> {
     }
     bail!(
         "'{text}' is not a color; use #RRGGBB or one of: {}",
-        NAMED_COLORS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")
+        NAMED_COLORS
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>()
+            .join(", ")
     )
 }
 
@@ -159,8 +163,14 @@ pub fn parse_key_list(text: &str) -> Result<Vec<u8>> {
             bail!("empty entry in key list '{text}'");
         }
         if let Some((start, end)) = part.split_once('-') {
-            let start: u8 = start.trim().parse().with_context(|| format!("bad key '{part}'"))?;
-            let end: u8 = end.trim().parse().with_context(|| format!("bad key '{part}'"))?;
+            let start: u8 = start
+                .trim()
+                .parse()
+                .with_context(|| format!("bad key '{part}'"))?;
+            let end: u8 = end
+                .trim()
+                .parse()
+                .with_context(|| format!("bad key '{part}'"))?;
             if end < start {
                 bail!("descending range '{part}' in key list");
             }
@@ -272,7 +282,10 @@ fn parse_replace_line(line: &str) -> Result<CellWrite> {
             other => bail!("unknown parameter '{other}' (period, phase, duty)"),
         }
     }
-    Ok(CellWrite { key, effect: build_effect(kind, color, period, phase, duty)? })
+    Ok(CellWrite {
+        key,
+        effect: build_effect(kind, color, period, phase, duty)?,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -300,10 +313,16 @@ pub fn render_apply(operation: &str, outcome: &ApplyOutcome) -> String {
     let mut text = format!("{operation}: PARTIAL APPLY — peripheral half offline\n");
     text.push_str("  applied on the central half now\n");
     if outcome.pending_keys.is_empty() {
-        text.push_str("  pending on the peripheral: the full operation (will sync when it reconnects)");
+        text.push_str(
+            "  pending on the peripheral: the full operation (will sync when it reconnects)",
+        );
     } else {
-        let keys =
-            outcome.pending_keys.iter().map(u8::to_string).collect::<Vec<_>>().join(", ");
+        let keys = outcome
+            .pending_keys
+            .iter()
+            .map(u8::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
         text.push_str(&format!(
             "  pending on the peripheral: keys {keys} (will sync when it reconnects)"
         ));
@@ -331,8 +350,16 @@ pub fn render_overlay(cells: &[CellState]) -> String {
             cell.key.to_string(),
             effect_name(cell.effect.kind).into(),
             format_color(&cell.effect),
-            if animated { format!("{}ms", cell.effect.period_ms) } else { "-".into() },
-            if animated { format!("{}ms", cell.effect.phase_ms) } else { "-".into() },
+            if animated {
+                format!("{}ms", cell.effect.period_ms)
+            } else {
+                "-".into()
+            },
+            if animated {
+                format!("{}ms", cell.effect.phase_ms)
+            } else {
+                "-".into()
+            },
             if cell.effect.kind == EffectKind::Blink {
                 format!("{}%", cell.effect.duty_percent)
             } else {
@@ -428,13 +455,23 @@ pub fn run_with_client(client: &mut HostClient, command: &LightingCommand) -> Re
             let capabilities = client.capabilities()?;
             println!("{}", render_capabilities(&capabilities));
         }
-        LightingCommand::Set { keys, color, effect, period, phase, duty, ttl } => {
+        LightingCommand::Set {
+            keys,
+            color,
+            effect,
+            period,
+            phase,
+            duty,
+            ttl,
+        } => {
             let keys = parse_key_list(keys)?;
             let effect = build_effect(effect.kind(), parse_color(color)?, *period, *phase, *duty)?;
-            let cells: Vec<CellWrite> =
-                keys.iter().map(|&key| CellWrite { key, effect }).collect();
+            let cells: Vec<CellWrite> = keys.iter().map(|&key| CellWrite { key, effect }).collect();
             let outcome = client.set_cells(ttl.unwrap_or(0), &cells)?;
-            println!("{}", render_apply(&format!("set {} cell(s)", cells.len()), &outcome));
+            println!(
+                "{}",
+                render_apply(&format!("set {} cell(s)", cells.len()), &outcome)
+            );
         }
         LightingCommand::Unset { keys } => {
             let mut parsed = Vec::new();
@@ -442,7 +479,10 @@ pub fn run_with_client(client: &mut HostClient, command: &LightingCommand) -> Re
                 parsed.extend(parse_key_list(list)?);
             }
             let outcome = client.unset_cells(&parsed)?;
-            println!("{}", render_apply(&format!("unset {} cell(s)", parsed.len()), &outcome));
+            println!(
+                "{}",
+                render_apply(&format!("unset {} cell(s)", parsed.len()), &outcome)
+            );
         }
         LightingCommand::Clear => {
             let outcome = client.clear_overlay()?;
@@ -463,7 +503,10 @@ pub fn run_with_client(client: &mut HostClient, command: &LightingCommand) -> Re
             let outcome = client.replace_overlay(ttl.unwrap_or(0), &cells)?;
             println!(
                 "{}",
-                render_apply(&format!("replace overlay with {} cell(s)", cells.len()), &outcome)
+                render_apply(
+                    &format!("replace overlay with {} cell(s)", cells.len()),
+                    &outcome
+                )
             );
         }
         LightingCommand::Brightness { value } => {
@@ -491,13 +534,20 @@ fn read_stdin() -> Result<String> {
 
 /// Host-protocol bootloader entry with a confirmation prompt.
 pub fn run_bootloader(selector: &Selector, peripheral: bool, yes: bool) -> Result<()> {
-    let target = if peripheral { BootTarget::Peripheral } else { BootTarget::Central };
+    let target = if peripheral {
+        BootTarget::Peripheral
+    } else {
+        BootTarget::Central
+    };
     let half = if peripheral { "peripheral" } else { "central" };
     if !yes {
         print!("Reboot the {half} half into its UF2 bootloader? [y/N] ");
         std::io::stdout().flush().ok();
         let mut answer = String::new();
-        std::io::stdin().lock().read_line(&mut answer).context("could not read confirmation")?;
+        std::io::stdin()
+            .lock()
+            .read_line(&mut answer)
+            .context("could not read confirmation")?;
         if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
             println!("aborted");
             return Ok(());
@@ -574,7 +624,9 @@ mod tests {
         let mock = MockTransport::new()
             .expect(caps_handler(test_capabilities()))
             .expect(|request_id, request| {
-                let Request::Ping { data } = request else { panic!("expected ping") };
+                let Request::Ping { data } = request else {
+                    panic!("expected ping")
+                };
                 vec![Response {
                     request_id,
                     command: Command::Ping,
@@ -583,7 +635,9 @@ mod tests {
                 }]
             })
             .expect(|request_id, request| {
-                let Request::Ping { data } = request else { panic!("expected ping") };
+                let Request::Ping { data } = request else {
+                    panic!("expected ping")
+                };
                 vec![Response {
                     request_id,
                     command: Command::Ping,
@@ -608,14 +662,17 @@ mod tests {
 
         // 10 cells with max_cells_per_op = 8 must split into 8 + 2.
         let effect = Effect::blink(0xFF, 0x00, 0x66, 500, 100, 30);
-        let cells: Vec<CellWrite> =
-            (0..10).map(|key| CellWrite { key, effect }).collect();
+        let cells: Vec<CellWrite> = (0..10).map(|key| CellWrite { key, effect }).collect();
         let outcome = client.set_cells(2500, &cells).unwrap();
         assert_eq!(outcome, ApplyOutcome::default());
 
         let requests = requests.lock().unwrap();
         assert_eq!(requests.len(), 3); // caps + two batches
-        let Request::SetCells { ttl_ms, cells: first } = &requests[1] else {
+        let Request::SetCells {
+            ttl_ms,
+            cells: first,
+        } = &requests[1]
+        else {
             panic!("expected SetCells, got {:?}", requests[1]);
         };
         assert_eq!(*ttl_ms, 2500);
@@ -630,15 +687,27 @@ mod tests {
 
     #[test]
     fn partial_apply_is_surfaced_with_pending_keys() {
-        let mock = MockTransport::new().expect(caps_handler(test_capabilities())).expect(
-            |request_id, _| {
-                vec![ack(request_id, Command::SetCells, Status::PartialApply, &[41, 42])]
-            },
-        );
+        let mock = MockTransport::new()
+            .expect(caps_handler(test_capabilities()))
+            .expect(|request_id, _| {
+                vec![ack(
+                    request_id,
+                    Command::SetCells,
+                    Status::PartialApply,
+                    &[41, 42],
+                )]
+            });
         let mut client = HostClient::new(Box::new(mock));
-        let cells =
-            [CellWrite { key: 41, effect: Effect::solid(1, 2, 3) },
-             CellWrite { key: 42, effect: Effect::solid(1, 2, 3) }];
+        let cells = [
+            CellWrite {
+                key: 41,
+                effect: Effect::solid(1, 2, 3),
+            },
+            CellWrite {
+                key: 42,
+                effect: Effect::solid(1, 2, 3),
+            },
+        ];
         let outcome = client.set_cells(0, &cells).unwrap();
         assert!(outcome.partial);
         assert_eq!(outcome.pending_keys, vec![41, 42]);
@@ -652,12 +721,17 @@ mod tests {
 
     #[test]
     fn partial_clear_with_no_keys_is_still_surfaced() {
-        let mock = MockTransport::new().expect(caps_handler(test_capabilities())).expect(
-            |request_id, request| {
+        let mock = MockTransport::new()
+            .expect(caps_handler(test_capabilities()))
+            .expect(|request_id, request| {
                 assert!(matches!(request, Request::ClearOverlay));
-                vec![ack(request_id, Command::ClearOverlay, Status::PartialApply, &[])]
-            },
-        );
+                vec![ack(
+                    request_id,
+                    Command::ClearOverlay,
+                    Status::PartialApply,
+                    &[],
+                )]
+            });
         let mut client = HostClient::new(Box::new(mock));
         let outcome = client.clear_overlay().unwrap();
         assert!(outcome.partial);
@@ -670,23 +744,38 @@ mod tests {
     fn unadvertised_effect_is_rejected_client_side() {
         // Device advertises solid + blink only; no SET_CELLS handler is
         // queued, so reaching the wire would panic.
-        let capabilities = Capabilities { effect_mask: 0b011, ..test_capabilities() };
+        let capabilities = Capabilities {
+            effect_mask: 0b011,
+            ..test_capabilities()
+        };
         let mock = MockTransport::new().expect(caps_handler(capabilities));
         let mut client = HostClient::new(Box::new(mock));
-        let cells = [CellWrite { key: 0, effect: Effect::breathe(0, 0, 255, 3000, 0) }];
+        let cells = [CellWrite {
+            key: 0,
+            effect: Effect::breathe(0, 0, 255, 3000, 0),
+        }];
         let error = client.set_cells(0, &cells).unwrap_err();
         assert!(error.to_string().contains("breathe"), "{error}");
     }
 
     #[test]
     fn out_of_range_key_and_ttl_feature_are_validated() {
-        let capabilities = Capabilities { feature_bits: 0x3F & !feature::TTL, ..test_capabilities() };
+        let capabilities = Capabilities {
+            feature_bits: 0x3F & !feature::TTL,
+            ..test_capabilities()
+        };
         let mock = MockTransport::new().expect(caps_handler(capabilities));
         let mut client = HostClient::new(Box::new(mock));
-        let cells = [CellWrite { key: 80, effect: Effect::solid(1, 1, 1) }];
+        let cells = [CellWrite {
+            key: 80,
+            effect: Effect::solid(1, 1, 1),
+        }];
         let error = client.set_cells(0, &cells).unwrap_err();
         assert!(error.to_string().contains("out of range"), "{error}");
-        let cells = [CellWrite { key: 0, effect: Effect::solid(1, 1, 1) }];
+        let cells = [CellWrite {
+            key: 0,
+            effect: Effect::solid(1, 1, 1),
+        }];
         let error = client.set_cells(1000, &cells).unwrap_err();
         assert!(error.to_string().contains("TTL"), "{error}");
     }
@@ -695,19 +784,29 @@ mod tests {
     fn replace_refuses_to_split_batches() {
         let mock = MockTransport::new().expect(caps_handler(test_capabilities()));
         let mut client = HostClient::new(Box::new(mock));
-        let cells: Vec<CellWrite> =
-            (0..9).map(|key| CellWrite { key, effect: Effect::solid(9, 9, 9) }).collect();
+        let cells: Vec<CellWrite> = (0..9)
+            .map(|key| CellWrite {
+                key,
+                effect: Effect::solid(9, 9, 9),
+            })
+            .collect();
         let error = client.replace_overlay(0, &cells).unwrap_err();
         assert!(error.to_string().contains("atomic"), "{error}");
     }
 
     #[test]
     fn stray_responses_are_ignored_until_the_correlated_one() {
-        let mock = MockTransport::new().expect(caps_handler(test_capabilities())).expect(
-            |request_id, _| {
+        let mock = MockTransport::new()
+            .expect(caps_handler(test_capabilities()))
+            .expect(|request_id, _| {
                 vec![
                     // Wrong request id, then wrong command, then the real ack.
-                    ack(request_id.wrapping_add(7), Command::SetCells, Status::Ok, &[]),
+                    ack(
+                        request_id.wrapping_add(7),
+                        Command::SetCells,
+                        Status::Ok,
+                        &[],
+                    ),
                     Response {
                         request_id,
                         command: Command::GetBrightness,
@@ -716,28 +815,33 @@ mod tests {
                     },
                     ack(request_id, Command::SetCells, Status::Ok, &[]),
                 ]
-            },
-        );
+            });
         let mut client = HostClient::new(Box::new(mock));
-        let cells = [CellWrite { key: 3, effect: Effect::solid(0, 255, 0) }];
+        let cells = [CellWrite {
+            key: 3,
+            effect: Effect::solid(0, 255, 0),
+        }];
         let outcome = client.set_cells(0, &cells).unwrap();
         assert_eq!(outcome, ApplyOutcome::default());
     }
 
     #[test]
     fn error_statuses_render_readably() {
-        let mock = MockTransport::new().expect(caps_handler(test_capabilities())).expect(
-            |request_id, _| {
+        let mock = MockTransport::new()
+            .expect(caps_handler(test_capabilities()))
+            .expect(|request_id, _| {
                 vec![Response {
                     request_id,
                     command: Command::SetCells,
                     status: Status::CapacityExceeded,
                     payload: ResponsePayload::Empty,
                 }]
-            },
-        );
+            });
         let mut client = HostClient::new(Box::new(mock));
-        let cells = [CellWrite { key: 0, effect: Effect::solid(1, 1, 1) }];
+        let cells = [CellWrite {
+            key: 0,
+            effect: Effect::solid(1, 1, 1),
+        }];
         let error = client.set_cells(0, &cells).unwrap_err();
         assert!(error.to_string().contains("CAPACITY_EXCEEDED"), "{error}");
     }
@@ -783,7 +887,10 @@ mod tests {
     #[test]
     fn parses_key_lists() {
         assert_eq!(parse_key_list("3").unwrap(), vec![3]);
-        assert_eq!(parse_key_list("0-3,12,40-41").unwrap(), vec![0, 1, 2, 3, 12, 40, 41]);
+        assert_eq!(
+            parse_key_list("0-3,12,40-41").unwrap(),
+            vec![0, 1, 2, 3, 12, 40, 41]
+        );
         assert!(parse_key_list("5-2").is_err());
         assert!(parse_key_list("a").is_err());
         assert!(parse_key_list("1,,2").is_err());
@@ -800,14 +907,26 @@ mod tests {
 ";
         let cells = parse_replace_spec(spec).unwrap();
         assert_eq!(cells.len(), 3);
-        assert_eq!(cells[0], CellWrite { key: 12, effect: Effect::solid(0xFF, 0, 0) });
+        assert_eq!(
+            cells[0],
+            CellWrite {
+                key: 12,
+                effect: Effect::solid(0xFF, 0, 0)
+            }
+        );
         assert_eq!(
             cells[1],
-            CellWrite { key: 40, effect: Effect::blink(0, 0xFF, 0, 750, 0, 30) }
+            CellWrite {
+                key: 40,
+                effect: Effect::blink(0, 0xFF, 0, 750, 0, 30)
+            }
         );
         assert_eq!(
             cells[2],
-            CellWrite { key: 41, effect: Effect::breathe(0, 0, 0xFF, 3000, 1500) }
+            CellWrite {
+                key: 41,
+                effect: Effect::breathe(0, 0, 0xFF, 3000, 1500)
+            }
         );
         assert!(parse_replace_spec("12").is_err());
         assert!(parse_replace_spec("12 red wobble").is_err());
@@ -818,7 +937,11 @@ mod tests {
     #[test]
     fn renders_overlay_table_with_ttls() {
         let cells = [
-            CellState { key: 12, effect: Effect::solid(0xFF, 0, 0), remaining_ttl_ms: 0 },
+            CellState {
+                key: 12,
+                effect: Effect::solid(0xFF, 0, 0),
+                remaining_ttl_ms: 0,
+            },
             CellState {
                 key: 60,
                 effect: Effect::breathe(0, 0, 0xFF, 3000, 1500),
@@ -833,10 +956,22 @@ mod tests {
         let table = render_overlay(&cells);
         let lines: Vec<&str> = table.lines().collect();
         assert_eq!(lines.len(), 4);
-        assert!(lines[0].contains("KEY") && lines[0].contains("TTL"), "{table}");
-        assert!(lines[1].contains("#ff0000") && lines[1].contains("none"), "{table}");
-        assert!(lines[2].contains("breathe") && lines[2].contains("4.2s"), "{table}");
-        assert!(lines[3].contains("30%") && lines[3].contains("750ms"), "{table}");
+        assert!(
+            lines[0].contains("KEY") && lines[0].contains("TTL"),
+            "{table}"
+        );
+        assert!(
+            lines[1].contains("#ff0000") && lines[1].contains("none"),
+            "{table}"
+        );
+        assert!(
+            lines[2].contains("breathe") && lines[2].contains("4.2s"),
+            "{table}"
+        );
+        assert!(
+            lines[3].contains("30%") && lines[3].contains("750ms"),
+            "{table}"
+        );
         assert_eq!(render_overlay(&[]), "host overlay is empty");
     }
 

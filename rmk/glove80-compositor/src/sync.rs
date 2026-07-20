@@ -5,7 +5,7 @@
 //! Two things live here, both host-tested:
 //!
 //! - [`SyncMessage`]: the bounded, versioned payload codec for the split
-//!   application channel (`rmk::split_app_pipe` in the vendored tree). Every
+//!   application channel (`rmk::split_app` in the pinned fork). Every
 //!   encoded payload fits [`MAX_SYNC_PAYLOAD`] bytes; keys are LOCAL chain
 //!   indices on the receiving half (the central remaps protocol keys 40..80
 //!   to 0..40 before encoding). Messages are absolute state ("cell k is now

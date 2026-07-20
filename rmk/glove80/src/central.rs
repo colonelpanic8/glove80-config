@@ -6,6 +6,7 @@ mod host_proto;
 mod host_pump;
 mod lighting;
 mod lighting_config;
+mod remote_boot;
 mod split_lighting;
 mod version;
 
@@ -41,5 +42,14 @@ mod keyboard_central {
     #[register_processor(event)]
     fn host_transport_pump() {
         crate::host_pump::TransportPump
+    }
+
+    /// Route the Magic-layer key on the right half to that half's UF2
+    /// bootloader. RMK resolves split key actions on the central, so this
+    /// user action must be forwarded explicitly instead of using the local
+    /// `Bootloader` action.
+    #[register_processor(event)]
+    fn remote_bootloader_key() {
+        crate::remote_boot::RemoteBootloaderKey
     }
 }

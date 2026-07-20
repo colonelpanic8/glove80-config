@@ -8,11 +8,11 @@
 //!
 //! - `USB_VENDOR_USAGE_PAGE` / `USB_VENDOR_USAGE` — the vendor usage pair
 //!   of the host-protocol raw-HID interface: `HostProtocolReport` in
-//!   `rmk/vendor/rmk/rmk/src/hid.rs` (page 0xFF88, usage 0x01 — distinct
+//!   `dependencies/rmk/rmk/src/hid.rs` (page 0xFF88, usage 0x01 — distinct
 //!   from Via/Vial's 0xFF60/0x61 so the two raw-HID interfaces are
 //!   unambiguous).
 //! - `BLE_SERVICE_UUID`, `BLE_REQUEST_CHAR_UUID`, `BLE_RESPONSE_CHAR_UUID`
-//!   — `HostProtoService` in `rmk/vendor/rmk/rmk/src/ble/ble_server.rs`
+//!   — `HostProtoService` in `dependencies/rmk/rmk/src/ble/ble_server.rs`
 //!   (request: write-without-response; response: notify).
 //!
 //! Everything else (VID/PID, report size, framing) is settled by

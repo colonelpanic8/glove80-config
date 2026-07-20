@@ -2,7 +2,7 @@
 name = "glove80-control"
 version = "0.1.0"
 edition = "2021"
-description = "Control Glove80 keyboards over the RMK host protocol (USB raw HID / BLE)"
+description = "Control Glove80 keymaps over Rynk and lighting/config over the Glove80 protocol"
 license = "MIT"
 
 [dependencies]
@@ -19,3 +19,10 @@ heapless = { version = "0.8", default-features = false }
 libc = "0.2"
 # BLE transport: BlueZ over D-Bus via pure-Rust zbus (no libdbus C dependency).
 zbus = "5"
+# RMK-native configuration protocol. During migration this owns keymap
+# operations while the Glove80 protocol continues to own lighting/config.
+rynk = { path = "../../dependencies/rmk/rynk" }
+rynk-serial = { path = "../../dependencies/rmk/rynk/rynk-serial" }
+rynk-ble = { path = "../../dependencies/rmk/rynk/rynk-ble" }
+embassy-futures = "0.1"
+tokio = { version = "1.47", features = ["rt-multi-thread"] }

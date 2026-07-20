@@ -33,7 +33,11 @@ fn hash_display(half: &HalfVersion) -> String {
         Ok(text) if !text.is_empty() => text.to_string(),
         _ => format!("{:02x?}", half.git_hash),
     };
-    if half.dirty { format!("{hash}-dirty") } else { hash }
+    if half.dirty {
+        format!("{hash}-dirty")
+    } else {
+        hash
+    }
 }
 
 fn half_line(name: &str, half: &HalfVersion) -> String {
@@ -41,7 +45,11 @@ fn half_line(name: &str, half: &HalfVersion) -> String {
     if *half == HalfVersion::default() {
         return format!("  {name:<12} (never seen since the central booted)");
     }
-    let state = if half.present { "connected" } else { "disconnected (last known)" };
+    let state = if half.present {
+        "connected"
+    } else {
+        "disconnected (last known)"
+    };
     format!(
         "  {name:<12} v{}.{}.{}  {:<17} {state}",
         half.fw_major,

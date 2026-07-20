@@ -29,7 +29,7 @@
 //!   slots are simply ignored (falling back to the compiled defaults when
 //!   neither validates).
 //!
-//! All flash traffic goes through `rmk::config_flash` (a GLOVE80 PATCH):
+//! All flash traffic goes through `rmk::shared_flash`:
 //! bounded chunk/page requests executed by a service task that shares the
 //! radio-safe `nrf_mpsl::Flash` with RMK's storage task under an async
 //! mutex — every operation yields, nothing ever blocks key scanning.
@@ -39,8 +39,8 @@
 //! Decoding/validating the lighting config happens above
 //! (`lighting_config.rs`).
 
-use rmk::config_flash;
 use rmk::crc32::Crc32;
+use rmk::shared_flash::{self, SharedFlash};
 
 /// Reserved runtime-config partition bounds (see `memory.x`).
 pub const PARTITION_START: u32 = 0xdc000;
@@ -48,6 +48,10 @@ pub const PARTITION_END: u32 = 0xec000;
 
 /// nRF52840 flash page (erase unit).
 const PAGE_SIZE: u32 = 4096;
+
+/// Scratch-buffer size for streaming CRC validation. RMK's shared-flash
+/// client chunks larger requests internally, so this only bounds our stack.
+const FLASH_CHUNK: usize = 256;
 
 /// Two generation slots of 32 KiB each.
 const SLOT_SIZE: u32 = 0x8000;
@@ -77,8 +81,8 @@ pub enum StoreError {
     Corrupt,
 }
 
-impl From<config_flash::FlashOpError> for StoreError {
-    fn from(_: config_flash::FlashOpError) -> Self {
+impl From<shared_flash::FlashOpError> for StoreError {
+    fn from(_: shared_flash::FlashOpError) -> Self {
         StoreError::Flash
     }
 }
@@ -93,6 +97,7 @@ struct ActiveSlot {
 /// The store handle. Owned by the central's lighting task; `open` scans the
 /// partition once at boot, `save` runs the transactional apply.
 pub struct ConfigStore {
+    flash: SharedFlash,
     active: Option<ActiveSlot>,
 }
 
@@ -127,13 +132,19 @@ fn parse_header(bytes: &[u8; 20]) -> Option<Header> {
 }
 
 /// Stream the blob of `slot` through CRC-32 without a large buffer.
-async fn blob_crc(slot_addr: u32, blob_len: u32) -> Result<u32, StoreError> {
+async fn blob_crc(
+    flash: &mut SharedFlash,
+    slot_addr: u32,
+    blob_len: u32,
+) -> Result<u32, StoreError> {
     let mut crc = Crc32::new();
-    let mut chunk = [0u8; config_flash::CHUNK];
+    let mut chunk = [0u8; FLASH_CHUNK];
     let mut done = 0u32;
     while done < blob_len {
         let want = ((blob_len - done) as usize).min(chunk.len());
-        config_flash::read(slot_addr + BLOB_OFFSET + done, &mut chunk[..want]).await?;
+        flash
+            .read(slot_addr + BLOB_OFFSET + done, &mut chunk[..want])
+            .await?;
         crc.update(&chunk[..want]);
         done += want as u32;
     }
@@ -141,25 +152,27 @@ async fn blob_crc(slot_addr: u32, blob_len: u32) -> Result<u32, StoreError> {
 }
 
 /// Fully validate one slot: header, then streamed blob CRC.
-async fn validate_slot(slot_addr: u32) -> Option<Header> {
+async fn validate_slot(flash: &mut SharedFlash, slot_addr: u32) -> Option<Header> {
     let mut header_bytes = [0u8; 20];
-    config_flash::read(slot_addr, &mut header_bytes).await.ok()?;
+    flash.read(slot_addr, &mut header_bytes).await.ok()?;
     let header = parse_header(&header_bytes)?;
-    match blob_crc(slot_addr, header.blob_len).await {
+    match blob_crc(flash, slot_addr, header.blob_len).await {
         Ok(crc) if crc == header.blob_crc32 => Some(header),
         _ => None,
     }
 }
 
 impl ConfigStore {
-    /// Register the partition window with the flash service and scan both
+    /// Acquire the partition-scoped flash client and scan both
     /// slots. The newest fully valid slot becomes active; if neither
     /// validates the store is empty (boot then keeps the compiled defaults).
     pub async fn open() -> Self {
-        config_flash::set_window(PARTITION_START, PARTITION_END);
+        let mut flash = shared_flash::take(PARTITION_START..PARTITION_END)
+            .await
+            .expect("runtime-config shared-flash client initialization failed");
         let mut active: Option<ActiveSlot> = None;
         for (index, &addr) in SLOT_ADDRS.iter().enumerate() {
-            if let Some(h) = validate_slot(addr).await {
+            if let Some(h) = validate_slot(&mut flash, addr).await {
                 let newer = match &active {
                     // Plain comparison: generations only ever move forward
                     // (u32 exhaustion would take billions of saves).
@@ -167,7 +180,11 @@ impl ConfigStore {
                     None => true,
                 };
                 if newer {
-                    active = Some(ActiveSlot { index, generation: h.generation, blob_len: h.blob_len });
+                    active = Some(ActiveSlot {
+                        index,
+                        generation: h.generation,
+                        blob_len: h.blob_len,
+                    });
                 }
             }
         }
@@ -180,7 +197,7 @@ impl ConfigStore {
             ),
             None => defmt::info!("config-store: no stored config (compiled defaults apply)"),
         }
-        Self { active }
+        Self { flash, active }
     }
 
     /// Length of the active blob, or `None` when nothing is stored.
@@ -190,16 +207,16 @@ impl ConfigStore {
 
     /// Read the active blob into `buf` (which must hold `active_len`).
     /// Verifies the CRC again on the way out.
-    pub async fn read_active(&self, buf: &mut [u8]) -> Result<usize, StoreError> {
+    pub async fn read_active(&mut self, buf: &mut [u8]) -> Result<usize, StoreError> {
         let active = self.active.ok_or(StoreError::Corrupt)?;
         let len = active.blob_len as usize;
         if buf.len() < len {
             return Err(StoreError::TooLarge);
         }
         let addr = SLOT_ADDRS[active.index];
-        config_flash::read(addr + BLOB_OFFSET, &mut buf[..len]).await?;
+        self.flash.read(addr + BLOB_OFFSET, &mut buf[..len]).await?;
         let mut header_bytes = [0u8; 20];
-        config_flash::read(addr, &mut header_bytes).await?;
+        self.flash.read(addr, &mut header_bytes).await?;
         let header = parse_header(&header_bytes).ok_or(StoreError::Corrupt)?;
         let mut crc = Crc32::new();
         crc.update(&buf[..len]);
@@ -213,14 +230,22 @@ impl ConfigStore {
     /// to the blob end; returns the byte count). Serves CONFIG_READ straight
     /// from flash — exactly the committed bytes, so export is byte-stable —
     /// without needing a second RAM buffer next to the session's.
-    pub async fn read_active_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, StoreError> {
+    pub async fn read_active_at(
+        &mut self,
+        offset: usize,
+        buf: &mut [u8],
+    ) -> Result<usize, StoreError> {
         let active = self.active.ok_or(StoreError::Corrupt)?;
         let len = active.blob_len as usize;
         if offset > len {
             return Err(StoreError::Corrupt);
         }
         let n = buf.len().min(len - offset);
-        config_flash::read(SLOT_ADDRS[active.index] + BLOB_OFFSET + offset as u32, &mut buf[..n])
+        self.flash
+            .read(
+                SLOT_ADDRS[active.index] + BLOB_OFFSET + offset as u32,
+                &mut buf[..n],
+            )
             .await?;
         Ok(n)
     }
@@ -242,23 +267,25 @@ impl ConfigStore {
         // 1. Erase the pages the header + blob will occupy.
         let used = BLOB_OFFSET + blob.len() as u32;
         let erase_end = addr + used.div_ceil(PAGE_SIZE) * PAGE_SIZE;
-        config_flash::erase(addr, erase_end).await?;
+        self.flash.erase(addr, erase_end).await?;
 
         // 2. Program the blob (padded to the 4-byte write unit with 0xFF,
         //    the erased state).
         let full = blob.len() & !3;
-        config_flash::write(addr + BLOB_OFFSET, &blob[..full]).await?;
+        self.flash.write(addr + BLOB_OFFSET, &blob[..full]).await?;
         if full < blob.len() {
             let mut tail = [0xFFu8; 4];
             tail[..blob.len() - full].copy_from_slice(&blob[full..]);
-            config_flash::write(addr + BLOB_OFFSET + full as u32, &tail).await?;
+            self.flash
+                .write(addr + BLOB_OFFSET + full as u32, &tail)
+                .await?;
         }
 
         // 3. Read back and verify before anything can make the slot valid.
         let mut crc = Crc32::new();
         crc.update(blob);
         let expected_crc = crc.finalize();
-        if blob_crc(addr, blob.len() as u32).await? != expected_crc {
+        if blob_crc(&mut self.flash, addr, blob.len() as u32).await? != expected_crc {
             return Err(StoreError::VerifyFailed);
         }
 
@@ -270,19 +297,23 @@ impl ConfigStore {
         let mut hcrc = Crc32::new();
         hcrc.update(&fields[..12]);
         fields[12..16].copy_from_slice(&hcrc.finalize().to_le_bytes());
-        config_flash::write(addr + 4, &fields).await?;
+        self.flash.write(addr + 4, &fields).await?;
 
         // 5. Commit: the magic word, one atomic NVMC word program. From this
         //    write on, this slot validates and out-generations the old one.
-        config_flash::write(addr, &MAGIC.to_le_bytes()).await?;
+        self.flash.write(addr, &MAGIC.to_le_bytes()).await?;
 
         // Belt and braces: confirm the commit actually validates before
         // updating our in-RAM notion of the active slot.
-        if validate_slot(addr).await.is_none() {
+        if validate_slot(&mut self.flash, addr).await.is_none() {
             return Err(StoreError::VerifyFailed);
         }
 
-        self.active = Some(ActiveSlot { index: target, generation, blob_len: blob.len() as u32 });
+        self.active = Some(ActiveSlot {
+            index: target,
+            generation,
+            blob_len: blob.len() as u32,
+        });
         defmt::info!(
             "config-store: committed generation {} to slot {} ({} bytes)",
             generation,

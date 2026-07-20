@@ -301,9 +301,7 @@ fn format_mod_list(bits: u8) -> String {
     let names: Vec<String> = MOD_WRAPPERS
         .iter()
         .filter(|(bit, _, _)| bits & bit != 0)
-        .map(|(_, left, right_name)| {
-            format!("MOD_{}", if right { right_name } else { *left })
-        })
+        .map(|(_, left, right_name)| format!("MOD_{}", if right { right_name } else { *left }))
         .collect();
     if names.is_empty() {
         "MOD_NONE".into()
@@ -322,7 +320,9 @@ pub fn format_keycode(code: u16) -> String {
         return name.into();
     }
     let basic = |kc: u16| -> String {
-        table_name(BASIC, kc).map(String::from).unwrap_or_else(|| format!("0x{kc:04X}"))
+        table_name(BASIC, kc)
+            .map(String::from)
+            .unwrap_or_else(|| format!("0x{kc:04X}"))
     };
     match code {
         0x0100..=0x1FFF => {
@@ -369,7 +369,11 @@ pub fn format_keycode(code: u16) -> String {
         }
         0x4000..=0x4FFF => format!("LT({}, {})", (code >> 8) & 0xF, basic(code & 0xFF)),
         0x5000..=0x51FF if code & 0x0F != 0 => {
-            format!("LM({}, {})", (code >> 5) & 0xF, format_mod_list((code & 0x1F) as u8))
+            format!(
+                "LM({}, {})",
+                (code >> 5) & 0xF,
+                format_mod_list((code & 0x1F) as u8)
+            )
         }
         0x5200..=0x521F => format!("TO({})", code & 0xF),
         0x5220..=0x523F => format!("MO({})", code & 0xF),
@@ -460,7 +464,9 @@ pub fn parse_keycode(text: &str) -> Result<u16> {
             .map_err(|_| anyhow!("'{text}' is not a valid hex keycode"));
     }
     if text.chars().all(|c| c.is_ascii_digit()) {
-        return text.parse().map_err(|_| anyhow!("'{text}' does not fit a 16-bit keycode"));
+        return text
+            .parse()
+            .map_err(|_| anyhow!("'{text}' does not fit a 16-bit keycode"));
     }
 
     // Composite syntax NAME(args).
@@ -487,9 +493,7 @@ pub fn parse_keycode(text: &str) -> Result<u16> {
 
 fn parse_composite(name: &str, args: &str, original: &str) -> Result<u16> {
     // Single-integer layer verbs.
-    let layer_verb = |base: u16| -> Result<u16> {
-        Ok(base | parse_layer(args, "layer", 15)?)
-    };
+    let layer_verb = |base: u16| -> Result<u16> { Ok(base | parse_layer(args, "layer", 15)?) };
     match name {
         "TO" => return layer_verb(0x5200),
         "MO" => return layer_verb(0x5220),
@@ -512,13 +516,10 @@ fn parse_composite(name: &str, args: &str, original: &str) -> Result<u16> {
             .ok_or_else(|| anyhow!("'{original}' needs two comma-separated arguments"))?;
         return match name {
             "LT" => Ok(0x4000 | (parse_layer(first, "layer", 15)? << 8) | parse_basic(second)?),
-            "LM" => {
-                Ok(0x5000 | (parse_layer(first, "layer", 15)? << 5)
-                    | u16::from(parse_mod_list(second)?))
-            }
-            "MT" => {
-                Ok(0x2000 | (u16::from(parse_mod_list(first)?) << 8) | parse_basic(second)?)
-            }
+            "LM" => Ok(0x5000
+                | (parse_layer(first, "layer", 15)? << 5)
+                | u16::from(parse_mod_list(second)?)),
+            "MT" => Ok(0x2000 | (u16::from(parse_mod_list(first)?) << 8) | parse_basic(second)?),
             _ => unreachable!(),
         };
     }
@@ -600,7 +601,9 @@ pub fn search(fragment: &str) -> Vec<(u16, &'static str, &'static [&'static str]
         .chain(EXTRA.iter())
         .filter(|(_, canonical, aliases)| {
             canonical.to_ascii_uppercase().contains(&needle)
-                || aliases.iter().any(|alias| alias.to_ascii_uppercase().contains(&needle))
+                || aliases
+                    .iter()
+                    .any(|alias| alias.to_ascii_uppercase().contains(&needle))
         })
         .map(|(code, canonical, aliases)| (*code, *canonical, *aliases))
         .collect()
@@ -686,7 +689,10 @@ mod tests {
         assert_eq!(parse_keycode("RSFT_T(KC_ENT)").unwrap(), 0x3228);
         assert_eq!(parse_keycode("MEH_T(KC_A)").unwrap(), 0x2704);
         assert_eq!(parse_keycode("ALL_T(KC_A)").unwrap(), 0x2F04);
-        assert_eq!(parse_keycode("MT(MOD_LSFT|MOD_LALT, KC_A)").unwrap(), 0x2604);
+        assert_eq!(
+            parse_keycode("MT(MOD_LSFT|MOD_LALT, KC_A)").unwrap(),
+            0x2604
+        );
         assert_eq!(parse_keycode("LM(1, MOD_LSFT)").unwrap(), 0x5022);
         assert_eq!(parse_keycode("OSM(MOD_RCTL)").unwrap(), 0x52B1);
         assert_eq!(parse_keycode("TD(5)").unwrap(), 0x5705);
@@ -695,8 +701,14 @@ mod tests {
         assert_eq!(parse_keycode("USER(16)").unwrap(), 0x7E10);
 
         assert!(parse_keycode("MO(16)").is_err(), "layer beyond 4 bits");
-        assert!(parse_keycode("LT(3, MO(2))").is_err(), "non-basic tap keycode");
-        assert!(parse_keycode("LSFT(MO(2))").is_err(), "wrapping a non-basic code");
+        assert!(
+            parse_keycode("LT(3, MO(2))").is_err(),
+            "non-basic tap keycode"
+        );
+        assert!(
+            parse_keycode("LSFT(MO(2))").is_err(),
+            "wrapping a non-basic code"
+        );
         assert!(parse_keycode("LCTL(RSFT(KC_A))").is_err(), "mixed hands");
         assert!(parse_keycode("MO(2").is_err(), "unbalanced parenthesis");
         assert!(parse_keycode("WAT(2)").is_err(), "unknown composite");
@@ -707,10 +719,9 @@ mod tests {
     fn format_parse_round_trip() {
         // Every named/structured code must re-parse to itself.
         for code in [
-            0x0000u16, 0x0001, 0x0004, 0x00E7, 0x00AE, 0x0104, 0x1104, 0x0704, 0x0F04,
-            0x0304, 0x2204, 0x3228, 0x2704, 0x2F04, 0x2604, 0x4304, 0x5022, 0x5201,
-            0x5223, 0x5243, 0x5262, 0x5283, 0x52A2, 0x52B1, 0x52E3, 0x5705, 0x7705,
-            0x7C00, 0x7C73, 0x7E10,
+            0x0000u16, 0x0001, 0x0004, 0x00E7, 0x00AE, 0x0104, 0x1104, 0x0704, 0x0F04, 0x0304,
+            0x2204, 0x3228, 0x2704, 0x2F04, 0x2604, 0x4304, 0x5022, 0x5201, 0x5223, 0x5243, 0x5262,
+            0x5283, 0x52A2, 0x52B1, 0x52E3, 0x5705, 0x7705, 0x7C00, 0x7C73, 0x7E10,
             // Unknown codes round-trip through their hex rendering.
             0x0083, 0x6FFF,
         ] {
@@ -722,7 +733,9 @@ mod tests {
     #[test]
     fn searches_names_and_aliases() {
         let hits = search("play");
-        assert!(hits.iter().any(|(code, name, _)| *code == 0x00AE && *name == "KC_MPLY"));
+        assert!(hits
+            .iter()
+            .any(|(code, name, _)| *code == 0x00AE && *name == "KC_MPLY"));
         let hits = search("mply");
         assert!(hits.iter().any(|(code, _, _)| *code == 0x00AE));
         let hits = search("boot");
