@@ -1,8 +1,6 @@
-// Keymap editor: the live keymap over KEYMAP_READ/KEYMAP_WRITE (protocol
-// v1.2, feature bit 7). Bindings are VIA 16-bit keycodes — the same store
-// Vial edits, so both editors always agree. Edits are staged locally and
-// written in one batch; the firmware echoes what it actually stored, and any
-// difference (a lossy mapping) is flagged rather than hidden.
+// Keymap editor backed by Rynk in production and the frozen product-protocol
+// backend in demo/legacy mode. The editor keeps VIA u16 keycodes as a
+// transitional UI format and converts to typed Rynk actions at the boundary.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -12,9 +10,9 @@ import {
   KEYMAP_HOLES,
   LED_TO_GRID,
 } from "../lib/glove80-layout";
-import { FEATURE_KEYMAP, type Capabilities, type KeymapEntry } from "../lib/host-protocol";
+import type { KeymapEntry } from "../lib/host-protocol";
 import { formatKeycode, KeycodeError, parseKeycode, searchKeycodes } from "../lib/keycodes";
-import type { ProtocolClient } from "../lib/protocol-client";
+import type { RynkBrowserTransport } from "../lib/rynk-web-client";
 import { Board, type BoardCell } from "./Board";
 import type { StatusUpdate } from "./OverlayPanel";
 
@@ -35,12 +33,31 @@ interface LossyWrite {
 }
 
 interface KeymapPanelProps {
-  client: ProtocolClient | null;
-  capabilities: Capabilities | null;
+  client: {
+    readKeymapLayer(layer: number): Promise<number[]>;
+    writeKeymap(entries: KeymapEntry[]): Promise<number[]>;
+  } | null;
+  rows: number;
+  cols: number;
+  layerCount: number;
+  sourceLabel: string | null;
+  rynkConnecting: RynkBrowserTransport | null;
+  onConnectRynk: (transport: RynkBrowserTransport) => void;
+  onDisconnectRynk: (() => void) | null;
   onStatus: (status: StatusUpdate) => void;
 }
 
-export function KeymapPanel({ client, capabilities, onStatus }: KeymapPanelProps) {
+export function KeymapPanel({
+  client,
+  rows,
+  cols,
+  layerCount,
+  sourceLabel,
+  rynkConnecting,
+  onConnectRynk,
+  onDisconnectRynk,
+  onStatus,
+}: KeymapPanelProps) {
   const [layer, setLayer] = useState(0);
   /** layer → keycodes in flat grid order, as last read from the keyboard. */
   const [layers, setLayers] = useState<Map<number, number[]>>(new Map());
@@ -53,10 +70,8 @@ export function KeymapPanel({ client, capabilities, onStatus }: KeymapPanelProps
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const supported = !!capabilities && (capabilities.featureBits & FEATURE_KEYMAP) !== 0;
-  const layerCount = capabilities?.layerCapacity ?? 8;
-  const gridSize = capabilities ? capabilities.keymapRows * capabilities.keymapCols : 0;
-  const cols = capabilities?.keymapCols ?? 14;
+  const supported = client !== null && rows > 0 && cols > 0 && layerCount > 0;
+  const gridSize = rows * cols;
 
   // A new connection means a new keymap: drop everything cached or staged.
   useEffect(() => {
@@ -266,9 +281,28 @@ export function KeymapPanel({ client, capabilities, onStatus }: KeymapPanelProps
     return (
       <section className="workspace">
         <div className="keymap-gate">
-          {client
-            ? "This keyboard does not advertise keymap editing (protocol feature bit 7). Update the firmware to a v1.2+ build."
-            : "Connect a keyboard (or start demo mode) to read and edit its keymap."}
+          <strong>Keymaps are owned by Rynk.</strong>
+          <span>
+            USB uses the keyboard&apos;s Web Serial interface. Bluetooth uses Rynk&apos;s WebHID
+            collection on an already paired keyboard.
+          </span>
+          <div className="connect-actions">
+            <button
+              className="button primary"
+              disabled={rynkConnecting !== null}
+              onClick={() => onConnectRynk("usb")}
+            >
+              {rynkConnecting === "usb" ? "Connecting…" : "Connect Rynk USB"}
+            </button>
+            <button
+              className="button subtle"
+              disabled={rynkConnecting !== null}
+              onClick={() => onConnectRynk("ble")}
+            >
+              {rynkConnecting === "ble" ? "Connecting…" : "Connect Rynk Bluetooth"}
+            </button>
+          </div>
+          <small>Demo mode still exercises the frozen legacy protocol without touching hardware.</small>
         </div>
       </section>
     );
@@ -285,7 +319,7 @@ export function KeymapPanel({ client, capabilities, onStatus }: KeymapPanelProps
             <div>
               <h2>Layer</h2>
               <p>
-                {capabilities.keymapRows}×{capabilities.keymapCols} grid · {layerCount} layers
+                {rows}×{cols} grid · {layerCount} layers · {sourceLabel ?? "Rynk"}
               </p>
             </div>
           </div>
@@ -310,10 +344,15 @@ export function KeymapPanel({ client, capabilities, onStatus }: KeymapPanelProps
             className="button tool wide"
             disabled={busy}
             onClick={() => void loadLayer(layer, true)}
-            title="KEYMAP_READ: re-read this layer from the live keymap (discards staged edits on it)"
+            title="Re-read this layer through Rynk (discards staged edits on it)"
           >
             Reload from keyboard
           </button>
+          {onDisconnectRynk && (
+            <button className="button subtle wide" disabled={busy} onClick={onDisconnectRynk}>
+              Disconnect Rynk
+            </button>
+          )}
         </section>
 
         <section>
@@ -417,7 +456,7 @@ export function KeymapPanel({ client, capabilities, onStatus }: KeymapPanelProps
             <span className="step-number">03</span>
             <div>
               <h2>Write</h2>
-              <p>Batched KEYMAP_WRITE with canonical read-back</p>
+              <p>Rynk writes with canonical read-back</p>
             </div>
           </div>
           {lossyEntries.length > 0 && (
@@ -439,8 +478,8 @@ export function KeymapPanel({ client, capabilities, onStatus }: KeymapPanelProps
             {pending.size === 0 ? "No staged edits" : `Write ${pending.size} change${pending.size === 1 ? "" : "s"}`}
           </button>
           <p className="keymap-hint">
-            Writes change the live keymap immediately — no reboot — and persist. Same store as
-            Vial: edits made here show up in Vial and vice versa.
+            Writes change the live keymap immediately, persist through RMK storage, and are
+            read back through Rynk before Lightbench reports success.
           </p>
         </section>
       </aside>
@@ -453,7 +492,7 @@ export function KeymapPanel({ client, capabilities, onStatus }: KeymapPanelProps
           pendingKeys={pendingLeds}
           flaggedKeys={lossyLeds}
           onPaintKey={selectKey}
-          caption={`Layer ${layer} — bindings as stored on the keyboard (VIA keycodes). Dashed = staged, red = lossy write. Grid holes are not shown; they always read KC_NO.`}
+          caption={`Layer ${layer} — Rynk actions rendered through the transitional VIA-keycode editor. Dashed = staged, red = lossy conversion. Grid holes are not shown; they always read KC_NO.`}
         />
       </section>
     </section>

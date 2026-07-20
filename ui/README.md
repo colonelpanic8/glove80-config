@@ -1,20 +1,18 @@
 # Glove80 Lightbench
 
-Lightbench is the browser workbench for the Glove80 host protocol
-(`protocol/glove80-host-protocol/PROTOCOL.md`). It connects straight to the
-keyboard — no daemon, no Studio, no install — and drives two things:
+Lightbench connects straight to the keyboard — no daemon or Studio — and uses
+the Glove80 host protocol for lighting plus Rynk for keymaps. It drives:
 
 - the **live host overlay**: RAM-only lighting painted directly onto the
   board, with TTL and brightness control;
 - the **persistent config**: the ordered lighting records the keyboard boots
   with, edited offline and applied through the transactional v1.1 config
   session;
-- the **keymap**: the live key bindings, read and written over the v1.2
-  KEYMAP_READ/KEYMAP_WRITE commands.
+- the **keymap**: live bindings read and written through Rynk.
 
-The ZMK-era Studio path (`@zmkfirmware/zmk-studio-ts-client`, the protobuf
-lighting protocol) has been retired from the app; Lightbench now speaks only
-our own protocol over WebHID and Web Bluetooth.
+The ZMK-era Studio path has been retired. Lighting uses WebHID (USB) or Web
+Bluetooth; Rynk keymaps use Web Serial (USB) or Rynk's WebHID collection
+(Bluetooth). The two sessions are intentionally separate for now.
 
 ## Run locally
 
@@ -38,6 +36,10 @@ Chromium browser; `localhost` counts as a secure context).
   (bonded) with the OS; the `fc550001-…` GATT service requires an encrypted
   link and is claimed via `optionalServices`. Requests go out as
   write-without-response chunks; responses arrive as notifications.
+- **Connect Rynk USB** (Keymap tab) — Web Serial to the firmware's CDC
+  interface. The baud rate is nominal; Rynk frames the byte stream itself.
+- **Connect Rynk Bluetooth** (Keymap tab) — WebHID usage page `0xFF60`, usage
+  `0x61`, exposed by the already paired BLE keyboard.
 - **Demo mode** — an in-memory keyboard (`src/lib/mock-device.ts`)
   implementing the full protocol, including the config transfer session,
   partial-apply semantics, a live keymap (seeded with a QWERTY base layer,
@@ -100,30 +102,28 @@ while the split link has not synced, not an error.
 
 ## Keymap editor
 
-Available when the firmware advertises keymap editing (protocol v1.2,
-feature bit 7).
+Production keymap editing uses an independent Rynk connection from this tab.
+Demo mode retains the frozen v1.2 backend solely so the UI can be exercised
+without hardware.
 
 - Pick a **layer** (0–7); the board shows that layer's bindings as key
-  legends, read live from the keyboard (`KEYMAP_READ`, chunked to the
-  advertised per-op limit). **Reload from keyboard** re-reads the layer —
-  Vial edits, host-protocol writes and compiled defaults all read back
-  through the same runtime state.
+  legends, read live through Rynk. **Reload from keyboard** re-reads the layer
+  from RMK's runtime state.
 - **Click a key** to edit its binding. Enter a keycode by name (`KC_A`,
   `MO(2)`, `LT(1, KC_A)`, `LSFT_T(KC_ESC)`, …), as raw hex (`0x0004`), or
   via the built-in search — the same name table and spellings as
   `glove80-control keymap` (`src/lib/keycodes.ts` mirrors the CLI's
   `keycodes.rs`).
-- Edits are **staged** (dashed outline on the board) and sent in one batched
-  `KEYMAP_WRITE`. Each batch is all-or-nothing on the device; a rejected
-  batch leaves the staged edits staged. Writes change the live keymap
-  **immediately** — no reboot — and are persisted per key in RMK storage.
+- Edits are **staged** (dashed outline on the board), then written through
+  Rynk and read back. A rejected write leaves staged edits available to retry.
+  Successful writes change the live keymap immediately and persist in RMK.
 - The firmware echoes the keycode it actually stored (canonical read-back).
   A stored value that differs from the request is flagged **LOSSY** on the
   board and listed with both values — some nameable keycodes (e.g. `TT(n)`)
   have no RMK representation and store as `KC_NO`.
-- **Vial interop**: bindings travel as VIA/Vial 16-bit keycodes and hit the
-  same store Vial edits over its own protocol. Lightbench, the CLI and Vial
-  always agree — each sees the others' writes verbatim.
+- The editor still presents QMK/VIA-style 16-bit keycodes for continuity with
+  existing config files. `src/lib/rynk-keycode.ts` converts them to typed Rynk
+  actions and flags conversions that cannot round-trip exactly.
 - The four grid holes (positions 5, 8, 75, 78 of the 6×14 matrix) have no
   physical key and are not shown; they always read `KC_NO`.
 
@@ -135,6 +135,9 @@ feature bit 7).
 - `src/lib/keycodes.ts` — the VIA keycode name table (format, parse,
   search), mirroring `tools/glove80-control/src/keycodes.rs` so the web UI
   and the CLI speak the same names.
+- `src/lib/rynk-keycode.ts` / `rynk-web-client.ts` — the transitional typed
+  action converter and Web Serial/WebHID Rynk client, backed by the generated
+  `src/vendor/rynk-wasm` package.
 - `src/lib/glove80-layout.ts` — the LED chain order, plus the 6×14 keymap
   grid ↔ physical key mapping (from `rmk/glove80/vial.json`).
 - `src/lib/transport.ts` + `webhid-transport.ts` / `webbluetooth-transport.ts`

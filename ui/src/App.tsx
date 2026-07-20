@@ -1,9 +1,6 @@
-// Lightbench: the browser workbench for the Glove80 host protocol.
-//
-// Two panels over one connection: the live RAM-only host overlay and the
-// persistent boot config, both painted on the same board rendering. The
-// connection bar speaks WebHID (USB) and Web Bluetooth, and a mock keyboard
-// provides a full demo mode when no hardware is around.
+// Lightbench: Glove80 lighting/config over the product protocol plus keymap
+// editing over Rynk. The two protocols currently have independent browser
+// sessions because their USB and BLE transports are distinct.
 
 import { useEffect, useState } from "react";
 
@@ -31,6 +28,11 @@ import {
 } from "./lib/host-protocol";
 import { createDemoKeyboard, MockTransport } from "./lib/mock-device";
 import { ProtocolClient } from "./lib/protocol-client";
+import {
+  connectRynkKeymap,
+  type BrowserKeymapClient,
+  type RynkBrowserTransport,
+} from "./lib/rynk-web-client";
 import type { Transport, TransportKind } from "./lib/transport";
 import { connectWebBluetooth, webBluetoothSupported } from "./lib/webbluetooth-transport";
 import { connectWebHid, webHidSupported } from "./lib/webhid-transport";
@@ -130,6 +132,8 @@ export function App() {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [version, setVersion] = useState<VersionInfo | null>(null);
   const [connecting, setConnecting] = useState<TransportKind | null>(null);
+  const [rynkClient, setRynkClient] = useState<BrowserKeymapClient | null>(null);
+  const [rynkConnecting, setRynkConnecting] = useState<RynkBrowserTransport | null>(null);
   const [status, setStatus] = useState<StatusUpdate>({
     tone: "idle",
     message: "Connect a keyboard — or explore in demo mode",
@@ -158,6 +162,34 @@ export function App() {
       client?.close().catch(() => undefined);
     };
   }, [client]);
+
+  useEffect(() => {
+    return () => {
+      rynkClient?.close().catch(() => undefined);
+    };
+  }, [rynkClient]);
+
+  const connectRynk = async (transport: RynkBrowserTransport) => {
+    setRynkConnecting(transport);
+    setStatus({ tone: "busy", message: `Waiting for the Rynk ${transport.toUpperCase()} interface…` });
+    try {
+      const next = await connectRynkKeymap(transport);
+      setRynkClient(next);
+      setStatus({
+        tone: "ok",
+        message: `Rynk connected · ${next.rows}×${next.cols} · ${next.layers} layers`,
+      });
+    } catch (error) {
+      setStatus({ tone: "error", message: connectionError(error) });
+    } finally {
+      setRynkConnecting(null);
+    }
+  };
+
+  const disconnectRynk = () => {
+    setRynkClient(null);
+    setStatus({ tone: "idle", message: "Rynk keymap connection closed" });
+  };
 
   const connect = async (kind: TransportKind) => {
     setConnecting(kind);
@@ -321,9 +353,9 @@ export function App() {
             className={panel === "keymap" ? "selected" : ""}
             onClick={() => setPanel("keymap")}
             title={
-              !capabilities || (capabilities.featureBits & FEATURE_KEYMAP) !== 0
-                ? "Edit the live keymap (same store as Vial)"
-                : "This keyboard does not advertise keymap editing"
+              rynkClient || !capabilities || (capabilities.featureBits & FEATURE_KEYMAP) !== 0
+                ? "Edit the live keymap through Rynk"
+                : "Open the tab to connect Rynk for keymap editing"
             }
           >
             Keymap
@@ -368,7 +400,22 @@ export function App() {
           onStatus={setStatus}
         />
       ) : (
-        <KeymapPanel client={client} capabilities={capabilities} onStatus={setStatus} />
+        <KeymapPanel
+          client={
+            rynkClient ??
+            (client && capabilities && (capabilities.featureBits & FEATURE_KEYMAP) !== 0
+              ? client
+              : null)
+          }
+          rows={rynkClient?.rows ?? capabilities?.keymapRows ?? 0}
+          cols={rynkClient?.cols ?? capabilities?.keymapCols ?? 0}
+          layerCount={rynkClient?.layers ?? capabilities?.layerCapacity ?? 0}
+          sourceLabel={rynkClient?.label ?? (demo ? "demo protocol" : null)}
+          rynkConnecting={rynkConnecting}
+          onConnectRynk={(transport) => void connectRynk(transport)}
+          onDisconnectRynk={rynkClient ? () => void disconnectRynk() : null}
+          onStatus={setStatus}
+        />
       )}
     </main>
   );
