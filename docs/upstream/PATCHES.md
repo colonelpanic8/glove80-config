@@ -1,7 +1,7 @@
 # Vendored RMK patch inventory
 
 This inventory was generated from the current monorepo checkout at
-`/home/imalison/Projects/glove80-zmk-config`, commit `2bac75ac`, with:
+`/home/imalison/Projects/glove80-config`, commit `2bac75ac`, with:
 
 ```sh
 rg -n "GLOVE80 PATCH" rmk/vendor/rmk
