@@ -2,7 +2,7 @@ GLOVE80_RMK := dependencies/glove80-rmk
 CONTROL := ./bin/glove80-control
 CONFIG := config/glove80.toml
 
-.PHONY: init check apply show devices firmware
+.PHONY: init check apply show firmware
 
 init:
 	git submodule update --init --recursive
@@ -15,9 +15,6 @@ apply:
 
 show:
 	$(CONTROL) config show
-
-devices:
-	$(CONTROL) devices
 
 firmware:
 	@config_dirty=false; \
