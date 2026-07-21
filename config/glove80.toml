@@ -4,9 +4,9 @@
 # dependencies/glove80-rmk/firmware/glove80-rmk/keyboard.toml and is applied
 # at runtime through RMK's native Rynk protocol:
 #
-#   make check
-#   make apply
-#   make show
+#   just check
+#   just apply
+#   just show
 #
 # Keymap model:
 # - A [[layer]]'s position in this file is its firmware layer slot (0-7).

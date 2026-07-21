@@ -12,11 +12,11 @@ tree and the pre-extraction RMK product stack have been removed.
 ## Setup
 
 ```sh
-make init
-make check
+just init
+just check
 ```
 
-`make init` initializes `glove80-rmk` and its pinned RMK submodule. `make check`
+`just init` initializes `glove80-rmk` and its pinned RMK submodule. `just check`
 builds the pinned `glove80-control` and validates `config/glove80.toml` offline.
 Nix supplies the Rust and native dependencies used by the control tool.
 
@@ -25,8 +25,8 @@ Nix supplies the Rust and native dependencies used by the control tool.
 Connect the keyboard over USB or BLE, then run:
 
 ```sh
-make apply
-make show
+just apply
+just show
 ```
 
 The keymap is written through Rynk, becomes active immediately, and is persisted
@@ -48,7 +48,7 @@ Run `./bin/glove80-control --help` for the complete interface.
 Build release firmware from the exact pinned product stack with:
 
 ```sh
-make firmware
+just firmware
 ```
 
 Artifacts are written under `dependencies/glove80-rmk/dist/`. The firmware's
@@ -70,7 +70,7 @@ gitlink:
 ```sh
 git submodule update --remote dependencies/glove80-rmk
 git -C dependencies/glove80-rmk log --oneline --decorate ORIG_HEAD..HEAD
-make check
+just check
 git add dependencies/glove80-rmk
 ```
 
