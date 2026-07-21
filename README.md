@@ -62,6 +62,25 @@ firmware label: this configuration repository's commit, the pinned
 The release manifest records the full configuration, product, and RMK commits.
 A dirty working tree is marked in both places.
 
+## Lighting controls and indicators
+
+Lighting has a master output state: when it is off, background, layer scenes,
+host overlays, and status indicators are all dark.
+
+- Hold the left-thumb Magic key to ensure lighting is on and show the battery
+  information view.
+- Press `Magic+F2` to toggle all lighting off or on.
+- While lighting is on, `F1` through `F5` show layers 0 through 4: green means
+  active and dim red means inactive.
+- While Games (layer 3) is active, `W`, `A`, `S`, and `D` are red. The
+  left-thumb Backspace position is amber because its Games action is Space.
+- While Magic is held, the five keys below the top key in each outer column
+  form bottom-up battery bars for the corresponding half. Each segment is a
+  20% band; green is normal, amber/red is low, and blue means charging.
+
+The top-left outer-column key is reserved for the `F1` layer indicator, so the
+battery bars intentionally use five segments rather than six.
+
 ## Updating `glove80-rmk`
 
 Update deliberately, inspect the upstream changes, and then commit the new
