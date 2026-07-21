@@ -2,3 +2,7 @@
 	path = dependencies/glove80-rmk
 	url = https://github.com/colonelpanic8/glove80-rmk.git
 	branch = master
+[submodule "rynkbench"]
+	path = rynkbench
+	url = https://github.com/colonelpanic8/rynkbench.git
+	branch = master
