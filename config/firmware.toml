@@ -207,6 +207,9 @@ topology_revision = 1
 output_mode_cycle_user_action = 13
 wake_layer = 2
 initial_output_mode = "powered_only"
+# In powered-only mode each half evaluates its own USB/VBUS input. This is
+# independent of whether USB or BLE is selected as the keyboard transport.
+powered_only_scope = "local"
 
 [lighting.controls.output_mode_indicator]
 target = { key = [3, 5] }

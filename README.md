@@ -67,7 +67,8 @@ A dirty working tree is marked in both places.
 ## Lighting controls and indicators
 
 Lighting has a three-state output policy: always on, always off, or on only
-while USB power is present.
+while USB power is present. In plugged-in-only mode each half evaluates its
+own VBUS independently; USB power does not need to be the selected transport.
 
 - Hold the left-thumb Magic key to temporarily wake lighting and show the
   information view without changing the selected policy.
