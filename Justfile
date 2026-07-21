@@ -21,6 +21,8 @@ firmware:
         if test -n "$(git status --porcelain --untracked-files=normal)"; then \
             config_dirty=true; \
         fi; \
+        config_path="$(pwd)/config/firmware.toml"; \
+        KEYBOARD_TOML_PATH="$config_path" \
         GLOVE80_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
         GLOVE80_CONFIG_GIT_DIRTY="$config_dirty" \
-            bash -c 'cd {{ glove80_rmk }} && nix develop --command ./scripts/build-release.sh'
+            bash -c 'cd {{ glove80_rmk }} && nix develop --command just dist'

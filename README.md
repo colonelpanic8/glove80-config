@@ -4,10 +4,12 @@ Ivan's source-controlled Glove80 keymap, applied to the current
 [`glove80-rmk`](https://github.com/colonelpanic8/glove80-rmk) firmware through
 RMK's native Rynk protocol.
 
-This repository deliberately contains configuration only. Firmware, hardware
-support, lighting, the control CLI, release packaging, and their documentation
-live in the pinned `dependencies/glove80-rmk` submodule. The former vendored ZMK
-tree and the pre-extraction RMK product stack have been removed.
+Personal keymap and lighting policy live in this repository. Firmware hardware
+support, reusable lighting/protocol machinery, the control CLI, and release
+packaging live in the pinned `dependencies/glove80-rmk` submodule. The firmware
+build injects [`config/firmware.toml`](config/firmware.toml) through RMK's
+external keyboard-configuration path; `glove80-rmk` contains no personal
+lighting rules.
 
 ## Setup
 
@@ -64,12 +66,14 @@ A dirty working tree is marked in both places.
 
 ## Lighting controls and indicators
 
-Lighting has a master output state: when it is off, background, layer scenes,
-host overlays, and status indicators are all dark.
+Lighting has a three-state output policy: always on, always off, or on only
+while USB power is present.
 
-- Hold the left-thumb Magic key to ensure lighting is on and show the battery
-  information view.
-- Press `Magic+F2` to toggle all lighting off or on.
+- Hold the left-thumb Magic key to temporarily wake lighting and show the
+  information view without changing the selected policy.
+- Press `Magic+F` to cycle always on → always off → plugged-in only. `F` is
+  white as the action legend; adjacent `G` reports the selected policy in
+  green, red, or blue respectively.
 - While lighting is on, `F1` through `F5` show layers 0 through 4: green means
   active and dim red means inactive.
 - While Games (layer 3) is active, `W`, `A`, `S`, and `D` are red. The
