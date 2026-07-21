@@ -26,3 +26,10 @@ firmware:
         GLOVE80_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
         GLOVE80_CONFIG_GIT_DIRTY="$config_dirty" \
             bash -c 'cd {{ glove80_rmk }} && nix develop --command just dist'
+
+attention-check:
+    nix develop ./{{ glove80_rmk }} --command cargo test
+    nix develop ./{{ glove80_rmk }} --command cargo fmt --all -- --check
+
+attention-run *args:
+    nix develop ./{{ glove80_rmk }} --command cargo run --bin rmk-attentiond -- {{ args }}

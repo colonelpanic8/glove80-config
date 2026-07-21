@@ -86,6 +86,13 @@ own VBUS independently; USB power does not need to be the selected transport.
 The top-left outer-column key is reserved for the `F1` layer indicator, so the
 battery bars intentionally use five segments rather than six.
 
+## Agent attention lighting
+
+This repository also provides `rmk-attentiond`, a small local daemon that maps
+Codex and Claude Code approval/input requests onto expiring F1-F3 lighting
+overlays. See [RMK Agent Attention](docs/rmk-agent-attention.md) for behavior,
+Claude hook configuration, and development commands.
+
 ## Updating `glove80-rmk`
 
 Update deliberately, inspect the upstream changes, and then commit the new

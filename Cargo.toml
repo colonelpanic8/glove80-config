@@ -1,0 +1,24 @@
+[package]
+name = "rmk-agent-attention"
+version = "0.1.0"
+edition = "2024"
+description = "Drive RMK keyboard lighting from local coding-agent attention events"
+license = "MIT"
+
+[[bin]]
+name = "rmk-attentiond"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+axum = "0.8"
+clap = { version = "4.5", features = ["derive"] }
+futures-util = "0.3"
+serde_json = "1.0"
+tokio = { version = "1.48", features = ["macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "handshake"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
