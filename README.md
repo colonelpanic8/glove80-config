@@ -72,9 +72,9 @@ own VBUS independently; USB power does not need to be the selected transport.
 
 - Hold the left-thumb Magic key to temporarily wake lighting and show the
   information view without changing the selected policy.
-- Press `Magic+F` to cycle always on → always off → plugged-in only. `F` is
-  white as the action legend; adjacent `G` reports the selected policy in
-  green, red, or blue respectively.
+- Press either `Magic+S` or `Magic+D` to cycle always on → always off →
+  plugged-in only. `S` is white as the action legend; `D` reports the selected
+  policy in green, red, or blue respectively.
 - While lighting is on, `F1` through `F5` show layers 0 through 4: green means
   active and dim red means inactive.
 - While Games (layer 3) is active, `W`, `A`, `S`, and `D` are red. The

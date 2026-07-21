@@ -53,7 +53,8 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 # current/all profiles. USER(12) forwards the bootloader request to the right
 # half. The compiled keymap's "switch output to USB" action has no VIA keycode
 # encoding, so its key (r5c6) remains unbound in this runtime representation.
-# USER(13), on Magic+F, cycles always-on, always-off, and plugged-in-only.
+# USER(13), on both Magic+S and Magic+D, cycles always-on, always-off, and
+# plugged-in-only.
 # Holding Magic temporarily wakes lighting and reveals the information view.
 [[layer]]
 id = "magic"
@@ -62,7 +63,7 @@ keys = """
 USER(10)  --  --  --  --  --  USER(2)  --  --  --  --  --  --  USER(11)
 --        --  --  --  --  --  USER(3)  --  --  --  --  --  --  --
 --        --  --  --  --  --  --       --  --  --  --  --  --  --
-QK_BOOT   --  --  --  USER(13)  --  USER(0)  --  --  --  --  --  --  USER(12)
+QK_BOOT   --  USER(13)  USER(13)  --  --  USER(0)  --  --  --  --  --  --  USER(12)
 QK_RBT    --  --  --  --  --  USER(1)  --  --  --  --  --  --  QK_RBT
 --        --  --  --  --  --  --       --  --  --  --  --  --  TO(3)
 """

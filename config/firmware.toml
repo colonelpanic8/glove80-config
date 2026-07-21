@@ -76,7 +76,7 @@ keys = """
 User10 No No No No User2 No No No No No User11
 No No No No No No User3 No No No No No No No
 No No No No No No No No No No No No No No
-Bootloader No No No User13 No User0 No No No No No No User12
+Bootloader No User13 User13 No No User0 No No No No No No User12
 Reboot No No No No No User1 No No No No No No Reboot
 No No No No No OutputUsb No No No No No TO(3)
 """
@@ -202,8 +202,9 @@ col_pins = ["P1_06", "P1_04", "P0_02", "P1_07", "P1_05", "P1_03", "P1_01"]
 topology_revision = 1
 
 [lighting.controls]
-# User13 is bound to Magic+F. Layer 2 temporarily wakes a dark board without
-# changing the selected policy, while the adjacent G key reports that policy.
+# User13 is bound to both Magic+S and Magic+D. Layer 2 temporarily wakes a dark
+# board without changing the selected policy; S is the white action legend and
+# D reports the selected policy.
 output_mode_cycle_user_action = 13
 wake_layer = 2
 initial_output_mode = "powered_only"
@@ -212,7 +213,7 @@ initial_output_mode = "powered_only"
 powered_only_scope = "local"
 
 [lighting.controls.output_mode_indicator]
-target = { key = [3, 5] }
+target = { key = [3, 3] }
 always_on = { kind = "solid", color = [0, 128, 0] }
 always_off = { kind = "solid", color = [128, 0, 0] }
 powered_only = { kind = "solid", color = [0, 64, 160] }
@@ -886,14 +887,6 @@ physical_index = 39
 # Immutable status rules. These are compiled from configuration, evaluated
 # against live state on both halves, and exposed read-only over Rynk.
 
-# Magic+F is the output-mode action. Keep it white as the visual legend; the
-# adjacent G key is rendered by lighting.controls.output_mode_indicator.
-[[lighting.conditional_scene]]
-layer = { layer = 2, active = true }
-[[lighting.conditional_scene.cell]]
-target = { key = [3, 4] }
-effect = { kind = "solid", color = [160, 160, 160] }
-
 # F1-F5 report layers 0-4: green when active, dim red otherwise.
 [[lighting.conditional_scene]]
 layer = { layer = 0, active = false }
@@ -1140,6 +1133,16 @@ battery = { node = 1, min_level = 81, charge = "charging" }
 [[lighting.conditional_scene.cell]]
 target = { led = 75 }
 effect = { kind = "solid", color = [0, 64, 160] }
+
+# Both Magic+S and Magic+D cycle the output mode. Keep S white as the action
+# legend; D is rendered by lighting.controls.output_mode_indicator. This rule
+# follows the Games-layer WASD rules so Magic+S remains white when both layers
+# are active.
+[[lighting.conditional_scene]]
+layer = { layer = 2, active = true }
+[[lighting.conditional_scene.cell]]
+target = { key = [3, 2] }
+effect = { kind = "solid", color = [160, 160, 160] }
 
 [[lighting.layer_scene]]
 layer = 0
