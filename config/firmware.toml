@@ -76,8 +76,8 @@ keys = """
 User10 No No No No User2 No No No No No User11
 No No No No No No User3 No No No No No No No
 No No No No No No No No No No No No No No
-Bootloader No User13 User13 No No User0 No No No No No No User12
-Reboot No No No No No User1 No No No No No No Reboot
+Bootloader User13 BacklightDown BacklightUp No No User0 No No No No No No User12
+Reboot No RgbTog RgbModeForward RgbHui No User1 No No No No No No Reboot
 No No No No No OutputUsb No No No No No TO(3)
 """
 
@@ -100,7 +100,7 @@ _ _ _ _ _ _ _ TG(4) _ _ _ _ _ _
 _ _ _ _ _ _ _ _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ _ _ _ _ _ _
-_ _ _ _ _ _ WM(LCtrl, LGui | LAlt) _ _ _ _ _
+_ _ _ _ _ _ WM(LCtrl, LGui | LAlt | LShift) _ _ _ _ _
 """
 
 # The local lighting processor and the central semantic-replication task both
@@ -202,9 +202,8 @@ col_pins = ["P1_06", "P1_04", "P0_02", "P1_07", "P1_05", "P1_03", "P1_01"]
 topology_revision = 1
 
 [lighting.controls]
-# User13 is bound to both Magic+S and Magic+D. Layer 2 temporarily wakes a dark
-# board without changing the selected policy; S is the white action legend and
-# D reports the selected policy.
+# User13 is bound to Magic+A. Layer 2 temporarily wakes a dark board without
+# changing the selected policy; A reports the selected policy.
 output_mode_cycle_user_action = 13
 wake_layer = 2
 initial_output_mode = "powered_only"
@@ -213,7 +212,7 @@ initial_output_mode = "powered_only"
 powered_only_scope = "local"
 
 [lighting.controls.output_mode_indicator]
-target = { key = [3, 3] }
+target = { key = [3, 1] }
 always_on = { kind = "solid", color = [0, 128, 0] }
 always_off = { kind = "solid", color = [128, 0, 0] }
 powered_only = { kind = "solid", color = [0, 64, 160] }
@@ -887,68 +886,35 @@ physical_index = 39
 # Immutable status rules. These are compiled from configuration, evaluated
 # against live state on both halves, and exposed read-only over Rynk.
 
-# F1-F5 report layers 0-4: green when active, dim red otherwise.
-[[lighting.conditional_scene]]
-layer = { layer = 0, active = false }
-[[lighting.conditional_scene.cell]]
-target = { led = 34 }
-effect = { kind = "solid", color = [64, 0, 0] }
-
-[[lighting.conditional_scene]]
-layer = { layer = 0, active = true }
-[[lighting.conditional_scene.cell]]
-target = { led = 34 }
-effect = { kind = "solid", color = [0, 128, 0] }
-
-[[lighting.conditional_scene]]
-layer = { layer = 1, active = false }
-[[lighting.conditional_scene.cell]]
-target = { led = 28 }
-effect = { kind = "solid", color = [64, 0, 0] }
-
+# Number keys 1-4 report non-default layers 1-4 in blue while active. Inactive
+# layers contribute no indicator light; layer 0 needs none because it is always
+# active.
 [[lighting.conditional_scene]]
 layer = { layer = 1, active = true }
 [[lighting.conditional_scene.cell]]
-target = { led = 28 }
-effect = { kind = "solid", color = [0, 128, 0] }
-
-[[lighting.conditional_scene]]
-layer = { layer = 2, active = false }
-[[lighting.conditional_scene.cell]]
-target = { led = 22 }
-effect = { kind = "solid", color = [64, 0, 0] }
+target = { led = 29 }
+effect = { kind = "solid", color = [0, 0, 255] }
 
 [[lighting.conditional_scene]]
 layer = { layer = 2, active = true }
 [[lighting.conditional_scene.cell]]
-target = { led = 22 }
-effect = { kind = "solid", color = [0, 128, 0] }
-
-[[lighting.conditional_scene]]
-layer = { layer = 3, active = false }
-[[lighting.conditional_scene.cell]]
-target = { led = 16 }
-effect = { kind = "solid", color = [64, 0, 0] }
+target = { led = 23 }
+effect = { kind = "solid", color = [0, 0, 255] }
 
 [[lighting.conditional_scene]]
 layer = { layer = 3, active = true }
 [[lighting.conditional_scene.cell]]
-target = { led = 16 }
-effect = { kind = "solid", color = [0, 128, 0] }
-
-[[lighting.conditional_scene]]
-layer = { layer = 4, active = false }
-[[lighting.conditional_scene.cell]]
-target = { led = 10 }
-effect = { kind = "solid", color = [64, 0, 0] }
+target = { led = 17 }
+effect = { kind = "solid", color = [0, 0, 255] }
 
 [[lighting.conditional_scene]]
 layer = { layer = 4, active = true }
 [[lighting.conditional_scene.cell]]
-target = { led = 10 }
-effect = { kind = "solid", color = [0, 128, 0] }
+target = { led = 11 }
+effect = { kind = "solid", color = [0, 0, 255] }
 
-# Games layer: WASD red and the Backspace-position Space action amber.
+# Games layer: WASD red. The Backspace-position Space action is part of the
+# layer scene below so it composes above Base's color for that same key.
 [[lighting.conditional_scene]]
 layer = { layer = 3, active = true }
 [[lighting.conditional_scene.cell]]
@@ -963,9 +929,6 @@ effect = { kind = "solid", color = [160, 0, 0] }
 [[lighting.conditional_scene.cell]]
 target = { led = 19 }
 effect = { kind = "solid", color = [160, 0, 0] }
-[[lighting.conditional_scene.cell]]
-target = { led = 3 }
-effect = { kind = "solid", color = [160, 48, 0] }
 
 # Five-segment bottom-up battery bars, visible while Magic (layer 2) is held.
 # Broad green rules come first; low-level and charging rules below override
@@ -1134,16 +1097,6 @@ battery = { node = 1, min_level = 81, charge = "charging" }
 target = { led = 75 }
 effect = { kind = "solid", color = [0, 64, 160] }
 
-# Both Magic+S and Magic+D cycle the output mode. Keep S white as the action
-# legend; D is rendered by lighting.controls.output_mode_indicator. This rule
-# follows the Games-layer WASD rules so Magic+S remains white when both layers
-# are active.
-[[lighting.conditional_scene]]
-layer = { layer = 2, active = true }
-[[lighting.conditional_scene.cell]]
-target = { key = [3, 2] }
-effect = { kind = "solid", color = [160, 160, 160] }
-
 [[lighting.layer_scene]]
 layer = 0
 
@@ -1290,6 +1243,26 @@ effect = { kind = "solid", color = [0, 255, 0] }
 layer = 2
 
 [[lighting.layer_scene.cell]]
+target = { key = [3, 2] }
+effect = { kind = "solid", color = [255, 255, 255] }
+
+[[lighting.layer_scene.cell]]
+target = { key = [3, 3] }
+effect = { kind = "solid", color = [255, 255, 255] }
+
+[[lighting.layer_scene.cell]]
+target = { key = [4, 2] }
+effect = { kind = "solid", color = [0, 192, 64] }
+
+[[lighting.layer_scene.cell]]
+target = { key = [4, 3] }
+effect = { kind = "solid", color = [255, 255, 255] }
+
+[[lighting.layer_scene.cell]]
+target = { key = [4, 4] }
+effect = { kind = "solid", color = [255, 255, 255] }
+
+[[lighting.layer_scene.cell]]
 target = { led = 0 }
 effect = { kind = "solid", color = [255, 0, 255] }
 
@@ -1347,6 +1320,10 @@ effect = { kind = "solid", color = [255, 0, 255] }
 
 [[lighting.layer_scene]]
 layer = 3
+
+[[lighting.layer_scene.cell]]
+target = { led = 3 }
+effect = { kind = "solid", color = [160, 48, 0] }
 
 [[lighting.layer_scene.cell]]
 target = { led = 0 }

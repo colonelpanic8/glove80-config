@@ -1,17 +1,20 @@
-# Ivan's Glove80 keymap for the current glove80-rmk firmware.
+# Ivan's Glove80 runtime configuration for the current glove80-rmk firmware.
+default_layer = 0
 #
 # This matches the compiled-in layers in
-# dependencies/glove80-rmk/firmware/glove80-rmk/keyboard.toml and is applied
+# dependencies/glove80-rmk/crates/glove80-rmk/keyboard.toml and is applied
 # at runtime through RMK's native Rynk protocol:
 #
 #   just check
+#   just diff
 #   just apply
 #   just show
+#   just pull
 #
 # Keymap model:
 # - A [[layer]]'s position in this file is its firmware layer slot (0-7).
-# - `id` and `name` are host-side labels. The firmware stores neither; an
-#   export synthesizes layer0..N.
+# - `id` and `name` are host-side labels. The firmware stores neither; pull
+#   preserves existing labels when possible and otherwise synthesizes them.
 # - `keys` is the 6x14 grid, row-major, whitespace-separated, one row per
 #   line. Tokens are the same QMK-style names `keymap read`/`keymap set`
 #   use (see `keymap find`); `--` is an unbound key (KC_NO) and marks the
@@ -19,8 +22,9 @@
 #   end of the line. Columns 0-6 are the left half (col 6 = left thumbs),
 #   columns 7-13 the right half (col 7 = right thumbs).
 #
-# Apply semantics: writes are batched with read-back verification, but are not
-# atomic across the whole keymap. A failure reports exactly what was written.
+# Apply semantics: changed key bindings are written with read-back verification
+# but are not atomic across the whole keymap. Durable lighting scenes are
+# replaced atomically, and the full managed runtime state is verified afterward.
 
 # --- Layer 0: Base -----------------------------------------------------------
 [[layer]]
@@ -51,10 +55,10 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 # --- Layer 2: Magic (system controls) ---------------------------------------
 # USER(0)-USER(3) select BLE profiles 0-3; USER(10)/USER(11) clear the
 # current/all profiles. USER(12) forwards the bootloader request to the right
-# half. The compiled keymap's "switch output to USB" action has no VIA keycode
-# encoding, so its key (r5c6) remains unbound in this runtime representation.
-# USER(13), on both Magic+S and Magic+D, cycles always-on, always-off, and
-# plugged-in-only.
+# half. Magic's left-thumb key at r5c6 switches output to USB.
+# USER(13), on Magic+A, cycles always-on, always-off, and plugged-in-only.
+# Magic+S/D adjust global output brightness; Magic+X/C/V toggle PaletteFX,
+# cycle its effect, and cycle its palette.
 # Holding Magic temporarily wakes lighting and reveals the information view.
 [[layer]]
 id = "magic"
@@ -63,9 +67,9 @@ keys = """
 USER(10)  --  --  --  --  --  USER(2)  --  --  --  --  --  --  USER(11)
 --        --  --  --  --  --  USER(3)  --  --  --  --  --  --  --
 --        --  --  --  --  --  --       --  --  --  --  --  --  --
-QK_BOOT   --  USER(13)  USER(13)  --  --  USER(0)  --  --  --  --  --  --  USER(12)
-QK_RBT    --  --  --  --  --  USER(1)  --  --  --  --  --  --  QK_RBT
---        --  --  --  --  --  --       --  --  --  --  --  --  TO(3)
+QK_BOOT   USER(13)  BL_DOWN  BL_UP    --  --  USER(0)  --  --  --  --  --  --  USER(12)
+QK_RBT    --        RGB_TOG  RGB_MOD  RGB_HUI  --  USER(1)  --  --  --  --  --  --  QK_RBT
+--        --  --  --  --  --  QK_OUTPUT_USB  --  --  --  --  --  --  TO(3)
 """
 
 # --- Layer 3: Games (left-hand WASD) ----------------------------------------
@@ -91,5 +95,71 @@ _______  _______  _______  _______  _______  _______  _______  TG(4)    _______ 
 _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
 _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
 _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  --       _______  LALT(LGUI(KC_LCTL))  --  _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  --       _______  LSFT(LALT(LGUI(KC_LCTL)))  --  _______  _______  _______  _______  _______
 """
+
+[lighting]
+brightness = 255
+output_mode = "powered-only"
+scene_policy = "active-stack"
+
+[lighting.background]
+enabled = false
+hue = 0
+saturation = 0
+value = 0
+speed = 128
+mode = "solid"
+
+# Rynk's generic lighting-extension state. Names come from the connected
+# firmware's extension descriptor; PaletteFX is the current provider.
+[lighting.effects]
+effect = "Reactive"
+palette = "Phosphor"
+value = 128
+speed = 128
+
+[[lighting.scene]]
+layer = 1
+led = 29
+color = "#0000ff"
+
+[[lighting.scene]]
+layer = 2
+led = 14
+color = "#ffffff"
+
+[[lighting.scene]]
+layer = 2
+led = 19
+color = "#ffffff"
+
+[[lighting.scene]]
+layer = 2
+led = 20
+color = "#ffffff"
+
+[[lighting.scene]]
+layer = 2
+led = 23
+color = "#0000ff"
+
+[[lighting.scene]]
+layer = 2
+led = 25
+color = "#ffffff"
+
+[[lighting.scene]]
+layer = 2
+led = 26
+color = "#00c040"
+
+[[lighting.scene]]
+layer = 3
+led = 17
+color = "#0080ff"
+
+[[lighting.scene]]
+layer = 4
+led = 11
+color = "#0000ff"

@@ -13,6 +13,12 @@ check:
 apply:
     {{ control }} config apply {{ config }}
 
+diff:
+    {{ control }} config diff {{ config }}
+
+pull:
+    {{ control }} config pull {{ config }}
+
 show:
     {{ control }} config show
 

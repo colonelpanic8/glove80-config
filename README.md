@@ -27,13 +27,33 @@ Nix supplies the Rust and native dependencies used by the control tool.
 Connect the keyboard over USB or BLE, then run:
 
 ```sh
+just diff
 just apply
-just show
 ```
 
-The keymap is written through Rynk, becomes active immediately, and is persisted
-by RMK. Writes are verified in pages but are not atomic across the entire
-keymap; an interrupted apply can leave earlier pages updated.
+`config/glove80.toml` is a bidirectional representation of managed runtime
+state: keymap layers, default layer, brightness/background, output mode,
+durable layer scenes and policy, and the generic lighting-extension selection.
+Rynk supplies extension effect and palette names without knowing which effect
+pack implements them.
+
+`just diff` compares that TOML with the connected keyboard. `just apply` writes
+only differences and verifies the resulting state. Keymap/default-layer and
+durable-scene storage survive reboot; other lighting values are live state whose
+boot defaults come from firmware. Key writes are not atomic across the entire
+keymap, while durable lighting scenes are replaced atomically.
+
+To inspect or pull state in the other direction:
+
+```sh
+just show                         # print canonical live TOML
+just pull                         # rewrite config/glove80.toml from the keyboard
+./bin/glove80-control config pull /tmp/glove80.toml
+```
+
+Pull preserves existing layer IDs and names when it can parse the destination,
+but rewrites the file in canonical TOML form and therefore does not preserve
+comments.
 
 For transport selection or any other CLI command, use the pinned wrapper:
 
@@ -69,22 +89,27 @@ A dirty working tree is marked in both places.
 Lighting has a three-state output policy: always on, always off, or on only
 while USB power is present. In plugged-in-only mode each half evaluates its
 own VBUS independently; USB power does not need to be the selected transport.
+The final hardware driver caps each color channel at 230/255 (about 90%).
 
 - Hold the left-thumb Magic key to temporarily wake lighting and show the
   information view without changing the selected policy.
-- Press either `Magic+S` or `Magic+D` to cycle always on → always off →
-  plugged-in only. `S` is white as the action legend; `D` reports the selected
-  policy in green, red, or blue respectively.
-- While lighting is on, `F1` through `F5` show layers 0 through 4: green means
-  active and dim red means inactive.
+- Press `Magic+A` to cycle always on → always off → plugged-in only. `A`
+  reports the selected policy in green, red, or blue respectively.
+- On Magic, `S`/`D` lower and raise overall brightness, while `X`/`C`/`V`
+  toggle PaletteFX, advance to the next effect, and advance to the next
+  palette. The one-shot adjustment/cycle controls are white; `X` retains its
+  green toggle color, while `A` reports output mode in green, red, or blue.
+  PaletteFX starts off and toggles on at half brightness.
+- While lighting is on, number keys `1` through `4` show non-default layers 1
+  through 4 in blue while active. Inactive layers are transparent/dark; layer
+  0 has no indicator because it is always active.
 - While Games (layer 3) is active, `W`, `A`, `S`, and `D` are red. The
   left-thumb Backspace position is amber because its Games action is Space.
 - While Magic is held, the five keys below the top key in each outer column
   form bottom-up battery bars for the corresponding half. Each segment is a
   20% band; green is normal, amber/red is low, and blue means charging.
 
-The top-left outer-column key is reserved for the `F1` layer indicator, so the
-battery bars intentionally use five segments rather than six.
+The battery bars intentionally use five segments.
 
 ## Agent attention lighting
 
