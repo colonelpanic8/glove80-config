@@ -115,7 +115,7 @@ mode = "solid"
 # Rynk's generic lighting-extension state. Names come from the connected
 # firmware's extension descriptor; PaletteFX is the current provider.
 [lighting.effects]
-effect = "Rain"
+effect = "Storm"
 palette = "Afterburn"
 value = 128
 speed = 128
