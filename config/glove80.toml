@@ -56,7 +56,9 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 # USER(0)-USER(3) select BLE profiles 0-3; USER(10)/USER(11) clear the
 # current/all profiles. USER(12) forwards the bootloader request to the right
 # half. Magic's left-thumb key at r5c6 switches output to USB.
-# USER(13), on Magic+A, cycles always-on, always-off, and plugged-in-only.
+# UG_OMODE, on Magic+A, cycles always-on, always-off, and plugged-in-only.
+# It binds the lighting action directly, so the key says what it does rather
+# than pointing at a USER number the firmware has to be told the meaning of.
 # Magic+S/D adjust global output brightness; Magic+X/C/V toggle PaletteFX,
 # cycle its effect, and cycle its palette.
 # Holding Magic temporarily wakes lighting and reveals the information view.
@@ -67,7 +69,7 @@ keys = """
 USER(10)  --  --  --  --  --  USER(2)  --  --  --  --  --  --  USER(11)
 --        --  --  --  --  --  USER(3)  --  --  --  --  --  --  --
 --        --  --  --  --  --  --       --  --  --  --  --  --  --
-QK_BOOT   USER(13)  BL_DOWN  BL_UP    --  --  USER(0)  --  --  --  --  --  --  USER(12)
+QK_BOOT   UG_OMODE  BL_DOWN  BL_UP    --  --  USER(0)  --  --  --  --  --  --  USER(12)
 QK_RBT    --        RGB_TOG  RGB_MOD  RGB_HUI  --  USER(1)  --  --  --  --  --  --  QK_RBT
 --        --  --  --  --  --  QK_OUTPUT_USB  --  --  --  --  --  --  TO(3)
 """

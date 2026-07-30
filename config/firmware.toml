@@ -239,8 +239,6 @@ topology_revision = 1
 [lighting.controls]
 # User13 is bound to Magic+A. Layer 2 temporarily wakes a dark board without
 # changing the selected policy; A reports the selected policy.
-output_mode_cycle_user_action = 13
-wake_layer = 2
 initial_output_mode = "powered_only"
 # In powered-only mode each half evaluates its own USB/VBUS input. This is
 # independent of whether USB or BLE is selected as the keyboard transport.
