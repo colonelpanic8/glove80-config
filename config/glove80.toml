@@ -380,14 +380,17 @@ battery = { node = 1, min_level = 81, charge = "charging" }
 [[lighting.conditional_scene]]
 led = 31
 color = "#008000"
+layer = { layer = 2, active = true }
 output_mode = "always-on"
 
 [[lighting.conditional_scene]]
 led = 31
 color = "#800000"
+layer = { layer = 2, active = true }
 output_mode = "always-off"
 
 [[lighting.conditional_scene]]
 led = 31
 color = "#0040a0"
+layer = { layer = 2, active = true }
 output_mode = "powered-only"

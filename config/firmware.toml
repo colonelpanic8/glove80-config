@@ -110,7 +110,7 @@ keys = """
 User10 No No No No No No No No User11
 No No No No No No No No No No No No
 No No No No No No No No No No No No
-Bootloader User13 BacklightDown BacklightUp No No No No No No No User12
+Bootloader OutputModeCycle BacklightDown BacklightUp No No No No No No No User12
 Reboot No RgbTog RgbModeForward RgbHui No User2 User3 No No No No No No No No No Reboot
 No No No No No User0 User1 OutputUsb No No No No No No No TO(3)
 """
@@ -159,7 +159,8 @@ channel_size = 3
 pubs = 2
 subs = 4
 
-# MagicKeyActions consumes resolved User12/User13 and Magic-layer actions.
+# MagicKeyActions consumes the board-reserved User12 action and any legacy
+# user-number lighting actions a board elects to configure.
 [event.action]
 channel_size = 16
 pubs = 1
@@ -237,8 +238,9 @@ col_pins = ["P1_06", "P1_04", "P0_02", "P1_07", "P1_05", "P1_03", "P1_01"]
 topology_revision = 1
 
 [lighting.controls]
-# User13 is bound to Magic+A. Layer 2 temporarily wakes a dark board without
-# changing the selected policy; A reports the selected policy.
+# Magic+A binds OutputModeCycle directly. Layer 2 temporarily wakes a dark
+# board without changing the selected policy; A reports the selected policy.
+wake_layers = [2]
 initial_output_mode = "powered_only"
 # In powered-only mode each half evaluates its own USB/VBUS input. This is
 # independent of whether USB or BLE is selected as the keyboard transport.
@@ -916,3 +918,26 @@ physical_index = 39
 # Number keys 1-4 report non-default layers 1-4 in blue while active. Inactive
 # layers contribute no indicator light; layer 0 needs none because it is always
 # active.
+
+# Magic+A reports the selected three-state lighting policy only while the Magic
+# layer is active. Persisted runtime rules use the same predicates and effects.
+[[lighting.conditional_scene]]
+layer = { layer = 2, active = true }
+output_mode = "always_on"
+[[lighting.conditional_scene.cell]]
+target = { led = 31 }
+effect = { kind = "solid", color = [0, 128, 0] }
+
+[[lighting.conditional_scene]]
+layer = { layer = 2, active = true }
+output_mode = "always_off"
+[[lighting.conditional_scene.cell]]
+target = { led = 31 }
+effect = { kind = "solid", color = [128, 0, 0] }
+
+[[lighting.conditional_scene]]
+layer = { layer = 2, active = true }
+output_mode = "powered_only"
+[[lighting.conditional_scene.cell]]
+target = { led = 31 }
+effect = { kind = "solid", color = [0, 64, 160] }
