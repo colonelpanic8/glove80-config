@@ -118,21 +118,22 @@ mode = "solid"
 effect = "Storm"
 palette = "Afterburn"
 value = 255
-speed = 221
+speed = 108
 
 # Per-effect parameters, by the names the firmware advertises. Only the ones
 # listed here are managed: anything left out keeps whatever the keyboard has,
 # which is what makes live tuning in Rynkbench safe to leave in place.
 #
 # Rain and Storm share the same knobs but hold separate values. Spawn is in
-# units of 10 ms, so 5 is a drop every 50 ms; with 28 slots and roughly a
-# second of fall time that keeps about twenty drops on the board at once.
+# units of 10 ms, so 5 is a drop every 50 ms; the slot count then caps how many
+# are airborne. Hues are left unlisted because the firmware already defaults to
+# blue rain with green hits.
 [lighting.effects.params.Rain]
-Drops = 28
+Drops = 11
 "Spawn x10ms" = 5
 
 [lighting.effects.params.Storm]
-Drops = 28
+Drops = 11
 "Spawn x10ms" = 5
 Trail = 161
 
