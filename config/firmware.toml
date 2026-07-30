@@ -246,12 +246,6 @@ initial_output_mode = "powered_only"
 # independent of whether USB or BLE is selected as the keyboard transport.
 powered_only_scope = "local"
 
-[lighting.controls.output_mode_indicator]
-target = { key = [3, 1] }
-always_on = { kind = "solid", color = [0, 128, 0] }
-always_off = { kind = "solid", color = [128, 0, 0] }
-powered_only = { kind = "solid", color = [0, 64, 160] }
-
 [[lighting.zone]]
 id = 1
 name = "per-key"

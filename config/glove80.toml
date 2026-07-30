@@ -370,3 +370,22 @@ led = 75
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 81, charge = "charging" }
+
+# Output-mode indicator: the LED that shows whether lighting is always on,
+# always off, or only while plugged in. Expressed as three rules gated on the
+# live policy, which is what let it stop being compiled into the firmware.
+
+[[lighting.conditional_scene]]
+led = 31
+color = "#008000"
+output_mode = "always-on"
+
+[[lighting.conditional_scene]]
+led = 31
+color = "#800000"
+output_mode = "always-off"
+
+[[lighting.conditional_scene]]
+led = 31
+color = "#0040a0"
+output_mode = "powered-only"
