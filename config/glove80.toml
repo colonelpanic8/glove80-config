@@ -62,6 +62,8 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 # Magic+S/D adjust global output brightness; Magic+X/C/V toggle PaletteFX,
 # cycle its effect, and cycle its palette.
 # Holding Magic temporarily wakes lighting and reveals the information view.
+# Firmware gates PaletteFX to black while this layer is active; keeping that
+# dense mask out of the runtime scene table makes press/release rendering fast.
 [[layer]]
 id = "magic"
 name = "Magic"
