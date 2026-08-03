@@ -145,11 +145,11 @@ speed = 108
 # Crosshair is the default effect. Its full live tuning is pinned here so the
 # source profile reproduces the current look exactly.
 [lighting.effects.params.Crosshair]
-"Arm hue" = 44
+"Arm hue" = 0
 "Arm width" = 11
 Crosses = 1
 "Duration x10ms" = 90
-"Key hue" = 124
+"Key hue" = 173
 Motion = 0
 "Pulse width" = 170
 
@@ -158,8 +158,10 @@ Motion = 0
 # are airborne.
 [lighting.effects.params.Rain]
 Drops = 11
+"Rain hue" = 172
 "Spawn x10ms" = 5
 Trail = 161
+Width = 14
 
 # Active-layer indicators: F1-F5 show layers 1-5 in blue while active.
 
