@@ -32,7 +32,7 @@ cols = 14
 # bottom two rows where the hand actually finds them. Key centres derived from
 # this walk are the only geometry the lighting engine has, so this arrangement
 # — not column adjacency in the matrix — is what "nearby" means to the spatial
-# effects (Reactive, Ripple, Rain, Vortex). Positions are transcribed in key
+# effects (Reactive, Crosshair, Ripple, Rain, Vortex). Positions are transcribed in key
 # units from the MoErgo ZMK board definition, glove80-layouts.dtsi.
 #
 # Written in the same order as the ZMK matrix transform in glove80.dtsi, which

@@ -33,9 +33,11 @@ just apply
 
 `config/glove80.toml` is a bidirectional representation of managed runtime
 state: keymap layers, default layer, brightness/background, output mode,
-durable layer scenes and policy, and the generic lighting-extension selection.
-Rynk supplies extension effect and palette names without knowing which effect
-pack implements them.
+durable layer scenes and policy, and the generic lighting-extension selection
+and optional overlay. Rynk supplies extension effect and palette names without
+knowing which effect pack implements them. The current PaletteFX pack includes
+the key-reactive Crosshair effect and exposes all seven of its tuning controls
+through the same generic parameter interface.
 
 `just diff` compares that TOML with the connected keyboard. `just apply` writes
 only differences and verifies the resulting state. Keymap/default-layer and
