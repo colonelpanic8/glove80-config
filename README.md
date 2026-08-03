@@ -57,6 +57,25 @@ Pull preserves existing layer IDs and names when it can parse the destination,
 but rewrites the file in canonical TOML form and therefore does not preserve
 comments.
 
+The same configuration commands also accept the experimental JSON backup
+format from the MoErgo Layout Editor:
+
+```sh
+./bin/glove80-control config validate layout.json
+./bin/glove80-control config diff layout.json
+./bin/glove80-control config apply layout.json
+./bin/glove80-control config pull layout.json --format moergo-json
+./bin/glove80-control config show --format moergo-json
+```
+
+JSON import manages the runtime keymap and default layer; the editor format has
+no Rynk lighting state. Pulling over an existing editor JSON preserves its
+identity, layer names, macros, combos, custom behavior definitions, and other
+editor-owned sections. A binding with no faithful Rynk/editor equivalent is
+rejected with its exact layer and key position rather than silently changed.
+The Layout Editor itself describes JSON import/export as experimental, so the
+schema may evolve.
+
 For transport selection or any other CLI command, use the pinned wrapper:
 
 ```sh
