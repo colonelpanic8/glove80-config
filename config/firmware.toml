@@ -72,7 +72,7 @@ thumb_5_7 = { x = 0.1854, y = 2.125, r = -60.0 }
 layers = 8
 # Ported from legacy glove80-config/config/glove80.keymap. Layers: 0 Base,
 # 1 Lower, 2 Magic,
-# 3 Games, 4 Mac Hyper. Layers 5-7 are unassigned editable capacity.
+# 3 Games, 4 Mac Hyper, 5 Paseo. Layers 6-7 are unassigned editable capacity.
 # Substitutions from the ZMK keymap:
 #   - &magic hold-tap        -> MO(2) plus board-local lighting wake/status
 #   - &bt_0..&bt_3           -> User0..User3 (RMK BLE profile select)
@@ -89,7 +89,7 @@ F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
 Equal Kc1 Kc2 Kc3 Kc4 Kc5 Kc6 Kc7 Kc8 Kc9 Kc0 Minus
 Tab Q W E R T Y U I O P Backslash
 LCtrl A S D F G H J K L LT(1, Semicolon) Quote
-LShift Z X C V B LT(1, Escape) Delete MO(2) LGui TG(4) Backspace N M Comma Dot Slash RShift
+LShift Z X C V B LT(1, Escape) LT(5, Delete) MO(2) LGui TG(4) Backspace N M Comma Dot Slash RShift
 Grave Home End Left Right Backspace LGui LAlt RGui Enter Space Up Down LeftBracket RightBracket TG(3)
 """
 
@@ -136,6 +136,18 @@ _ _ _ _ _ _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ _ _ TG(4) _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ MOD(LCtrl | LAlt | LGui) _ _ _ _ _ _ _
+"""
+
+[[keymap.layer]]
+name = "Paseo"
+# F/O/S/L emit F13-F16; Q/M/H emit F17-F19.
+keys = """
+_ _ _ _ _ _ _ _ _ _
+_ _ _ _ _ _ _ _ _ _ _ _
+_ F17 _ _ _ _ _ _ _ F14 _ _
+_ _ F15 _ F13 _ F19 _ _ F16 _ _
+_ _ _ _ _ _ _ _ _ _ _ _ _ F18 _ _ _ _
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 """
 
 # The local lighting processor and the central semantic-replication task both
@@ -915,9 +927,8 @@ physical_index = 39
 # Immutable status rules. These are compiled from configuration, evaluated
 # against live state on both halves, and exposed read-only over Rynk.
 
-# Number keys 1-4 report non-default layers 1-4 in blue while active. Inactive
-# layers contribute no indicator light; layer 0 needs none because it is always
-# active.
+# F1-F5 report non-default layers 1-5 in blue while active. Inactive layers
+# contribute no indicator light; layer 0 needs none because it is always active.
 
 # Magic+A reports the selected three-state lighting policy only while the Magic
 # layer is active. Persisted runtime rules use the same predicates and effects.

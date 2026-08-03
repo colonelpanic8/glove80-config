@@ -32,7 +32,7 @@ id = "base"
 name = "Base"
 keys = """
 KC_F1    KC_F2    KC_F3   KC_F4    KC_F5    --       LT(1,KC_ESC)  KC_BSPC  --       KC_F6  KC_F7    KC_F8    KC_F9          KC_F10
-KC_EQL   KC_1     KC_2    KC_3     KC_4     KC_5     KC_DEL        TG(4)    KC_6     KC_7   KC_8     KC_9     KC_0           KC_MINS
+KC_EQL   KC_1     KC_2    KC_3     KC_4     KC_5     LT(5,KC_DEL)  TG(4)    KC_6     KC_7   KC_8     KC_9     KC_0           KC_MINS
 KC_TAB   KC_Q     KC_W    KC_E     KC_R     KC_T     MO(2)         KC_LGUI  KC_Y     KC_U   KC_I     KC_O     KC_P           KC_BSLS
 KC_LCTL  KC_A     KC_S    KC_D     KC_F     KC_G     KC_BSPC       KC_SPC   KC_H     KC_J   KC_K     KC_L     LT(1,KC_SCLN)  KC_QUOT
 KC_LSFT  KC_Z     KC_X    KC_C     KC_V     KC_B     KC_LGUI       KC_ENT   KC_N     KC_M   KC_COMM  KC_DOT   KC_SLSH        KC_RSFT
@@ -101,6 +101,22 @@ _______  _______  _______  _______  _______  _______  _______  _______  _______ 
 _______  _______  _______  _______  _______  --       _______  MOD(MOD_LCTL|MOD_LALT|MOD_LGUI)  --  _______  _______  _______  _______  _______
 """
 
+# --- Layer 5: Paseo ----------------------------------------------------------
+# Tap Delete normally; hold it to activate this layer.
+# Mnemonics: F/O/S/L select Fable/Opus/Sol/Luna; Q/M/H select
+# low (quick)/medium/high effort. F13-F19 are the host shortcut namespace.
+[[layer]]
+id = "paseo"
+name = "Paseo"
+keys = """
+_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
+_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+_______  KC_F17   _______  _______  _______  _______  _______  _______  _______  _______  _______  KC_F14   _______  _______
+_______  _______  KC_F15   _______  KC_F13   _______  _______  _______  KC_F19   _______  _______  KC_F16   _______  _______
+_______  _______  _______  _______  _______  _______  _______  _______  _______  KC_F18   _______  _______  _______  _______
+_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
+"""
+
 [lighting]
 brightness = 255
 output_mode = "powered-only"
@@ -145,10 +161,11 @@ Drops = 11
 "Spawn x10ms" = 5
 Trail = 161
 
+# Active-layer indicators: F1-F5 show layers 1-5 in blue while active.
 
 [[lighting.scene]]
 layer = 1
-led = 29
+led = 34
 color = "#0000ff"
 
 [[lighting.scene]]
@@ -168,7 +185,7 @@ color = "#ffffff"
 
 [[lighting.scene]]
 layer = 2
-led = 23
+led = 28
 color = "#0000ff"
 
 [[lighting.scene]]
@@ -183,12 +200,17 @@ color = "#00c040"
 
 [[lighting.scene]]
 layer = 3
-led = 17
+led = 22
 color = "#0080ff"
 
 [[lighting.scene]]
 layer = 4
-led = 11
+led = 16
+color = "#0000ff"
+
+[[lighting.scene]]
+layer = 5
+led = 10
 color = "#0000ff"
 
 # Games-layer key highlights, moved out of the compiled table so lighting
@@ -219,6 +241,44 @@ color = "#a00000"
 layer = 3
 led = 19
 color = "#a00000"
+
+# Paseo mnemonic layer: Claude models are orange, Codex models are blue, and
+# effort runs from green through amber to red.
+
+[[lighting.scene]]
+layer = 5
+led = 13  # F: Fable
+color = "#d06040"
+
+[[lighting.scene]]
+layer = 5
+led = 64  # O: Opus
+color = "#d06040"
+
+[[lighting.scene]]
+layer = 5
+led = 25  # S: Sol
+color = "#0080ff"
+
+[[lighting.scene]]
+layer = 5
+led = 65  # L: Luna
+color = "#0080ff"
+
+[[lighting.scene]]
+layer = 5
+led = 30  # Q: low / quick
+color = "#00c040"
+
+[[lighting.scene]]
+layer = 5
+led = 54  # M: medium
+color = "#d08000"
+
+[[lighting.scene]]
+layer = 5
+led = 48  # H: high
+color = "#c02020"
 
 # Battery gauges on the Magic layer, five LEDs per half. Order matters:
 # later rules win the LEDs they share, so the level bands come first, the

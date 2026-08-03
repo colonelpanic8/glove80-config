@@ -121,8 +121,8 @@ The final hardware driver caps each color channel at 230/255 (about 90%).
   palette. The one-shot adjustment/cycle controls are white; `X` retains its
   green toggle color, while `A` reports output mode in green, red, or blue.
   PaletteFX starts off and toggles on at half brightness.
-- While lighting is on, number keys `1` through `4` show non-default layers 1
-  through 4 in blue while active. Inactive layers are transparent/dark; layer
+- While lighting is on, F-keys `F1` through `F5` show non-default layers 1
+  through 5 in blue while active. Inactive layers are transparent/dark; layer
   0 has no indicator because it is always active.
 - While Games (layer 3) is active, `W`, `A`, `S`, and `D` are red. The
   left-thumb Backspace position is amber because its Games action is Space.
