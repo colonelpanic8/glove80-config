@@ -27,7 +27,7 @@ jobs:
           submodules: recursive
       - uses: cachix/install-nix-action@v25
       - name: Build and validate both configured firmware halves
-        run: nix develop ./dependencies/glove80-rmk --command just firmware
+        run: nix develop path:./dependencies/glove80-rmk --command just firmware
       - name: Upload configured firmware bundle
         uses: actions/upload-artifact@v4
         with:
