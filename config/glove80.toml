@@ -129,11 +129,11 @@ speed = 108
 # Crosshair is the default effect. Its full live tuning is pinned here so the
 # source profile reproduces the current look exactly.
 [lighting.effects.params.Crosshair]
-"Arm hue" = 172
-"Arm width" = 12
+"Arm hue" = 44
+"Arm width" = 11
 Crosses = 1
 "Duration x10ms" = 90
-"Key hue" = 16
+"Key hue" = 124
 Motion = 0
 "Pulse width" = 170
 
