@@ -31,7 +31,7 @@ firmware:
         KEYBOARD_TOML_PATH="$config_path" \
         GLOVE80_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
         GLOVE80_CONFIG_GIT_DIRTY="$config_dirty" \
-            bash -c 'cd {{ glove80_rmk }} && nix develop --command just dist'
+            bash -c 'cd {{ glove80_rmk }} && nix develop path:. --command just dist'
 
 attention-check:
     nix develop ./{{ glove80_rmk }} --command cargo test
