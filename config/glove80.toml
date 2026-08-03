@@ -117,9 +117,8 @@ mode = "solid"
 # Rynk's generic lighting-extension state. Names come from the connected
 # firmware's extension descriptor; PaletteFX is the current provider.
 [lighting.effects]
-effect = "Rain"
-overlay = "Reactive"
-palette = "Afterburn"
+effect = "Crosshair"
+palette = "Amber"
 value = 255
 speed = 108
 
@@ -127,17 +126,24 @@ speed = 108
 # listed here are managed: anything left out keeps whatever the keyboard has,
 # which is what makes live tuning in Rynkbench safe to leave in place.
 #
-# Spawn is in units of 10 ms, so 5 is a drop every 50 ms; the slot count then
-# caps how many are airborne. Rain is the primary effect and Reactive occupies
-# the ordinary second effect slot.
+# Crosshair is the default effect. Its full live tuning is pinned here so the
+# source profile reproduces the current look exactly.
+[lighting.effects.params.Crosshair]
+"Arm hue" = 172
+"Arm width" = 12
+Crosses = 1
+"Duration x10ms" = 90
+"Key hue" = 16
+Motion = 0
+"Pulse width" = 170
+
+# Keep Rain's tuned density available when cycling back to it. Spawn is in
+# units of 10 ms, so 5 is a drop every 50 ms; the slot count then caps how many
+# are airborne.
 [lighting.effects.params.Rain]
 Drops = 11
 "Spawn x10ms" = 5
 Trail = 161
-
-# Crosshair's Motion, Duration, arm/pulse width, count, and hues are deliberately
-# unmanaged here so tuning them live in Rynkbench remains durable. Crosshair can
-# occupy either the primary or overlay slot.
 
 [[lighting.scene]]
 layer = 1
