@@ -272,6 +272,44 @@ value = 0
 speed = 128
 mode = "solid"
 
+# Magic replaces PaletteFX with a dark information view. The all-LED black
+# floor hides the extension effect; later cells restore the keys that expose
+# Magic controls. Battery and output-mode indicators compose above this layer.
+[[lighting.layer_scene]]
+layer = 2
+
+[[lighting.layer_scene.cell]]
+target = { all = true }
+effect = { kind = "solid", color = [0, 0, 0] }
+
+[[lighting.layer_scene.cell]]
+target = { led = 14 }
+effect = { kind = "solid", color = [255, 255, 255] }
+
+[[lighting.layer_scene.cell]]
+target = { led = 19 }
+effect = { kind = "solid", color = [255, 255, 255] }
+
+[[lighting.layer_scene.cell]]
+target = { led = 20 }
+effect = { kind = "solid", color = [255, 255, 255] }
+
+[[lighting.layer_scene.cell]]
+target = { led = 23 }
+effect = { kind = "solid", color = [0, 0, 255] }
+
+[[lighting.layer_scene.cell]]
+target = { led = 25 }
+effect = { kind = "solid", color = [255, 255, 255] }
+
+[[lighting.layer_scene.cell]]
+target = { led = 26 }
+effect = { kind = "solid", color = [0, 192, 64] }
+
+[[lighting.layer_scene.cell]]
+target = { led = 6 }
+effect = { kind = "solid", color = [0, 96, 128] }
+
 [[lighting.emitter]]
 id = 0
 key = [0, 6]
