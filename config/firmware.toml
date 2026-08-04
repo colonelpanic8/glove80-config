@@ -18,6 +18,11 @@ manufacturer = "MoErgo"
 chip = "nrf52840"
 
 [rmk]
+# Four key-selectable BLE profile slots. The USER id map shifts with this
+# number: User0-3 select, User4/5 next/previous, User6 clears the active
+# bond, User7 toggles the preferred transport, User8 (held) clears the
+# split peer.
+ble_profiles_num = 4
 # The right half carries both input and replicated lighting state over the
 # split link. On USB power attend every 7.5 ms event; on battery allow one
 # skipped event (15 ms maximum interval) to retain some radio savings.
@@ -75,9 +80,10 @@ layers = 8
 # 3 Games, 4 Mac Hyper, 5 Paseo. Layers 6-7 are unassigned editable capacity.
 # Substitutions from the ZMK keymap:
 #   - &magic hold-tap        -> MO(2) plus board-local lighting wake/status
-#   - &bt_0..&bt_3           -> User0..User3 (RMK BLE profile select)
-#   - &bt BT_CLR / BT_CLR_ALL-> User10 / User11 (profile clear actions)
-#   - &out OUT_USB           -> OutputUsb
+#   - &bt_0..&bt_3           -> User0..User3 (select the profile AND prefer
+#     BLE output, so a slot key both picks and routes to that connection)
+#   - &bt BT_CLR             -> User6 (clear the active profile's bond)
+#   - &out OUT_USB           -> OutputUsb (prefer USB output)
 #   - left &bootloader       -> Bootloader
 #   - right &bootloader      -> User12 (forwarded to the peripheral)
 #   - &sys_reset             -> Reboot
@@ -107,12 +113,12 @@ _ _ _ MediaPrevTrack MediaNextTrack _ _ _ _ _ MediaPlayPause AudioVolUp AudioVol
 [[keymap.layer]]
 name = "Magic"
 keys = """
-User10 No No No No No No No No User11
+User6 No No No No No No No No No
 No No No No No No No No No No No No
 No No No No No No No No No No No No
 Bootloader OutputModeCycle BacklightDown BacklightUp No No No No No No No User12
-Reboot No RgbTog RgbModeForward RgbHui No User2 User3 No No No No No No No No No Reboot
-No No No No No User0 User1 OutputUsb No No No No No No No TO(3)
+Reboot RgbTog RgbModeForward RgbHui No No User0 User1 No No No No No No No No No Reboot
+No No No No No User2 User3 OutputUsb No No No No No No No TO(3)
 """
 
 [[keymap.layer]]
@@ -296,33 +302,33 @@ layer = 2
 target = { all = true }
 effect = { kind = "solid", color = [0, 0, 0] }
 
+# Z: PaletteFX on/off, the second of the two on/off switches in the A/Z column.
 [[lighting.layer_scene.cell]]
-target = { led = 14 }
+target = { led = 32 }
+effect = { kind = "solid", color = [0, 192, 64] }
+
+# S/D: brightness down/up.
+[[lighting.layer_scene.cell]]
+target = { led = 25 }
 effect = { kind = "solid", color = [255, 255, 255] }
 
 [[lighting.layer_scene.cell]]
 target = { led = 19 }
 effect = { kind = "solid", color = [255, 255, 255] }
 
+# X/C: next PaletteFX effect/palette.
+[[lighting.layer_scene.cell]]
+target = { led = 26 }
+effect = { kind = "solid", color = [255, 255, 255] }
+
 [[lighting.layer_scene.cell]]
 target = { led = 20 }
 effect = { kind = "solid", color = [255, 255, 255] }
 
+# F2 is this layer's active-layer indicator, matching F1/F3/F4/F5 on the others.
 [[lighting.layer_scene.cell]]
-target = { led = 23 }
+target = { led = 28 }
 effect = { kind = "solid", color = [0, 0, 255] }
-
-[[lighting.layer_scene.cell]]
-target = { led = 25 }
-effect = { kind = "solid", color = [255, 255, 255] }
-
-[[lighting.layer_scene.cell]]
-target = { led = 26 }
-effect = { kind = "solid", color = [0, 192, 64] }
-
-[[lighting.layer_scene.cell]]
-target = { led = 6 }
-effect = { kind = "solid", color = [0, 96, 128] }
 
 [[lighting.emitter]]
 id = 0
