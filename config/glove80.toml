@@ -68,12 +68,11 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 # arrows:
 #
 #   W: brightness up               S: brightness down
-#   E: PaletteFX on/off            T: lighting on/off
+#   E: PaletteFX on/off            T: lighting on/off/auto
 #   left arrow: previous effect    right arrow: next effect
 #   C: next palette
 #
-# BL_TOGG, on Magic+T, toggles between always-on and always-off. The keyboard
-# can still enter plugged-in-only through its configuration/state interfaces.
+# UG_OMODE, on Magic+T, cycles always-on, always-off, and plugged-in-only.
 # Holding Magic temporarily wakes lighting and reveals the information view.
 # The runtime scene table carries the full-layer black mask itself, so it does
 # not depend on the firmware's compiled Magic scene to hide PaletteFX.
@@ -83,9 +82,9 @@ name = "Magic"
 keys = """
 --        --        --       --       --  --  QK_OUTPUT_USB  --  --  --  --  --  --  --
 --        --        --       --       --  --  --             --  --  --  --  --  --  --
---        --        --       --       --  --  --             --  --  --  --  --  --  --
-QK_BOOT   --        BL_UP    --       --  BL_TOGG  USER(0)    --  --  --  --  --  --  USER(12)
-QK_RBT    --        BL_DOWN RGB_TOG  --  --       USER(1)     --  --  --  --  --  --  QK_RBT
+--        --        BL_UP    RGB_TOG  --  UG_OMODE --           --  --  --  --  --  --  --
+QK_BOOT   --        BL_DOWN --       --  --       USER(0)      --  --  --  --  --  --  USER(12)
+QK_RBT    --        --       RGB_HUI  --  --       USER(1)     --  --  --  --  --  --  QK_RBT
 --        --        --       RGB_RMOD RGB_MOD  --  USER(2)     --  --  --  --  --  --  TO(3)
 """
 
@@ -166,7 +165,7 @@ mode = "solid"
 # Rynk's generic lighting-extension state. Names come from the connected
 # firmware's extension descriptor; PaletteFX is the current provider.
 [lighting.effects]
-effect = "Keyfall"
+effect = "Crosshair"
 palette = "Polarized"
 value = 255
 speed = 32
@@ -282,12 +281,22 @@ color = "#000000"
 
 [[lighting.scene]]
 layer = 2
+led = 19
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
 led = 22
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
 led = 23
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+led = 26
 color = "#000000"
 
 [[lighting.scene]]
@@ -308,6 +317,11 @@ color = "#000000"
 [[lighting.scene]]
 layer = 2
 led = 31
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+led = 32
 color = "#000000"
 
 [[lighting.scene]]

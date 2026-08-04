@@ -117,7 +117,7 @@ name = "Magic"
 keys = """
 No No No No No No No No No No
 No No No No No No No No No No No No
-No No BacklightUp RgbTog No BacklightToggle No No No No No No
+No No BacklightUp RgbTog No OutputModeCycle No No No No No No
 Bootloader No BacklightDown No No No No No No No No No User12
 Reboot No No RgbHui No No OutputUsb No No No No No No No No No No Reboot
 No No No RgbModeReverse RgbModeForward User0 User1 User2 No No No No No No No TO(3)
@@ -260,7 +260,7 @@ col_pins = ["P1_06", "P1_04", "P0_02", "P1_07", "P1_05", "P1_03", "P1_01"]
 topology_revision = 1
 
 [lighting.controls]
-# Magic+T binds BacklightToggle directly. Layer 2 temporarily wakes a dark
+# Magic+T binds OutputModeCycle directly. Layer 2 temporarily wakes a dark
 # board without changing the selected policy; T reports the selected policy.
 wake_layers = [2]
 initial_output_mode = "powered_only"
