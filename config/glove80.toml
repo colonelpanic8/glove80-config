@@ -107,6 +107,24 @@ _______  _______  _______  _______  _______  --       _______  MOD(MOD_LCTL|MOD_
 # Tap Delete normally; hold it to activate this layer.
 # Mnemonics: F/O/S/L select Fable/Opus/Sol/Luna; Q/M/H select
 # low (quick)/medium/high effort. F13-F19 are the host shortcut namespace.
+#
+# The host half of this contract lives in Paseo, whose shortcut overrides
+# persist to renderer localStorage (`@paseo:keyboard-shortcut-overrides` under
+# the `paseo://app` origin) rather than to any file, so it cannot be checked in
+# alongside this keymap. Recorded here so the pairing survives a reset:
+#
+#   F13  command-center.shortcut:models:claude:claude-fable-5
+#   F14  command-center.shortcut:models:claude:claude-opus-5
+#   F15  command-center.shortcut:models:codex:gpt-5.6-sol
+#   F16  command-center.shortcut:models:codex:gpt-5.6-luna
+#   F17  command-center.shortcut:thinking:low
+#   F18  command-center.shortcut:thinking:medium
+#   F19  command-center.shortcut:thinking:high
+#
+# Rebind through Settings -> Shortcuts (Model and Thinking sections). Those rows
+# only became bindable in getpaseo/paseo#2845; before that fix they rendered
+# permanently greyed out because availability was computed from the live
+# contribution set, which is empty on the settings route.
 [[layer]]
 id = "paseo"
 name = "Paseo"
