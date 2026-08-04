@@ -64,16 +64,16 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 # management goes through `glove80-control connection`. USER(12) forwards
 # the bootloader request to the right half.
 #
-# The lighting controls form a 2x3 block on the left hand. Column A/Z holds the
-# two on/off switches, and the two columns to their right adjust that row's
-# subject:
+# The lighting controls use the familiar WASD cluster plus the left/right
+# arrows:
 #
-#   A: output policy on/off/auto   S: brightness down   D: brightness up
-#   Z: PaletteFX on/off            X: next effect       C: next palette
+#   W: brightness up               S: brightness down
+#   E: PaletteFX on/off            T: lighting on/off
+#   left arrow: previous effect    right arrow: next effect
+#   C: next palette
 #
-# UG_OMODE, on Magic+A, cycles always-on, always-off, and plugged-in-only.
-# It binds the lighting action directly, so the key says what it does rather
-# than pointing at a USER number the firmware has to be told the meaning of.
+# BL_TOGG, on Magic+T, toggles between always-on and always-off. The keyboard
+# can still enter plugged-in-only through its configuration/state interfaces.
 # Holding Magic temporarily wakes lighting and reveals the information view.
 # The runtime scene table carries the full-layer black mask itself, so it does
 # not depend on the firmware's compiled Magic scene to hide PaletteFX.
@@ -84,9 +84,9 @@ keys = """
 --        --        --       --       --  --  QK_OUTPUT_USB  --  --  --  --  --  --  --
 --        --        --       --       --  --  --             --  --  --  --  --  --  --
 --        --        --       --       --  --  --             --  --  --  --  --  --  --
-QK_BOOT   UG_OMODE  BL_DOWN  BL_UP    --  --  USER(0)        --  --  --  --  --  --  USER(12)
-QK_RBT    RGB_TOG   RGB_MOD  RGB_HUI  --  --  USER(1)        --  --  --  --  --  --  QK_RBT
---        --        --       --       --  --  USER(2)        --  --  --  --  --  --  TO(3)
+QK_BOOT   --        BL_UP    --       --  BL_TOGG  USER(0)    --  --  --  --  --  --  USER(12)
+QK_RBT    --        BL_DOWN RGB_TOG  --  --       USER(1)     --  --  --  --  --  --  QK_RBT
+--        --        --       RGB_RMOD RGB_MOD  --  USER(2)     --  --  --  --  --  --  TO(3)
 """
 
 # --- Layer 3: Games (left-hand WASD) ----------------------------------------
@@ -166,10 +166,10 @@ mode = "solid"
 # Rynk's generic lighting-extension state. Names come from the connected
 # firmware's extension descriptor; PaletteFX is the current provider.
 [lighting.effects]
-effect = "Crosshair"
-palette = "Amber"
+effect = "Keyfall"
+palette = "Polarized"
 value = 255
-speed = 108
+speed = 32
 
 # Per-effect parameters, by the names the firmware advertises. Only the ones
 # listed here are managed: anything left out keeps whatever the keyboard has,
@@ -237,11 +237,6 @@ color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 7
-color = "#000000"
-
-[[lighting.scene]]
-layer = 2
 led = 8
 color = "#000000"
 
@@ -277,11 +272,6 @@ color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 15
-color = "#000000"
-
-[[lighting.scene]]
-layer = 2
 led = 16
 color = "#000000"
 
@@ -292,27 +282,12 @@ color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 18
-color = "#000000"
-
-[[lighting.scene]]
-layer = 2
-led = 21
-color = "#000000"
-
-[[lighting.scene]]
-layer = 2
 led = 22
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
 led = 23
-color = "#000000"
-
-[[lighting.scene]]
-layer = 2
-led = 24
 color = "#000000"
 
 [[lighting.scene]]
@@ -570,30 +545,35 @@ layer = 2
 led = 79
 color = "#000000"
 
-# Magic's lighting-control block, painted over the blackout. The two on/off
-# switches share the A/Z column, and neither is painted here: both report
-# their own live state through the conditional rules below. The adjust/cycle
-# keys to their right are white.
+# Magic's lighting-control block, painted over the blackout. Effect and output
+# toggles report their own live state through the conditional rules below.
+# Brightness controls are yellow, effect cycling is white, and palette cycling
+# is magenta.
+
+[[lighting.scene]]
+layer = 2
+led = 24  # W: brightness up
+color = "#ffff00"
 
 [[lighting.scene]]
 layer = 2
 led = 25  # S: brightness down
+color = "#ffff00"
+
+[[lighting.scene]]
+layer = 2
+led = 21  # left arrow: previous effect
 color = "#ffffff"
 
 [[lighting.scene]]
 layer = 2
-led = 19  # D: brightness up
-color = "#ffffff"
-
-[[lighting.scene]]
-layer = 2
-led = 26  # X: next effect
+led = 15  # right arrow: next effect
 color = "#ffffff"
 
 [[lighting.scene]]
 layer = 2
 led = 20  # C: next palette
-color = "#ffffff"
+color = "#ff00ff"
 
 # Active-layer indicators: F1-F5 show layers 1-5 in blue while active.
 
@@ -849,42 +829,41 @@ color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 81, charge = "charging" }
 
-# Output-mode indicator: the LED that shows whether lighting is always on,
+# Output-mode indicator: the LED on T that shows whether lighting is always on,
 # always off, or only while plugged in. Expressed as three rules gated on the
 # live policy, which is what let it stop being compiled into the firmware.
 
 [[lighting.conditional_scene]]
-led = 31
+led = 7
 color = "#008000"
 layer = { layer = 2, active = true }
 output_mode = "always-on"
 
 [[lighting.conditional_scene]]
-led = 31
+led = 7
 color = "#800000"
 layer = { layer = 2, active = true }
 output_mode = "always-off"
 
 [[lighting.conditional_scene]]
-led = 31
+led = 7
 color = "#0040a0"
 layer = { layer = 2, active = true }
 output_mode = "powered-only"
 
-# PaletteFX on/off indicator, directly below the output-mode one so the A/Z
-# column reads as two switches reporting their own state. RGB_TOG works by
+# PaletteFX on/off indicator on E. RGB_TOG works by
 # zeroing the extension's brightness, and that is the state this reads: green
 # while effects render, dim red while they are toggled off. The colors follow
 # the output-mode rules above, where green is on and dark red is off.
 
 [[lighting.conditional_scene]]
-led = 32
+led = 18
 color = "#008000"
 layer = { layer = 2, active = true }
 effects = { enabled = true }
 
 [[lighting.conditional_scene]]
-led = 32
+led = 18
 color = "#800000"
 layer = { layer = 2, active = true }
 effects = { enabled = false }

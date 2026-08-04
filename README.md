@@ -114,17 +114,15 @@ The final hardware driver caps each color channel at 230/255 (about 90%).
 
 - Hold the left-thumb Magic key to temporarily wake lighting and show the
   information view without changing the selected policy.
-- Press `Magic+A` to cycle always on → always off → plugged-in only. `A`
-  reports the selected policy in green, red, or blue respectively.
-- The Magic lighting controls form a 2x3 block whose left column holds both
-  on/off switches: `A` cycles the output policy and `Z` toggles PaletteFX. The
-  two columns to the right adjust that row's subject — `S`/`D` lower and raise
-  overall brightness, and `X`/`C` advance to the next PaletteFX effect and
-  palette. The one-shot adjust/cycle controls are white. Both switches report
-  their own live state instead of being painted a fixed color: `A` shows the
-  output policy in green, red, or blue, and `Z` is green while PaletteFX is
-  rendering and dim red while it is toggled off. PaletteFX starts off and
-  toggles on at half brightness.
+- Press `Magic+T` to toggle lighting always on/off. `T` reports the selected
+  policy in green, red, or blue; the plugged-in-only policy remains available
+  through configuration/state interfaces.
+- The Magic lighting controls use the familiar WASD cluster plus left/right
+  arrows: `W`/`S` raise and lower overall brightness, `E` toggles PaletteFX,
+  `T` toggles lighting, left/right cycle effects backward/forward, and `C`
+  cycles palettes. Brightness is yellow, palette cycling is magenta, effect
+  cycling is white, and both toggles report their live state. PaletteFX starts
+  off and toggles on at half brightness.
 - While lighting is on, F-keys `F1` through `F5` show non-default layers 1
   through 5 in blue while active. Inactive layers are transparent/dark; layer
   0 has no indicator because it is always active.

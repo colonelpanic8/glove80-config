@@ -117,10 +117,10 @@ name = "Magic"
 keys = """
 No No No No No No No No No No
 No No No No No No No No No No No No
-No No No No No No No No No No No No
-Bootloader OutputModeCycle BacklightDown BacklightUp No No No No No No No User12
-Reboot RgbTog RgbModeForward RgbHui No No OutputUsb No No No No No No No No No No Reboot
-No No No No No User0 User1 User2 No No No No No No No TO(3)
+No No BacklightUp RgbTog No BacklightToggle No No No No No No
+Bootloader No BacklightDown No No No No No No No No No User12
+Reboot No No RgbHui No No OutputUsb No No No No No No No No No No Reboot
+No No No RgbModeReverse RgbModeForward User0 User1 User2 No No No No No No No TO(3)
 """
 
 [[keymap.layer]]
@@ -260,8 +260,8 @@ col_pins = ["P1_06", "P1_04", "P0_02", "P1_07", "P1_05", "P1_03", "P1_01"]
 topology_revision = 1
 
 [lighting.controls]
-# Magic+A binds OutputModeCycle directly. Layer 2 temporarily wakes a dark
-# board without changing the selected policy; A reports the selected policy.
+# Magic+T binds BacklightToggle directly. Layer 2 temporarily wakes a dark
+# board without changing the selected policy; T reports the selected policy.
 wake_layers = [2]
 initial_output_mode = "powered_only"
 # In powered-only mode each half evaluates its own USB/VBUS input. This is
@@ -304,28 +304,33 @@ layer = 2
 target = { all = true }
 effect = { kind = "solid", color = [0, 0, 0] }
 
-# Z: PaletteFX on/off, the second of the two on/off switches in the A/Z column.
+# E: PaletteFX on/off.
 [[lighting.layer_scene.cell]]
-target = { led = 32 }
+target = { led = 18 }
 effect = { kind = "solid", color = [0, 192, 64] }
 
-# S/D: brightness down/up.
+# W/S: brightness up/down, shown in yellow.
+[[lighting.layer_scene.cell]]
+target = { led = 24 }
+effect = { kind = "solid", color = [255, 255, 0] }
+
 [[lighting.layer_scene.cell]]
 target = { led = 25 }
+effect = { kind = "solid", color = [255, 255, 0] }
+
+# Left/right arrows: previous/next PaletteFX effect.
+[[lighting.layer_scene.cell]]
+target = { led = 21 }
 effect = { kind = "solid", color = [255, 255, 255] }
 
 [[lighting.layer_scene.cell]]
-target = { led = 19 }
+target = { led = 15 }
 effect = { kind = "solid", color = [255, 255, 255] }
 
-# X/C: next PaletteFX effect/palette.
-[[lighting.layer_scene.cell]]
-target = { led = 26 }
-effect = { kind = "solid", color = [255, 255, 255] }
-
+# C: next PaletteFX palette, shown in magenta.
 [[lighting.layer_scene.cell]]
 target = { led = 20 }
-effect = { kind = "solid", color = [255, 255, 255] }
+effect = { kind = "solid", color = [255, 0, 255] }
 
 # F2 is this layer's active-layer indicator, matching F1/F3/F4/F5 on the others.
 [[lighting.layer_scene.cell]]
@@ -978,25 +983,25 @@ physical_index = 39
 # F1-F5 report non-default layers 1-5 in blue while active. Inactive layers
 # contribute no indicator light; layer 0 needs none because it is always active.
 
-# Magic+A reports the selected three-state lighting policy only while the Magic
+# Magic+T reports the selected three-state lighting policy only while the Magic
 # layer is active. Persisted runtime rules use the same predicates and effects.
 [[lighting.conditional_scene]]
 layer = { layer = 2, active = true }
 output_mode = "always_on"
 [[lighting.conditional_scene.cell]]
-target = { led = 31 }
+target = { led = 7 }
 effect = { kind = "solid", color = [0, 128, 0] }
 
 [[lighting.conditional_scene]]
 layer = { layer = 2, active = true }
 output_mode = "always_off"
 [[lighting.conditional_scene.cell]]
-target = { led = 31 }
+target = { led = 7 }
 effect = { kind = "solid", color = [128, 0, 0] }
 
 [[lighting.conditional_scene]]
 layer = { layer = 2, active = true }
 output_mode = "powered_only"
 [[lighting.conditional_scene.cell]]
-target = { led = 31 }
+target = { led = 7 }
 effect = { kind = "solid", color = [0, 64, 160] }
