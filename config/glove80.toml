@@ -891,8 +891,10 @@ effects = { enabled = false }
 
 # Connection indicator on the left thumb cluster while Magic is held.
 # One color per state on every slot key (later rules win): white = empty,
-# red = paired but idle, blue = selected (blinking = advertising), green =
-# connected. The USB key (LED 0, Esc position): red = unplugged, blue =
+# red = paired but idle, blue = selected or connected-but-idle (blinking =
+# advertising), green = carrying typing. Green means "keystrokes go here"
+# everywhere, so a connected slot only turns green once BLE is the active
+# transport — otherwise it stays blue like a plugged-but-idle USB key. The USB key (LED 0, Esc position): red = unplugged, blue =
 # plugged but typing elsewhere, green = carrying typing. Slot keys are the
 # lower arc: LED 3 = slot 1, LED 4 = slot 2, LED 5 = slot 3.
 
@@ -926,9 +928,15 @@ connection = { profile = 0, ble_state = "advertising" }
 
 [[lighting.conditional_scene]]
 led = 3
-color = "#00c020"
+color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 0, ble_state = "connected" }
+
+[[lighting.conditional_scene]]
+led = 3
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { profile = 0, ble_state = "connected", transport = "ble" }
 
 [[lighting.conditional_scene]]
 led = 4
@@ -960,9 +968,15 @@ connection = { profile = 1, ble_state = "advertising" }
 
 [[lighting.conditional_scene]]
 led = 4
-color = "#00c020"
+color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 1, ble_state = "connected" }
+
+[[lighting.conditional_scene]]
+led = 4
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { profile = 1, ble_state = "connected", transport = "ble" }
 
 [[lighting.conditional_scene]]
 led = 5
@@ -994,9 +1008,15 @@ connection = { profile = 2, ble_state = "advertising" }
 
 [[lighting.conditional_scene]]
 led = 5
-color = "#00c020"
+color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 2, ble_state = "connected" }
+
+[[lighting.conditional_scene]]
+led = 5
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { profile = 2, ble_state = "connected", transport = "ble" }
 
 [[lighting.conditional_scene]]
 led = 0
