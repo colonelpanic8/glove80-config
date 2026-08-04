@@ -178,16 +178,18 @@ channel_size = 16
 pubs = 1
 subs = 1
 
-# The information-lighting state tracks both halves' live battery reports.
+# The information-lighting state tracks both halves' live battery reports, and
+# the semantic-replication task subscribes as well so battery changes reach the
+# peripheral as a context delta.
 [event.battery_status]
 channel_size = 2
 pubs = 1
-subs = 1
+subs = 2
 
 [event.peripheral_battery]
 channel_size = 3
 pubs = 1
-subs = 3
+subs = 4
 
 [storage]
 enabled = true
