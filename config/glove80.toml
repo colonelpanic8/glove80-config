@@ -53,14 +53,16 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 """
 
 # --- Layer 2: Magic (system controls) ---------------------------------------
-# The left thumb column is the connection selector: USER(0)-USER(3) select
-# BLE profiles 0-3 top to bottom AND prefer BLE output, so tapping a slot key
-# moves typing to that connection even while USB is plugged in. The bottom
-# thumb key (QK_OUTPUT_USB) moves output back to USB. USER(6), top-left,
-# clears the active profile's bond. While Magic is held, each thumb key's LED
-# shows its slot: full colour = connected, blinking = advertising/searching,
-# dim = selected but idle; the USB key glows green while USB carries output.
-# USER(12) forwards the bootloader request to the right half.
+# The left thumb cluster is the connection selector. The lower arc's three
+# keys are BLE slots 1-3 (USER(0)-USER(2)): tapping one selects that slot AND
+# prefers BLE output, so typing moves there even while USB is plugged in. The
+# upper Esc-position key (QK_OUTPUT_USB) moves typing back to USB. While
+# Magic is held every key shows its own slot's state — white empty, red
+# paired-but-idle, blue selected (blinking while advertising), green
+# connected — and the USB key mirrors the scheme: green carrying typing,
+# blue plugged but idle, red unplugged. Nothing destructive is bound; bond
+# management goes through `glove80-control connection`. USER(12) forwards
+# the bootloader request to the right half.
 #
 # The lighting controls form a 2x3 block on the left hand. Column A/Z holds the
 # two on/off switches, and the two columns to their right adjust that row's
@@ -79,12 +81,12 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 id = "magic"
 name = "Magic"
 keys = """
-USER(6)   --        --       --       --  --  USER(0)        --  --  --  --  --  --  --
---        --        --       --       --  --  USER(1)        --  --  --  --  --  --  --
+--        --        --       --       --  --  QK_OUTPUT_USB  --  --  --  --  --  --  --
 --        --        --       --       --  --  --             --  --  --  --  --  --  --
-QK_BOOT   UG_OMODE  BL_DOWN  BL_UP    --  --  USER(2)        --  --  --  --  --  --  USER(12)
-QK_RBT    RGB_TOG   RGB_MOD  RGB_HUI  --  --  USER(3)        --  --  --  --  --  --  QK_RBT
---        --        --       --       --  --  QK_OUTPUT_USB  --  --  --  --  --  --  TO(3)
+--        --        --       --       --  --  --             --  --  --  --  --  --  --
+QK_BOOT   UG_OMODE  BL_DOWN  BL_UP    --  --  USER(0)        --  --  --  --  --  --  USER(12)
+QK_RBT    RGB_TOG   RGB_MOD  RGB_HUI  --  --  USER(1)        --  --  --  --  --  --  QK_RBT
+--        --        --       --       --  --  USER(2)        --  --  --  --  --  --  TO(3)
 """
 
 # --- Layer 3: Games (left-hand WASD) ----------------------------------------
@@ -887,22 +889,34 @@ color = "#800000"
 layer = { layer = 2, active = true }
 effects = { enabled = false }
 
-# Connection-slot indicator on the left thumb cluster while Magic is held.
-# LEDs 0/1/3/4 sit under the four BLE slot keys (top to bottom), LED 5 under
-# the USB key. Later rules win shared slots, so per-slot state stacks:
-# dim = selected but idle, blinking = advertising, full colour = connected.
-# The USB key glows green whenever USB is the transport actually carrying
-# output. Slot hues: 0 blue, 1 teal, 2 violet, 3 amber.
+# Connection indicator on the left thumb cluster while Magic is held.
+# One color per state on every slot key (later rules win): white = empty,
+# red = paired but idle, blue = selected (blinking = advertising), green =
+# connected. The USB key (LED 0, Esc position): red = unplugged, blue =
+# plugged but typing elsewhere, green = carrying typing. Slot keys are the
+# lower arc: LED 3 = slot 1, LED 4 = slot 2, LED 5 = slot 3.
 
 [[lighting.conditional_scene]]
-led = 0
-color = "#020b18"
+led = 3
+color = "#2a2a2a"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 0, bonded = false } }
+
+[[lighting.conditional_scene]]
+led = 3
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 0, bonded = true } }
+
+[[lighting.conditional_scene]]
+led = 3
+color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 0, ble_state = "inactive" }
 
 [[lighting.conditional_scene]]
-led = 0
-color = "#0060ff"
+led = 3
+color = "#0050ff"
 effect = "blink"
 period_ms = 800
 phase_ms = 0
@@ -911,20 +925,32 @@ layer = { layer = 2, active = true }
 connection = { profile = 0, ble_state = "advertising" }
 
 [[lighting.conditional_scene]]
-led = 0
-color = "#0060ff"
+led = 3
+color = "#00c020"
 layer = { layer = 2, active = true }
 connection = { profile = 0, ble_state = "connected" }
 
 [[lighting.conditional_scene]]
-led = 1
-color = "#03150f"
+led = 4
+color = "#2a2a2a"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 1, bonded = false } }
+
+[[lighting.conditional_scene]]
+led = 4
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 1, bonded = true } }
+
+[[lighting.conditional_scene]]
+led = 4
+color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 1, ble_state = "inactive" }
 
 [[lighting.conditional_scene]]
-led = 1
-color = "#00d8b0"
+led = 4
+color = "#0050ff"
 effect = "blink"
 period_ms = 800
 phase_ms = 0
@@ -933,20 +959,32 @@ layer = { layer = 2, active = true }
 connection = { profile = 1, ble_state = "advertising" }
 
 [[lighting.conditional_scene]]
-led = 1
-color = "#00d8b0"
+led = 4
+color = "#00c020"
 layer = { layer = 2, active = true }
 connection = { profile = 1, ble_state = "connected" }
 
 [[lighting.conditional_scene]]
-led = 3
-color = "#100518"
+led = 5
+color = "#2a2a2a"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 2, bonded = false } }
+
+[[lighting.conditional_scene]]
+led = 5
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 2, bonded = true } }
+
+[[lighting.conditional_scene]]
+led = 5
+color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 2, ble_state = "inactive" }
 
 [[lighting.conditional_scene]]
-led = 3
-color = "#b040ff"
+led = 5
+color = "#0050ff"
 effect = "blink"
 period_ms = 800
 phase_ms = 0
@@ -955,40 +993,25 @@ layer = { layer = 2, active = true }
 connection = { profile = 2, ble_state = "advertising" }
 
 [[lighting.conditional_scene]]
-led = 3
-color = "#b040ff"
+led = 5
+color = "#00c020"
 layer = { layer = 2, active = true }
 connection = { profile = 2, ble_state = "connected" }
 
 [[lighting.conditional_scene]]
-led = 4
-color = "#181100"
+led = 0
+color = "#b00000"
 layer = { layer = 2, active = true }
-connection = { profile = 3, ble_state = "inactive" }
+connection = { usb_connected = false }
 
 [[lighting.conditional_scene]]
-led = 4
-color = "#ffb000"
-effect = "blink"
-period_ms = 800
-phase_ms = 0
-duty = 50
+led = 0
+color = "#0050ff"
 layer = { layer = 2, active = true }
-connection = { profile = 3, ble_state = "advertising" }
+connection = { usb_connected = true }
 
 [[lighting.conditional_scene]]
-led = 4
-color = "#ffb000"
-layer = { layer = 2, active = true }
-connection = { profile = 3, ble_state = "connected" }
-
-[[lighting.conditional_scene]]
-led = 5
-color = "#001402"
-layer = { layer = 2, active = true }
-
-[[lighting.conditional_scene]]
-led = 5
+led = 0
 color = "#00c020"
 layer = { layer = 2, active = true }
 connection = { transport = "usb" }
