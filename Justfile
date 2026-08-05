@@ -22,6 +22,9 @@ pull:
 show:
     {{ control }} config show
 
+ctl *args:
+    {{ control }} {{ args }}
+
 firmware:
     config_dirty=false; \
         if test -n "$(git status --porcelain --untracked-files=normal)"; then \
