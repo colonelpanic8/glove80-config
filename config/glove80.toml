@@ -185,6 +185,21 @@ Crosses = 1
 Motion = 0
 "Pulse width" = 170
 
+# Comet flies one body to each pressed key instead of lighting the key where
+# it was pressed, so it arrives late and swings wide of a key it is redirected
+# onto mid-flight. `Lag x10ms` buys a flight the full width of the board and
+# `Distance pace` decides how much of that a shorter hop gives back -- at 200
+# a next-key hop costs about a third of a full crossing, which is what keeps
+# the comet in touch with fast typing. Every duration here is scaled by the
+# shared `speed = 32` above, so the real full-board flight is nearer 440 ms.
+[lighting.effects.params.Comet]
+"Lag x10ms" = 32
+"Distance pace" = 200
+Momentum = 168
+"Trail x10ms" = 20
+"Head size" = 14
+"Linger x10ms" = 80
+
 # Keep Rain's tuned density available when cycling back to it. Spawn is in
 # units of 10 ms, so 5 is a drop every 50 ms; the slot count then caps how many
 # are airborne.
