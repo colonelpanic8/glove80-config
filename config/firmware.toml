@@ -74,10 +74,11 @@ thumb_4_7 = { x = -0.0891, y = 1.2604, r = -40.0 }
 thumb_5_7 = { x = 0.1854, y = 2.125, r = -60.0 }
 
 [keymap]
-layers = 8
+layers = 16
 # Ported from legacy glove80-config/config/glove80.keymap. Layers: 0 Base,
 # 1 Lower, 2 Magic,
-# 3 Games, 4 Mac Hyper, 5 Paseo. Layers 6-7 are unassigned editable capacity.
+# 3 Games, 4 Mac Hyper, 5 Paseo. Layers 6-15 are unassigned editable capacity,
+# sized so an imported MoErgo layout fits without a reflash.
 # Substitutions from the ZMK keymap:
 #   - &magic hold-tap        -> MO(2) plus board-local lighting wake/status
 #   - lower left thumb arc   -> User0..User2 (select the slot AND prefer
