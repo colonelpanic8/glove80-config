@@ -32,7 +32,7 @@ id = "base"
 name = "Base"
 keys = """
 KC_F1    KC_F2    KC_F3   KC_F4    KC_F5    --       LT(1,KC_ESC)  KC_BSPC  --       KC_F6  KC_F7    KC_F8    KC_F9          KC_F10
-KC_EQL   KC_1     KC_2    KC_3     KC_4     KC_5     LT(5,KC_DEL)  TG(4)    KC_6     KC_7   KC_8     KC_9     KC_0           KC_MINS
+KC_EQL   KC_1     KC_2    KC_3     KC_4     KC_5     TD(0)         TG(4)    KC_6     KC_7   KC_8     KC_9     KC_0           KC_MINS
 KC_TAB   KC_Q     KC_W    KC_E     KC_R     KC_T     MO(2)         KC_LGUI  KC_Y     KC_U   KC_I     KC_O     KC_P           KC_BSLS
 KC_LCTL  KC_A     KC_S    KC_D     KC_F     KC_G     KC_BSPC       KC_SPC   KC_H     KC_J   KC_K     KC_L     LT(1,KC_SCLN)  KC_QUOT
 KC_LSFT  KC_Z     KC_X    KC_C     KC_V     KC_B     KC_LGUI       KC_ENT   KC_N     KC_M   KC_COMM  KC_DOT   KC_SLSH        KC_RSFT
@@ -116,7 +116,8 @@ _______  _______  _______  _______  _______  --       _______  MOD(MOD_LCTL|MOD_
 """
 
 # --- Layer 5: Paseo ----------------------------------------------------------
-# Tap Delete normally; hold it to activate this layer.
+# Tap Delete normally; hold it to activate this layer. The key is TD(0), whose
+# hold window lives in the morse table below.
 # Mnemonics: F/O/S/L select Fable/Opus/Sol/Luna; Q/M/H select
 # low (quick)/medium/high effort. F13-F19 are the host shortcut namespace.
 #
@@ -148,6 +149,19 @@ _______  _______  KC_F15   _______  KC_F13   _______  _______  _______  KC_F19  
 _______  _______  _______  _______  _______  _______  _______  _______  _______  KC_F18   _______  _______  _______  _______
 _______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
 """
+
+# --- Morse table -------------------------------------------------------------
+# Morse 0 is the Paseo thumb key, addressed as TD(0) on the base layer: tap
+# Delete, hold for layer 5. It exists as a morse rather than an LT so its hold
+# window can be tuned here, from the host, without a firmware flash. That hold
+# is a deliberate thumb press rather than a rolled home row mod, so it commits
+# sooner than the firmware's 250 ms default. Everything left out — gap, quick
+# tap, mode — stays at the keyboard's global defaults.
+[[morse]]
+name = "Paseo layer"
+tap = "KC_DEL"
+hold = "MO(5)"
+hold_timeout_ms = 180
 
 [lighting]
 brightness = 255
