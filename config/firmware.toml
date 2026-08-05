@@ -28,6 +28,18 @@ ble_profiles_num = 4
 # skipped event (15 ms maximum interval) to retain some radio savings.
 split_central_max_latency_powered = 0
 split_central_max_latency_battery = 1
+# Room for an imported MoErgo layout's behavior tables. TailorKey lands at 59
+# morses and 20 combos once its per-finger home-row-mod layers collapse, and
+# every slot has to exist at compile time because a `TD(n)` keymap cell is only
+# runtime-editable within the compiled capacity.
+#
+# Raising these used to reset the board in a ~9 s loop: boot restored one record
+# per slot, each a full scan of the storage partition, and on memory-mapped
+# flash those reads are always immediately ready — so they never yielded and the
+# 10 s hardware watchdog fired before the feeder ran. RMK now restores every
+# record in a single traversal, which is what makes the capacity affordable.
+morse_max_num = 64
+combo_max_num = 32
 
 [layout]
 rows = 6
