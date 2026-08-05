@@ -118,7 +118,7 @@ keys = """
 No No No No No No No No No No
 No No No No No No No No No No No No
 No No BacklightUp RgbTog No OutputModeCycle No No No No No No
-Bootloader No BacklightDown No No No No No No No No No User12
+Bootloader No BacklightDown No No No No No No No No User12
 Reboot No No RgbHui No No OutputUsb No No No No No No No No No No Reboot
 No No No RgbModeReverse RgbModeForward User0 User1 User2 No No No No No No No TO(3)
 """
