@@ -33,11 +33,24 @@ split_central_max_latency_battery = 1
 # every slot has to exist at compile time because a `TD(n)` keymap cell is only
 # runtime-editable within the compiled capacity.
 #
-# Raising these used to reset the board in a ~9 s loop: boot restored one record
-# per slot, each a full scan of the storage partition, and on memory-mapped
-# flash those reads are always immediately ready — so they never yielded and the
-# 10 s hardware watchdog fired before the feeder ran. RMK now restores every
-# record in a single traversal, which is what makes the capacity affordable.
+# These values are an empirically established ceiling, not a computed one. 64/32
+# boots and is verified; 128/64 resets the board in a loop of exactly 10 s, which
+# is the nRF hardware watchdog's timeout. Do not raise them without flashing
+# through `bin/glove80-safe-flash --recover <known-good.uf2>`, which detects the
+# loop and rolls back on its own.
+#
+# What is known about the failure: the half enumerates within a second and then
+# resets at precisely the watchdog deadline, so the feeder never pets even once —
+# and RMK joins that feeder LAST, so any earlier task that fails to yield on its
+# first poll starves it outright. Something after the join therefore monopolizes
+# the executor for over 10 s, and its cost scales with these two numbers.
+#
+# What is NOT the cause, each having been proposed and disproven: static RAM
+# (255/255 fits with ~83 KB of stack to spare), the storage partition (auto-sized
+# to 128 KB, and the `[storage]` settings below are ignored under DFU), the
+# boot-time record read (now a single traversal that yields every 32 records),
+# and the boot-time storage rewrite (it completes before USB comes up, inside
+# that first second). The layer count is likewise innocent: 16 boots fine.
 morse_max_num = 64
 combo_max_num = 32
 
