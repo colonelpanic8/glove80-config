@@ -3,3 +3,4 @@
 /.worktrees/
 /target/
 /dependencies/glove80-rmk/dist/
+.claude-session/
