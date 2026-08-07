@@ -1,4 +1,5 @@
 # Ivan's Glove80 runtime configuration for the current glove80-rmk firmware.
+bluetooth_name = "Glove80 {slot}"
 default_layer = 0
 #
 # This matches the compiled-in layers in
