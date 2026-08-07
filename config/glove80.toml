@@ -1,4 +1,5 @@
 # Ivan's Glove80 runtime configuration for the current glove80-rmk firmware.
+bluetooth_name = "Glove80 {slot}"
 default_layer = 0
 #
 # This matches the compiled-in layers in
@@ -58,7 +59,7 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 # prefers BLE output, so typing moves there even while USB is plugged in. The
 # upper Esc-position key (QK_OUTPUT_USB) moves typing back to USB. While
 # Magic is held every key shows its own slot's state — white empty, red
-# paired-but-idle, blue selected (blinking while advertising), green
+# paired-but-idle, blue selected, blinking white while advertising, green
 # connected — and the USB key mirrors the scheme: green carrying typing,
 # blue plugged but idle, red unplugged. Magic+R toggles the maintenance lock;
 # R is green while unlocked and red while locked. Bond management goes through
@@ -914,8 +915,8 @@ effects = { enabled = false }
 
 # Connection indicator on the left thumb cluster while Magic is held.
 # One color per state on every slot key (later rules win): white = empty,
-# red = paired but idle, blue = selected or connected-but-idle (blinking =
-# advertising), green = carrying typing. Green means "keystrokes go here"
+# red = paired but idle, blue = selected or connected-but-idle, blinking white
+# = advertising, and green = carrying typing. Green means "keystrokes go here"
 # everywhere, so a connected slot only turns green once BLE is the active
 # transport — otherwise it stays blue like a plugged-but-idle USB key. The USB key (LED 0, Esc position): red = unplugged, blue =
 # plugged but typing elsewhere, green = carrying typing. Slot keys are the
@@ -941,7 +942,7 @@ connection = { profile = 0, ble_state = "inactive" }
 
 [[lighting.conditional_scene]]
 led = 3
-color = "#0050ff"
+color = "#ffffff"
 effect = "blink"
 period_ms = 800
 phase_ms = 0
@@ -981,7 +982,7 @@ connection = { profile = 1, ble_state = "inactive" }
 
 [[lighting.conditional_scene]]
 led = 4
-color = "#0050ff"
+color = "#ffffff"
 effect = "blink"
 period_ms = 800
 phase_ms = 0
@@ -1021,7 +1022,7 @@ connection = { profile = 2, ble_state = "inactive" }
 
 [[lighting.conditional_scene]]
 led = 5
-color = "#0050ff"
+color = "#ffffff"
 effect = "blink"
 period_ms = 800
 phase_ms = 0
