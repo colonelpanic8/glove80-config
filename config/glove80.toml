@@ -60,9 +60,10 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 # Magic is held every key shows its own slot's state — white empty, red
 # paired-but-idle, blue selected (blinking while advertising), green
 # connected — and the USB key mirrors the scheme: green carrying typing,
-# blue plugged but idle, red unplugged. Nothing destructive is bound; bond
-# management goes through `glove80-control connection`. USER(12) forwards
-# the bootloader request to the right half.
+# blue plugged but idle, red unplugged. Magic+R toggles maintenance access and
+# R reports it in green (on) or red (off). Bond management goes through
+# `glove80-control connection`. USER(12) forwards the bootloader request to
+# the right half.
 #
 # The lighting controls use the familiar WASD cluster plus the left/right
 # arrows:
@@ -82,7 +83,7 @@ name = "Magic"
 keys = """
 --        --        --       --       --  --  QK_OUTPUT_USB  --  --  --  --  --  --  --
 --        --        --       --       --  --  --             --  --  --  --  --  --  --
---        --        BL_UP    RGB_TOG  --  UG_OMODE --           --  --  --  --  --  --  --
+--        --        BL_UP    RGB_TOG  MAINT_TOG UG_OMODE --     --  --  --  --  --  --  --
 QK_BOOT   --        BL_DOWN --       --  --       USER(0)      --  --  --  --  --  --  USER(12)
 QK_RBT    --        --       RGB_HUI  --  --       USER(1)     --  --  --  --  --  --  QK_RBT
 --        --        --       RGB_RMOD RGB_MOD  --  USER(2)     --  --  --  --  --  --  TO(3)
