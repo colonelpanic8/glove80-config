@@ -116,9 +116,9 @@ The final hardware driver caps each color channel at 230/255 (about 90%).
   information view without changing the selected policy.
 - Press `Magic+T` to cycle always on → always off → plugged-in only. `T`
   reports the selected policy in green, red, or blue respectively.
-- Press `Magic+R` to allow or deny host maintenance operations. `R` is green
-  while fully unattended configuration and firmware pushes are allowed and
-  red while they are denied. This firmware defaults the gate to off.
+- Press `Magic+R` to toggle the maintenance lock. `R` is green while the lock
+  is off and fully unattended configuration and firmware pushes are allowed,
+  and red while the lock is engaged. This firmware defaults the lock to off.
 - The Magic lighting controls use the familiar WASD cluster plus left/right
   arrows: `W`/`S` raise and lower overall brightness, `E` toggles PaletteFX,
   `T` cycles the lighting policy, left/right cycle effects backward/forward,
