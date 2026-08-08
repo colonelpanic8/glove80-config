@@ -24,10 +24,11 @@ chip = "nrf52840"
 # split peer.
 ble_profiles_num = 4
 # The right half carries both input and replicated lighting state over the
-# split link. On USB power attend every 7.5 ms event; on battery allow one
-# skipped event (15 ms maximum interval) to retain some radio savings.
+# split link. On USB power attend every 7.5 ms event. On battery, match ZMK's
+# slave-latency default so an idle peripheral may sleep through 30 events;
+# queued key reports may still attend the next event without waiting them out.
 split_central_max_latency_powered = 0
-split_central_max_latency_battery = 1
+split_central_max_latency_battery = 30
 # Room for an imported MoErgo layout's behavior tables. TailorKey lands at 59
 # morses and 20 combos once its per-finger home-row-mod layers collapse, and
 # every slot has to exist at compile time because a `TD(n)` keymap cell is only
@@ -205,11 +206,12 @@ channel_size = 4
 pubs = 2
 subs = 3
 
-# Replication exports a fresh authoritative snapshot after engine mutations.
+# Replication exports a fresh authoritative snapshot after engine mutations;
+# the reactive-hit gate also caches whether lighting output is effective.
 [event.lighting_changed]
 channel_size = 2
 pubs = 1
-subs = 2
+subs = 3
 
 # Changing the maintenance gate invalidates the Magic-layer status LED.
 [event.maintenance_mode]
