@@ -16,12 +16,28 @@
 # 3 crash loop and no/failed recovery; 4 flashing-machinery failure.
 set -u
 
+SCRIPT_PATH="$(readlink -f "$0")"
+REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+PRODUCT_ROOT="$REPO_ROOT/dependencies/glove80-rmk"
+
+# Enter the development environment once for the whole flash operation. The
+# retry loop must call the already-built binary directly: invoking the wrapper
+# on every attempt can spend the central's entire enumeration window starting
+# Nix and Cargo instead of opening the device.
+if [ -z "${IN_NIX_SHELL:-}" ] && [ -z "${GLOVE80_FLASH_DEV_SHELL:-}" ]; then
+  exec nix develop "path:$PRODUCT_ROOT" --command env GLOVE80_FLASH_DEV_SHELL=1 "$SCRIPT_PATH" "$@"
+fi
+
+CONTROL="$PRODUCT_ROOT/target/debug/glove80-control"
+if ! cargo build --quiet --manifest-path "$PRODUCT_ROOT/Cargo.toml" -p glove80-control; then
+  echo "FAIL: could not build glove80-control" >&2
+  exit 4
+fi
+
 USB_ID="16c0:27db"
 BOOT_IDS="239a:0029 239a:002a"
 LH_VOL=GLV80LHBOOT
 RH_VOL=GLV80RHBOOT
-CONTROL="$(dirname "$(readlink -f "$0")")/glove80-control"
-
 image="" recover="" peripheral="" watch=45
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -48,7 +64,11 @@ enter_bootloader() {
   # A crash-looping central is only on USB ~1s per cycle; keep retrying
   # until a request lands in one of those windows.
   for _ in $(seq 1 60); do
-    if "$CONTROL" "${args[@]}" >/dev/null 2>&1; then return 0; fi
+    # The bootloader may mount after the initial check while a preceding
+    # control attempt is still returning. Do not keep requesting an app that
+    # has already rebooted.
+    in_bootloader && return 0
+    if timeout 2 "$CONTROL" "${args[@]}" >/dev/null 2>&1; then return 0; fi
     sleep 0.4
   done
   return 1
