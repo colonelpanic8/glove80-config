@@ -119,12 +119,12 @@ layers = 16
 [[keymap.layer]]
 name = "Base"
 keys = """
-F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+F1 F2 F3 F4 F5 F6 F7 F8 F9 TG(1)
 Equal Kc1 Kc2 Kc3 Kc4 Kc5 Kc6 Kc7 Kc8 Kc9 Kc0 Minus
 Tab Q W E R T Y U I O P Backslash
 LCtrl A S D F G H J K L LT(1, Semicolon) Quote
 LShift Z X C V B LT(1, Escape) TD(0) MO(2) LGui TG(4) Backspace N M Comma Dot Slash RShift
-Grave Home End Left Right Backspace LGui LAlt RGui Enter Space Up Down LeftBracket RightBracket TG(3)
+Grave Home End MO(2) Escape Backspace LGui LAlt RGui Enter Space Delete Down LeftBracket RightBracket TG(3)
 """
 
 [[keymap.layer]]
@@ -132,9 +132,9 @@ name = "Lower"
 keys = """
 _ _ _ _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ _ _ _ _
-_ WM(Equal, LShift) WM(Minus, LShift) WM(Kc9, LShift) WM(Kc0, LShift) _ _ _ _ _ _ _
-CapsLock WM(Kc1, LShift) WM(Kc2, LShift) WM(Kc3, LShift) WM(Kc4, LShift) WM(Kc5, LShift) WM(Kc6, LShift) WM(Kc7, LShift) WM(Kc8, LShift) WM(Kc9, LShift) WM(Kc0, LShift) _
-_ LeftBracket RightBracket WM(LeftBracket, LShift) WM(RightBracket, LShift) _ _ _ TO(0) _ _ _ _ _ _ _ _ _
+_ _ Up _ _ _ _ _ _ _ _ _
+CapsLock Left Down Right _ _ _ _ _ _ _ _
+_ _ _ _ _ _ _ _ TO(0) _ _ _ _ _ _ _ _ _
 _ _ _ MediaPrevTrack MediaNextTrack _ _ _ _ _ MediaPlayPause AudioVolUp AudioVolDown _ _ _
 """
 

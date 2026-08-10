@@ -3,12 +3,15 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 glove80_rmk := "dependencies/glove80-rmk"
 control := "./bin/glove80-control"
 config := "config/glove80.toml"
+go60_config := "config/go60.toml"
+go60_firmware_config := "config/go60-firmware.toml"
 
 init:
     git submodule update --init --recursive
 
 check:
     {{ control }} config validate {{ config }}
+    {{ control }} config validate {{ go60_config }}
 
 apply:
     {{ control }} config apply {{ config }}
@@ -21,6 +24,15 @@ pull:
 
 show:
     {{ control }} config show
+
+go60-diff device:
+    {{ control }} config diff --device {{ device }} {{ go60_config }}
+
+go60-apply device:
+    {{ control }} config apply --device {{ device }} {{ go60_config }}
+
+go60-pull device:
+    {{ control }} config pull --device {{ device }} {{ go60_config }}
 
 ctl *args:
     {{ control }} {{ args }}
@@ -35,6 +47,17 @@ firmware:
         GLOVE80_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
         GLOVE80_CONFIG_GIT_DIRTY="$config_dirty" \
             bash -c 'cd {{ glove80_rmk }} && nix develop path:. --command just dist'
+
+go60-firmware:
+    config_dirty=false; \
+        if test -n "$(git status --porcelain --untracked-files=normal)"; then \
+            config_dirty=true; \
+        fi; \
+        config_path="$(pwd)/{{ go60_firmware_config }}"; \
+        KEYBOARD_TOML_PATH="$config_path" \
+        GO60_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
+        GO60_CONFIG_GIT_DIRTY="$config_dirty" \
+            bash -c 'cd {{ glove80_rmk }} && nix develop path:. --command just go60-firmware'
 
 attention-check:
     nix develop ./{{ glove80_rmk }} --command cargo test

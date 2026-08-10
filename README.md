@@ -64,6 +64,20 @@ Pull preserves existing layer IDs and names when it can parse the destination,
 but rewrites the file in canonical TOML form and therefore does not preserve
 comments.
 
+The Go60's managed runtime state lives in
+[config/go60.toml](config/go60.toml). Runtime TOML declares its logical
+5×14 matrix and carries the persisted policy for both pointing devices; the
+current policy makes device 0 (the left trackpad) scroll and device 1 (the
+right trackpad) move the cursor. Because both keyboards can be connected at
+once, Go60 recipes require an explicit Rynk HID path:
+
+    just go60-diff /dev/hidraw12
+    just go60-apply /dev/hidraw12
+    just go60-pull /dev/hidraw12
+
+The HID number can change after reconnecting. Identify the Go60 Rynk
+interface before applying rather than reusing a stale path.
+
 The same configuration commands also accept the experimental JSON backup
 format from the MoErgo Layout Editor:
 
@@ -104,6 +118,18 @@ just firmware
 Artifacts are written under `dependencies/glove80-rmk/dist/`. The firmware's
 compiled defaults currently match this keymap, while this repository remains
 the editable source of truth for subsequent runtime changes.
+
+The compact counterpart for the experimental Go60 RMK port lives in
+[`config/go60-firmware.toml`](config/go60-firmware.toml). Build both Go60
+halves from that configuration with:
+
+```sh
+just go60-firmware
+```
+
+The bundle is written under `dependencies/glove80-rmk/dist/go60/`. The Go60
+port currently supports BLE split and the two trackpads, but not automatic
+BLE/TRRS inter-half switching; hardware qualification is still required.
 
 The build embeds three independently checkable Git identities in the Rynk
 firmware label: this configuration repository's commit, the pinned

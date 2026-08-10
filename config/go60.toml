@@ -1,0 +1,136 @@
+rows = 5
+bluetooth_name = "Go60"
+default_layer = 0
+
+[[layer]]
+id = "layer0"
+name = "Base"
+keys = """
+
+KC_EQL KC_1 KC_2 KC_3 KC_4 KC_5 KC_BSPC KC_SPC KC_6 KC_7 KC_8 KC_9 KC_0 KC_MINS
+KC_TAB KC_Q KC_W KC_E KC_R KC_T KC_LGUI KC_ENT KC_Y KC_U KC_I KC_O KC_P KC_BSLS
+KC_LCTL KC_A KC_S KC_D KC_F KC_G KC_LALT KC_RGUI KC_H KC_J KC_K KC_L LT(1,KC_SCLN) KC_QUOT
+KC_LSFT KC_Z KC_X KC_C KC_V KC_B -- -- KC_N KC_M KC_COMM KC_DOT KC_SLSH KC_RSFT
+-- -- KC_END MO(2) KC_ESC -- -- -- -- TD(0) KC_GRV KC_LBRC -- --
+"""
+
+[[layer]]
+id = "layer1"
+name = "Lower"
+keys = """
+
+KC_F1 KC_F2 KC_F3 KC_F4 KC_F5 KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_F6 KC_F7 KC_F8 KC_F9 TG(1)
+KC_TRNS KC_TRNS KC_UP KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_MPRV KC_MNXT KC_TRNS
+KC_CAPS KC_LEFT KC_DOWN KC_RGHT KC_TRNS KC_TRNS KC_TRNS TG(4) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- -- KC_HOME KC_TRNS KC_TRNS KC_TRNS KC_TRNS TG(3)
+-- -- KC_TRNS KC_TRNS KC_TRNS -- -- -- -- KC_VOLU KC_VOLD KC_RBRC -- --
+"""
+
+[[layer]]
+id = "layer2"
+name = "Magic"
+keys = """
+
+QK_OUTPUT_USB -- -- -- -- USER(2) USER(0) -- -- -- -- -- -- --
+-- -- BL_UP UG_TOGG MAINT_LOCK_TOG UG_OMODE USER(1) -- -- -- -- -- -- --
+QK_BOOT -- BL_DOWN -- -- -- USER(2) -- -- -- -- -- -- USER(12)
+QK_RBT -- -- UG_HUEU -- -- -- -- -- -- -- -- -- QK_RBT
+-- -- -- UG_PREV UG_NEXT -- -- -- -- -- -- -- -- --
+"""
+
+[[layer]]
+id = "layer3"
+name = "Games"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_SPC KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_W KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_A KC_S KC_D KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS TG(3)
+-- -- KC_TRNS KC_TRNS KC_TRNS -- -- -- -- KC_TRNS KC_TRNS KC_TRNS -- --
+"""
+
+[[layer]]
+id = "layer4"
+name = "Mac Hyper"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS TG(4) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS MOD(MOD_LCTL|MOD_LALT|MOD_LGUI) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+-- -- KC_TRNS KC_TRNS KC_TRNS -- -- -- -- KC_TRNS KC_TRNS KC_TRNS -- --
+"""
+
+[[layer]]
+id = "layer5"
+name = "Paseo"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_F17 KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_F14 KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_F15 KC_TRNS KC_F13 KC_TRNS KC_TRNS KC_TRNS KC_F19 KC_TRNS KC_TRNS KC_F16 KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- -- KC_TRNS KC_F18 KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+-- -- KC_TRNS KC_TRNS KC_TRNS -- -- -- -- KC_TRNS KC_TRNS KC_TRNS -- --
+"""
+
+[[morse]]
+name = "morse 0"
+tap = "KC_DEL"
+hold = "MO(5)"
+hold_timeout_ms = 180
+
+[behavior]
+combo_timeout_ms = 50
+oneshot_timeout_ms = 1000
+tap_interval_ms = 20
+tap_capslock_interval_ms = 20
+oneshot_activate_on_keypress = false
+oneshot_quick_release = false
+
+[behavior.morse]
+enable_flow_tap = false
+prior_idle_ms = 120
+
+[behavior.morse.default_profile]
+hold_timeout_ms = 250
+gap_timeout_ms = 250
+
+[pointing]
+
+[[pointing.device]]
+device_id = 0
+mode = "scroll"
+
+[[pointing.device]]
+device_id = 1
+mode = "cursor"
+
+[lighting]
+brightness = 255
+output_mode = "always-on"
+scene_policy = "active-stack"
+scene = []
+conditional_scene = []
+
+[lighting.background]
+enabled = false
+hue = 0
+saturation = 0
+value = 0
+speed = 128
+mode = "solid"
+
+[lighting.effects]
+effect = "Crosshair"
+palette = "Amber"
+value = 255
+speed = 108
+
+[lighting.effects.params.Crosshair]
+"Arm hue" = 0
+"Arm width" = 11
+Crosses = 1
+"Duration x10ms" = 90
+"Key hue" = 173
+"Pulse width" = 170
