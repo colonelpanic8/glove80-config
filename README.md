@@ -103,6 +103,7 @@ For transport selection or any other CLI command, use the pinned wrapper:
 ./bin/glove80-control --usb keymap read --all
 ./bin/glove80-control --ble version
 ./bin/glove80-control --usb lighting caps
+./bin/glove80-control --usb device-data
 ```
 
 Run `./bin/glove80-control --help` for the complete interface.
