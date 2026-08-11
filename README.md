@@ -103,6 +103,7 @@ For transport selection or any other CLI command, use the pinned wrapper:
 ./bin/glove80-control --usb keymap read --all
 ./bin/glove80-control --ble version
 ./bin/glove80-control --usb lighting caps
+./bin/glove80-control --usb device-data
 ```
 
 Run `./bin/glove80-control --help` for the complete interface.
@@ -128,9 +129,10 @@ just go60-firmware
 ```
 
 The bundle is written under `dependencies/glove80-rmk/dist/go60/`. The Go60
-port uses the board's half-duplex UART/TRRS link between halves and retains BLE
-for host communication. Automatic fallback to a wireless inter-half link is
-not yet implemented; hardware qualification is still required.
+port automatically prefers the board's half-duplex UART/TRRS link between
+halves and falls back to BLE between halves when the cable is absent. Host
+communication remains independently selectable between USB and BLE. Hardware
+qualification is still required.
 
 The build embeds three independently checkable Git identities in the Rynk
 firmware label: this configuration repository's commit, the pinned
