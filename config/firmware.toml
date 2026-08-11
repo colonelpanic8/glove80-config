@@ -349,35 +349,35 @@ effect = { kind = "solid", color = [0, 0, 0] }
 
 # E: PaletteFX on/off.
 [[lighting.layer_scene.cell]]
-target = { led = 18 }
+target = { key = [2, 3] }
 effect = { kind = "solid", color = [0, 192, 64] }
 
 # W/S: brightness up/down, shown in yellow.
 [[lighting.layer_scene.cell]]
-target = { led = 24 }
+target = { key = [2, 2] }
 effect = { kind = "solid", color = [255, 255, 0] }
 
 [[lighting.layer_scene.cell]]
-target = { led = 25 }
+target = { key = [3, 2] }
 effect = { kind = "solid", color = [255, 255, 0] }
 
 # Left/right arrows: previous/next PaletteFX effect.
 [[lighting.layer_scene.cell]]
-target = { led = 21 }
+target = { key = [5, 3] }
 effect = { kind = "solid", color = [255, 255, 255] }
 
 [[lighting.layer_scene.cell]]
-target = { led = 15 }
+target = { key = [5, 4] }
 effect = { kind = "solid", color = [255, 255, 255] }
 
 # C: next PaletteFX palette, shown in magenta.
 [[lighting.layer_scene.cell]]
-target = { led = 20 }
+target = { key = [4, 3] }
 effect = { kind = "solid", color = [255, 0, 255] }
 
 # F2 is this layer's active-layer indicator, matching F1/F3/F4/F5 on the others.
 [[lighting.layer_scene.cell]]
-target = { led = 28 }
+target = { key = [0, 1] }
 effect = { kind = "solid", color = [0, 0, 255] }
 
 [[lighting.emitter]]
@@ -1032,19 +1032,19 @@ physical_index = 39
 layer = { layer = 2, active = true }
 output_mode = "always_on"
 [[lighting.conditional_scene.cell]]
-target = { led = 7 }
+target = { key = [2, 5] }
 effect = { kind = "solid", color = [0, 128, 0] }
 
 [[lighting.conditional_scene]]
 layer = { layer = 2, active = true }
 output_mode = "always_off"
 [[lighting.conditional_scene.cell]]
-target = { led = 7 }
+target = { key = [2, 5] }
 effect = { kind = "solid", color = [128, 0, 0] }
 
 [[lighting.conditional_scene]]
 layer = { layer = 2, active = true }
 output_mode = "powered_only"
 [[lighting.conditional_scene.cell]]
-target = { led = 7 }
+target = { key = [2, 5] }
 effect = { kind = "solid", color = [0, 64, 160] }
