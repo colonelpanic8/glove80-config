@@ -108,10 +108,165 @@ mode = "cursor"
 
 [lighting]
 brightness = 255
-output_mode = "always-on"
+output_mode = "powered-only"
 scene_policy = "active-stack"
-scene = []
-conditional_scene = []
+
+# The Glove80 lighting policy translated by key position to Go60's 60-LED
+# topology. Magic gets the same opaque information view, control colors,
+# battery gauges, connection state, and layer indicators.
+scene = [
+  # Magic blackout, excluding its eight explicitly painted control LEDs.
+  { layer = 2, led = 0, color = "#000000" },
+  { layer = 2, led = 1, color = "#000000" },
+  { layer = 2, led = 2, color = "#000000" },
+  { layer = 2, led = 3, color = "#000000" },
+  { layer = 2, led = 5, color = "#000000" },
+  { layer = 2, led = 6, color = "#000000" },
+  { layer = 2, led = 7, color = "#000000" },
+  { layer = 2, led = 8, color = "#000000" },
+  { layer = 2, led = 9, color = "#000000" },
+  { layer = 2, led = 10, color = "#000000" },
+  { layer = 2, led = 12, color = "#000000" },
+  { layer = 2, led = 14, color = "#000000" },
+  { layer = 2, led = 17, color = "#000000" },
+  { layer = 2, led = 20, color = "#000000" },
+  { layer = 2, led = 21, color = "#000000" },
+  { layer = 2, led = 23, color = "#000000" },
+  { layer = 2, led = 24, color = "#000000" },
+  { layer = 2, led = 25, color = "#000000" },
+  { layer = 2, led = 26, color = "#000000" },
+  { layer = 2, led = 27, color = "#000000" },
+  { layer = 2, led = 28, color = "#000000" },
+  { layer = 2, led = 29, color = "#000000" },
+  { layer = 2, led = 30, color = "#000000" },
+  { layer = 2, led = 31, color = "#000000" },
+  { layer = 2, led = 32, color = "#000000" },
+  { layer = 2, led = 33, color = "#000000" },
+  { layer = 2, led = 34, color = "#000000" },
+  { layer = 2, led = 35, color = "#000000" },
+  { layer = 2, led = 36, color = "#000000" },
+  { layer = 2, led = 37, color = "#000000" },
+  { layer = 2, led = 38, color = "#000000" },
+  { layer = 2, led = 39, color = "#000000" },
+  { layer = 2, led = 40, color = "#000000" },
+  { layer = 2, led = 41, color = "#000000" },
+  { layer = 2, led = 42, color = "#000000" },
+  { layer = 2, led = 43, color = "#000000" },
+  { layer = 2, led = 44, color = "#000000" },
+  { layer = 2, led = 45, color = "#000000" },
+  { layer = 2, led = 46, color = "#000000" },
+  { layer = 2, led = 47, color = "#000000" },
+  { layer = 2, led = 48, color = "#000000" },
+  { layer = 2, led = 49, color = "#000000" },
+  { layer = 2, led = 50, color = "#000000" },
+  { layer = 2, led = 51, color = "#000000" },
+  { layer = 2, led = 52, color = "#000000" },
+  { layer = 2, led = 53, color = "#000000" },
+  { layer = 2, led = 54, color = "#000000" },
+  { layer = 2, led = 55, color = "#000000" },
+  { layer = 2, led = 56, color = "#000000" },
+  { layer = 2, led = 57, color = "#000000" },
+  { layer = 2, led = 58, color = "#000000" },
+  { layer = 2, led = 59, color = "#000000" },
+
+  # Magic controls: W/S brightness, old arrows effect cycle, C palette.
+  { layer = 2, led = 18, color = "#ffff00" },
+  { layer = 2, led = 19, color = "#ffff00" },
+  { layer = 2, led = 16, color = "#ffffff" },
+  { layer = 2, led = 11, color = "#ffffff" },
+  { layer = 2, led = 15, color = "#ff00ff" },
+
+  # F1-F5 equivalents on Go60's Lower number row indicate layers 1-5.
+  { layer = 1, led = 26, color = "#0000ff" },
+  { layer = 2, led = 22, color = "#0000ff" },
+  { layer = 3, led = 17, color = "#0080ff" },
+  { layer = 4, led = 12, color = "#0000ff" },
+  { layer = 5, led = 7, color = "#0000ff" },
+
+  # Games: W/A/S/D and Space.
+  { layer = 3, led = 18, color = "#a03000" },
+  { layer = 3, led = 24, color = "#a00000" },
+  { layer = 3, led = 19, color = "#a00000" },
+  { layer = 3, led = 14, color = "#a00000" },
+  { layer = 3, led = 30, color = "#a00000" },
+
+  # Paseo mnemonic colors.
+  { layer = 5, led = 9, color = "#d06040" },
+  { layer = 5, led = 48, color = "#d06040" },
+  { layer = 5, led = 19, color = "#0080ff" },
+  { layer = 5, led = 49, color = "#0080ff" },
+  { layer = 5, led = 23, color = "#00c040" },
+  { layer = 5, led = 40, color = "#d08000" },
+  { layer = 5, led = 35, color = "#c02020" },
+]
+
+conditional_scene = [
+  # Left battery, bottom-to-top: bottom finger key then the outer column.
+  { led = 21, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 1 } },
+  { led = 29, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 21 } },
+  { led = 28, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 41 } },
+  { led = 27, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 61 } },
+  { led = 26, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 81 } },
+
+  # Right battery mirrors the left.
+  { led = 51, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 1 } },
+  { led = 59, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 21 } },
+  { led = 58, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 41 } },
+  { led = 57, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 61 } },
+  { led = 56, color = "#008000", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 81 } },
+
+  # Low battery overrides.
+  { led = 21, color = "#a03000", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 1, max_level = 40 } },
+  { led = 29, color = "#a03000", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 21, max_level = 40 } },
+  { led = 21, color = "#a00000", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 1, max_level = 20 } },
+  { led = 51, color = "#a03000", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 1, max_level = 40 } },
+  { led = 59, color = "#a03000", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 21, max_level = 40 } },
+  { led = 51, color = "#a00000", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 1, max_level = 20 } },
+
+  # Charging wins over level and low-battery colors.
+  { led = 21, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 1, charge = "charging" } },
+  { led = 29, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 21, charge = "charging" } },
+  { led = 28, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 41, charge = "charging" } },
+  { led = 27, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 61, charge = "charging" } },
+  { led = 26, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 0, min_level = 81, charge = "charging" } },
+  { led = 51, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 1, charge = "charging" } },
+  { led = 59, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 21, charge = "charging" } },
+  { led = 58, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 41, charge = "charging" } },
+  { led = 57, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 61, charge = "charging" } },
+  { led = 56, color = "#0040a0", layer = { layer = 2, active = true }, battery = { node = 1, min_level = 81, charge = "charging" } },
+
+  # T output-mode and E effects-state indicators.
+  { led = 4, color = "#008000", layer = { layer = 2, active = true }, output_mode = "always-on" },
+  { led = 4, color = "#800000", layer = { layer = 2, active = true }, output_mode = "always-off" },
+  { led = 4, color = "#0040a0", layer = { layer = 2, active = true }, output_mode = "powered-only" },
+  { led = 13, color = "#008000", layer = { layer = 2, active = true }, effects = { enabled = true } },
+  { led = 13, color = "#800000", layer = { layer = 2, active = true }, effects = { enabled = false } },
+
+  # BLE slot keys are the Go60 left thumb arc: LEDs 0, 1, and 2.
+  { led = 0, color = "#2a2a2a", layer = { layer = 2, active = true }, connection = { bonded = { slot = 0, bonded = false } } },
+  { led = 0, color = "#b00000", layer = { layer = 2, active = true }, connection = { bonded = { slot = 0, bonded = true } } },
+  { led = 0, color = "#0050ff", layer = { layer = 2, active = true }, connection = { profile = 0, ble_state = "inactive" } },
+  { led = 0, color = "#ffffff", effect = "blink", period_ms = 800, phase_ms = 0, duty = 50, layer = { layer = 2, active = true }, connection = { profile = 0, ble_state = "advertising" } },
+  { led = 0, color = "#0050ff", layer = { layer = 2, active = true }, connection = { profile = 0, ble_state = "connected" } },
+  { led = 0, color = "#00c020", layer = { layer = 2, active = true }, connection = { profile = 0, ble_state = "connected", transport = "ble" } },
+  { led = 1, color = "#2a2a2a", layer = { layer = 2, active = true }, connection = { bonded = { slot = 1, bonded = false } } },
+  { led = 1, color = "#b00000", layer = { layer = 2, active = true }, connection = { bonded = { slot = 1, bonded = true } } },
+  { led = 1, color = "#0050ff", layer = { layer = 2, active = true }, connection = { profile = 1, ble_state = "inactive" } },
+  { led = 1, color = "#ffffff", effect = "blink", period_ms = 800, phase_ms = 0, duty = 50, layer = { layer = 2, active = true }, connection = { profile = 1, ble_state = "advertising" } },
+  { led = 1, color = "#0050ff", layer = { layer = 2, active = true }, connection = { profile = 1, ble_state = "connected" } },
+  { led = 1, color = "#00c020", layer = { layer = 2, active = true }, connection = { profile = 1, ble_state = "connected", transport = "ble" } },
+  { led = 2, color = "#2a2a2a", layer = { layer = 2, active = true }, connection = { bonded = { slot = 2, bonded = false } } },
+  { led = 2, color = "#b00000", layer = { layer = 2, active = true }, connection = { bonded = { slot = 2, bonded = true } } },
+  { led = 2, color = "#0050ff", layer = { layer = 2, active = true }, connection = { profile = 2, ble_state = "inactive" } },
+  { led = 2, color = "#ffffff", effect = "blink", period_ms = 800, phase_ms = 0, duty = 50, layer = { layer = 2, active = true }, connection = { profile = 2, ble_state = "advertising" } },
+  { led = 2, color = "#0050ff", layer = { layer = 2, active = true }, connection = { profile = 2, ble_state = "connected" } },
+  { led = 2, color = "#00c020", layer = { layer = 2, active = true }, connection = { profile = 2, ble_state = "connected", transport = "ble" } },
+
+  # USB status lives on Go60's Magic+Equal key (QK_OUTPUT_USB).
+  { led = 26, color = "#b00000", layer = { layer = 2, active = true }, connection = { usb_connected = false } },
+  { led = 26, color = "#0050ff", layer = { layer = 2, active = true }, connection = { usb_connected = true } },
+  { led = 26, color = "#00c020", layer = { layer = 2, active = true }, connection = { transport = "usb" } },
+]
 
 [lighting.background]
 enabled = false
@@ -123,9 +278,9 @@ mode = "solid"
 
 [lighting.effects]
 effect = "Crosshair"
-palette = "Amber"
+palette = "Polarized"
 value = 255
-speed = 108
+speed = 32
 
 [lighting.effects.params.Crosshair]
 "Arm hue" = 0
@@ -133,4 +288,20 @@ speed = 108
 Crosses = 1
 "Duration x10ms" = 90
 "Key hue" = 173
+Motion = 0
 "Pulse width" = 170
+
+[lighting.effects.params.Comet]
+"Lag x10ms" = 32
+"Distance pace" = 200
+Momentum = 168
+"Trail x10ms" = 20
+"Head size" = 14
+"Linger x10ms" = 80
+
+[lighting.effects.params.Rain]
+Drops = 11
+"Rain hue" = 172
+"Spawn x10ms" = 5
+Trail = 161
+Width = 14
