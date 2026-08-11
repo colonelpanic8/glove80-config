@@ -128,8 +128,9 @@ just go60-firmware
 ```
 
 The bundle is written under `dependencies/glove80-rmk/dist/go60/`. The Go60
-port currently supports BLE split and the two trackpads, but not automatic
-BLE/TRRS inter-half switching; hardware qualification is still required.
+port uses the board's half-duplex UART/TRRS link between halves and retains BLE
+for host communication. Automatic fallback to a wireless inter-half link is
+not yet implemented; hardware qualification is still required.
 
 The build embeds three independently checkable Git identities in the Rynk
 firmware label: this configuration repository's commit, the pinned
