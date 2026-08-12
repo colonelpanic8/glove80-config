@@ -14,7 +14,7 @@ jobs:
           submodules: recursive
       - uses: cachix/install-nix-action@v25
       - name: Validate runtime configuration
-        run: just check
+        run: nix develop path:./dependencies/moergo-rmk --command just check
 
   configured-firmware:
     name: Build configured firmware
@@ -27,7 +27,7 @@ jobs:
           submodules: recursive
       - uses: cachix/install-nix-action@v25
       - name: Build and validate both configured keyboards
-        run: just firmware-all
+        run: nix develop path:./dependencies/moergo-rmk --command just firmware-all
       - name: Upload configured firmware bundle
         uses: actions/upload-artifact@v4
         with:
