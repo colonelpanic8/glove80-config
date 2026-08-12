@@ -143,6 +143,9 @@ A dirty working tree is marked in both places.
 
 ## Lighting controls and indicators
 
+See [Lighting model](docs/lighting.md) for the topology, selector syntax,
+matrix/zone regions, resolution behavior, and compositor order.
+
 Lighting has a three-state output policy: always on, always off, or on only
 while USB power is present. In plugged-in-only mode each half evaluates its
 own VBUS independently; USB power does not need to be the selected transport.

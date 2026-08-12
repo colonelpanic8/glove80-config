@@ -246,6 +246,11 @@ col_pins = ["P0_14", "P0_13", "P0_16", "P0_15", "P0_17", "P0_20", "P0_24"]
 [lighting]
 topology_revision = 1
 
+[lighting.controls]
+# Holding Magic temporarily wakes lighting so the layer's controls and status
+# remain visible even when the selected output policy would leave the board dark.
+wake_layers = [2]
+
 [[lighting.zone]]
 id = 1
 name = "per-key"

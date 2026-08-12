@@ -32,24 +32,24 @@ default_layer = 0
 id = "base"
 name = "Base"
 keys = """
-KC_F1    KC_F2    KC_F3   KC_F4    KC_F5    --       LT(1,KC_ESC)  KC_BSPC  --       KC_F6  KC_F7    KC_F8    KC_F9          TG(1)
+KC_F1    KC_F2    KC_F3   KC_F4    KC_F5    --       LT(1,KC_ESC)  KC_BSPC  --       KC_F6  KC_F7    KC_F8    KC_F9          KC_F10
 KC_EQL   KC_1     KC_2    KC_3     KC_4     KC_5     TD(0)         TG(4)    KC_6     KC_7   KC_8     KC_9     KC_0           KC_MINS
 KC_TAB   KC_Q     KC_W    KC_E     KC_R     KC_T     MO(2)         KC_LGUI  KC_Y     KC_U   KC_I     KC_O     KC_P           KC_BSLS
 KC_LCTL  KC_A     KC_S    KC_D     KC_F     KC_G     KC_BSPC       KC_SPC   KC_H     KC_J   KC_K     KC_L     LT(1,KC_SCLN)  KC_QUOT
 KC_LSFT  KC_Z     KC_X    KC_C     KC_V     KC_B     KC_LGUI       KC_ENT   KC_N     KC_M   KC_COMM  KC_DOT   KC_SLSH        KC_RSFT
-KC_GRV   KC_HOME  KC_END  MO(2)    KC_ESC   --       KC_LALT       KC_RGUI  --       KC_DEL KC_DOWN  KC_LBRC  KC_RBRC        TG(3)
+KC_GRV   KC_HOME  KC_END  KC_LEFT  KC_RGHT  --       KC_LALT       KC_RGUI  --       KC_UP  KC_DOWN  KC_LBRC  KC_RBRC        TG(3)
 """
 
-# --- Layer 1: Lower (navigation + media) ------------------------------------
+# --- Layer 1: Lower (symbols + media) ---------------------------------------
 [[layer]]
 id = "lower"
 name = "Lower"
 keys = """
 _______  _______       _______       _______        _______        --       _______  _______  --            _______       _______       _______       _______       _______
 _______  _______       _______       _______        _______        _______  _______  _______  _______       _______       _______       _______       _______       _______
-_______  _______       KC_UP         _______         _______        _______  TO(0)    _______  _______       _______       _______       _______       _______       _______
-KC_CAPS  KC_LEFT       KC_DOWN       KC_RGHT         _______        _______  _______  KC_MPLY  _______       _______       _______       _______       _______       _______
-_______  _______       _______       _______         _______        _______  _______  _______  _______       _______       _______       _______       _______       _______
+_______  LSFT(KC_EQL)  LSFT(KC_MINS) LSFT(KC_9)     LSFT(KC_0)     _______  TO(0)    _______  _______       _______       _______       _______       _______       _______
+KC_CAPS  LSFT(KC_1)    LSFT(KC_2)    LSFT(KC_3)     LSFT(KC_4)     LSFT(KC_5)  _______  KC_MPLY  LSFT(KC_6)  LSFT(KC_7)   LSFT(KC_8)    LSFT(KC_9)    LSFT(KC_0)    _______
+_______  KC_LBRC       KC_RBRC       LSFT(KC_LBRC)  LSFT(KC_RBRC)  _______  _______  _______  _______       _______       _______       _______       _______       _______
 _______  _______       _______       KC_MPRV        KC_MNXT        --       _______  _______  --            KC_VOLU       KC_VOLD       _______       _______       _______
 """
 
@@ -168,6 +168,7 @@ hold_timeout_ms = 180
 [lighting]
 brightness = 255
 output_mode = "powered-only"
+wake_layers = [2]
 scene_policy = "active-stack"
 
 [lighting.background]
@@ -232,362 +233,362 @@ Width = 14
 
 [[lighting.scene]]
 layer = 2
-led = 0
+key = [0, 6]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 1
+key = [1, 6]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 2
+key = [2, 6]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 3
+key = [3, 6]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 4
+key = [4, 6]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 5
+key = [5, 6]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 6
+key = [1, 5]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 8
+key = [3, 5]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 9
+key = [4, 5]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 10
+key = [0, 4]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 11
+key = [1, 4]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 12
+key = [2, 4]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 13
+key = [3, 4]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 14
+key = [4, 4]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 16
+key = [0, 3]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 17
+key = [1, 3]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 19
+key = [3, 3]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 22
+key = [0, 2]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 23
+key = [1, 2]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 26
+key = [4, 2]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 27
+key = [5, 2]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 29
+key = [1, 1]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 30
+key = [2, 1]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 31
+key = [3, 1]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 32
+key = [4, 1]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 33
+key = [5, 1]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 34
+key = [0, 0]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 35
+key = [1, 0]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 36
+key = [2, 0]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 37
+key = [3, 0]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 38
+key = [4, 0]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 39
+key = [5, 0]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 40
+key = [0, 7]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 41
+key = [1, 7]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 42
+key = [2, 7]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 43
+key = [3, 7]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 44
+key = [4, 7]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 45
+key = [5, 7]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 46
+key = [1, 8]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 47
+key = [2, 8]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 48
+key = [3, 8]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 49
+key = [4, 8]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 50
+key = [0, 9]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 51
+key = [1, 9]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 52
+key = [2, 9]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 53
+key = [3, 9]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 54
+key = [4, 9]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 55
+key = [5, 9]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 56
+key = [0, 10]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 57
+key = [1, 10]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 58
+key = [2, 10]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 59
+key = [3, 10]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 60
+key = [4, 10]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 61
+key = [5, 10]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 62
+key = [0, 11]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 63
+key = [1, 11]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 64
+key = [2, 11]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 65
+key = [3, 11]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 66
+key = [4, 11]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 67
+key = [5, 11]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 68
+key = [0, 12]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 69
+key = [1, 12]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 70
+key = [2, 12]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 71
+key = [3, 12]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 72
+key = [4, 12]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 73
+key = [5, 12]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 74
+key = [0, 13]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 75
+key = [1, 13]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 76
+key = [2, 13]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 77
+key = [3, 13]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 78
+key = [4, 13]
 color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 79
+key = [5, 13]
 color = "#000000"
 
 # Magic's lighting-control block, painted over the blackout. Effect and output
@@ -597,54 +598,54 @@ color = "#000000"
 
 [[lighting.scene]]
 layer = 2
-led = 24  # W: brightness up
+key = [2, 2]  # W: brightness up
 color = "#ffff00"
 
 [[lighting.scene]]
 layer = 2
-led = 25  # S: brightness down
+key = [3, 2]  # S: brightness down
 color = "#ffff00"
 
 [[lighting.scene]]
 layer = 2
-led = 21  # left arrow: previous effect
+key = [5, 3]  # left arrow: previous effect
 color = "#ffffff"
 
 [[lighting.scene]]
 layer = 2
-led = 15  # right arrow: next effect
+key = [5, 4]  # right arrow: next effect
 color = "#ffffff"
 
 [[lighting.scene]]
 layer = 2
-led = 20  # C: next palette
+key = [4, 3]  # C: next palette
 color = "#ff00ff"
 
 # Active-layer indicators: F1-F5 show layers 1-5 in blue while active.
 
 [[lighting.scene]]
 layer = 1
-led = 34
+key = [0, 0]
 color = "#0000ff"
 
 [[lighting.scene]]
 layer = 2
-led = 28
+key = [0, 1]
 color = "#0000ff"
 
 [[lighting.scene]]
 layer = 3
-led = 22
+key = [0, 2]
 color = "#0080ff"
 
 [[lighting.scene]]
 layer = 4
-led = 16
+key = [0, 3]
 color = "#0000ff"
 
 [[lighting.scene]]
 layer = 5
-led = 10
+key = [0, 4]
 color = "#0000ff"
 
 # Games-layer key highlights, moved out of the compiled table so lighting
@@ -653,27 +654,27 @@ color = "#0000ff"
 
 [[lighting.scene]]
 layer = 3
-led = 3
+key = [3, 6]
 color = "#a03000"  # the Games layer's W key
 
 [[lighting.scene]]
 layer = 3
-led = 24
+key = [2, 2]
 color = "#a00000"
 
 [[lighting.scene]]
 layer = 3
-led = 31
+key = [3, 1]
 color = "#a00000"
 
 [[lighting.scene]]
 layer = 3
-led = 25
+key = [3, 2]
 color = "#a00000"
 
 [[lighting.scene]]
 layer = 3
-led = 19
+key = [3, 3]
 color = "#a00000"
 
 # Paseo mnemonic layer: Claude models are orange, Codex models are blue, and
@@ -681,37 +682,37 @@ color = "#a00000"
 
 [[lighting.scene]]
 layer = 5
-led = 13  # F: Fable
+key = [3, 4]  # F: Fable
 color = "#d06040"
 
 [[lighting.scene]]
 layer = 5
-led = 64  # O: Opus
+key = [2, 11]  # O: Opus
 color = "#d06040"
 
 [[lighting.scene]]
 layer = 5
-led = 25  # S: Sol
+key = [3, 2]  # S: Sol
 color = "#0080ff"
 
 [[lighting.scene]]
 layer = 5
-led = 65  # L: Luna
+key = [3, 11]  # L: Luna
 color = "#0080ff"
 
 [[lighting.scene]]
 layer = 5
-led = 30  # Q: low / quick
+key = [2, 1]  # Q: low / quick
 color = "#00c040"
 
 [[lighting.scene]]
 layer = 5
-led = 54  # M: medium
+key = [4, 9]  # M: medium
 color = "#d08000"
 
 [[lighting.scene]]
 layer = 5
-led = 48  # H: high
+key = [3, 8]  # H: high
 color = "#c02020"
 
 # Battery gauges on the Magic layer, five LEDs per half. Order matters:
@@ -719,157 +720,157 @@ color = "#c02020"
 # low-battery overrides next, and charging last so it beats both.
 
 [[lighting.conditional_scene]]
-led = 39
+key = [5, 0]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 1 }
 
 [[lighting.conditional_scene]]
-led = 38
+key = [4, 0]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 21 }
 
 [[lighting.conditional_scene]]
-led = 37
+key = [3, 0]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 41 }
 
 [[lighting.conditional_scene]]
-led = 36
+key = [2, 0]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 61 }
 
 [[lighting.conditional_scene]]
-led = 35
+key = [1, 0]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 81 }
 
 [[lighting.conditional_scene]]
-led = 79
+key = [5, 13]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 1 }
 
 [[lighting.conditional_scene]]
-led = 78
+key = [4, 13]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 21 }
 
 [[lighting.conditional_scene]]
-led = 77
+key = [3, 13]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 41 }
 
 [[lighting.conditional_scene]]
-led = 76
+key = [2, 13]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 61 }
 
 [[lighting.conditional_scene]]
-led = 75
+key = [1, 13]
 color = "#008000"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 81 }
 
 [[lighting.conditional_scene]]
-led = 39
+key = [5, 0]
 color = "#a03000"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 1, max_level = 40 }
 
 [[lighting.conditional_scene]]
-led = 40
+key = [0, 7]
 color = "#a03000"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 21, max_level = 40 }
 
 [[lighting.conditional_scene]]
-led = 39
+key = [5, 0]
 color = "#a00000"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 1, max_level = 20 }
 
 [[lighting.conditional_scene]]
-led = 79
+key = [5, 13]
 color = "#a03000"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 1, max_level = 40 }
 
 [[lighting.conditional_scene]]
-led = 78
+key = [4, 13]
 color = "#a03000"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 21, max_level = 40 }
 
 [[lighting.conditional_scene]]
-led = 79
+key = [5, 13]
 color = "#a00000"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 1, max_level = 20 }
 
 [[lighting.conditional_scene]]
-led = 39
+key = [5, 0]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 1, charge = "charging" }
 
 [[lighting.conditional_scene]]
-led = 38
+key = [4, 0]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 21, charge = "charging" }
 
 [[lighting.conditional_scene]]
-led = 37
+key = [3, 0]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 41, charge = "charging" }
 
 [[lighting.conditional_scene]]
-led = 36
+key = [2, 0]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 61, charge = "charging" }
 
 [[lighting.conditional_scene]]
-led = 35
+key = [1, 0]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 0, min_level = 81, charge = "charging" }
 
 [[lighting.conditional_scene]]
-led = 79
+key = [5, 13]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 1, charge = "charging" }
 
 [[lighting.conditional_scene]]
-led = 78
+key = [4, 13]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 21, charge = "charging" }
 
 [[lighting.conditional_scene]]
-led = 77
+key = [3, 13]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 41, charge = "charging" }
 
 [[lighting.conditional_scene]]
-led = 76
+key = [2, 13]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 61, charge = "charging" }
 
 [[lighting.conditional_scene]]
-led = 75
+key = [1, 13]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 81, charge = "charging" }
@@ -879,19 +880,19 @@ battery = { node = 1, min_level = 81, charge = "charging" }
 # live policy, which is what let it stop being compiled into the firmware.
 
 [[lighting.conditional_scene]]
-led = 7
+key = [2, 5]
 color = "#008000"
 layer = { layer = 2, active = true }
 output_mode = "always-on"
 
 [[lighting.conditional_scene]]
-led = 7
+key = [2, 5]
 color = "#800000"
 layer = { layer = 2, active = true }
 output_mode = "always-off"
 
 [[lighting.conditional_scene]]
-led = 7
+key = [2, 5]
 color = "#0040a0"
 layer = { layer = 2, active = true }
 output_mode = "powered-only"
@@ -902,13 +903,13 @@ output_mode = "powered-only"
 # the output-mode rules above, where green is on and dark red is off.
 
 [[lighting.conditional_scene]]
-led = 18
+key = [2, 3]
 color = "#008000"
 layer = { layer = 2, active = true }
 effects = { enabled = true }
 
 [[lighting.conditional_scene]]
-led = 18
+key = [2, 3]
 color = "#800000"
 layer = { layer = 2, active = true }
 effects = { enabled = false }
@@ -923,25 +924,25 @@ effects = { enabled = false }
 # lower arc: LED 3 = slot 1, LED 4 = slot 2, LED 5 = slot 3.
 
 [[lighting.conditional_scene]]
-led = 3
+key = [3, 6]
 color = "#2a2a2a"
 layer = { layer = 2, active = true }
 connection = { bonded = { slot = 0, bonded = false } }
 
 [[lighting.conditional_scene]]
-led = 3
+key = [3, 6]
 color = "#b00000"
 layer = { layer = 2, active = true }
 connection = { bonded = { slot = 0, bonded = true } }
 
 [[lighting.conditional_scene]]
-led = 3
+key = [3, 6]
 color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 0, ble_state = "inactive" }
 
 [[lighting.conditional_scene]]
-led = 3
+key = [3, 6]
 color = "#ffffff"
 effect = "blink"
 period_ms = 800
@@ -951,37 +952,37 @@ layer = { layer = 2, active = true }
 connection = { profile = 0, ble_state = "advertising" }
 
 [[lighting.conditional_scene]]
-led = 3
+key = [3, 6]
 color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 0, ble_state = "connected" }
 
 [[lighting.conditional_scene]]
-led = 3
+key = [3, 6]
 color = "#00c020"
 layer = { layer = 2, active = true }
 connection = { profile = 0, ble_state = "connected", transport = "ble" }
 
 [[lighting.conditional_scene]]
-led = 4
+key = [4, 6]
 color = "#2a2a2a"
 layer = { layer = 2, active = true }
 connection = { bonded = { slot = 1, bonded = false } }
 
 [[lighting.conditional_scene]]
-led = 4
+key = [4, 6]
 color = "#b00000"
 layer = { layer = 2, active = true }
 connection = { bonded = { slot = 1, bonded = true } }
 
 [[lighting.conditional_scene]]
-led = 4
+key = [4, 6]
 color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 1, ble_state = "inactive" }
 
 [[lighting.conditional_scene]]
-led = 4
+key = [4, 6]
 color = "#ffffff"
 effect = "blink"
 period_ms = 800
@@ -991,37 +992,37 @@ layer = { layer = 2, active = true }
 connection = { profile = 1, ble_state = "advertising" }
 
 [[lighting.conditional_scene]]
-led = 4
+key = [4, 6]
 color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 1, ble_state = "connected" }
 
 [[lighting.conditional_scene]]
-led = 4
+key = [4, 6]
 color = "#00c020"
 layer = { layer = 2, active = true }
 connection = { profile = 1, ble_state = "connected", transport = "ble" }
 
 [[lighting.conditional_scene]]
-led = 5
+key = [5, 6]
 color = "#2a2a2a"
 layer = { layer = 2, active = true }
 connection = { bonded = { slot = 2, bonded = false } }
 
 [[lighting.conditional_scene]]
-led = 5
+key = [5, 6]
 color = "#b00000"
 layer = { layer = 2, active = true }
 connection = { bonded = { slot = 2, bonded = true } }
 
 [[lighting.conditional_scene]]
-led = 5
+key = [5, 6]
 color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 2, ble_state = "inactive" }
 
 [[lighting.conditional_scene]]
-led = 5
+key = [5, 6]
 color = "#ffffff"
 effect = "blink"
 period_ms = 800
@@ -1031,31 +1032,31 @@ layer = { layer = 2, active = true }
 connection = { profile = 2, ble_state = "advertising" }
 
 [[lighting.conditional_scene]]
-led = 5
+key = [5, 6]
 color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { profile = 2, ble_state = "connected" }
 
 [[lighting.conditional_scene]]
-led = 5
+key = [5, 6]
 color = "#00c020"
 layer = { layer = 2, active = true }
 connection = { profile = 2, ble_state = "connected", transport = "ble" }
 
 [[lighting.conditional_scene]]
-led = 0
+key = [0, 6]
 color = "#b00000"
 layer = { layer = 2, active = true }
 connection = { usb_connected = false }
 
 [[lighting.conditional_scene]]
-led = 0
+key = [0, 6]
 color = "#0050ff"
 layer = { layer = 2, active = true }
 connection = { usb_connected = true }
 
 [[lighting.conditional_scene]]
-led = 0
+key = [0, 6]
 color = "#00c020"
 layer = { layer = 2, active = true }
 connection = { transport = "usb" }

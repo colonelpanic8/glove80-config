@@ -109,6 +109,7 @@ mode = "cursor"
 [lighting]
 brightness = 255
 output_mode = "powered-only"
+wake_layers = [2]
 scene_policy = "active-stack"
 
 # The Glove80 lighting policy translated by key position to Go60's 60-LED
