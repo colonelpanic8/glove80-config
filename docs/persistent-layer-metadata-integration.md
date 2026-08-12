@@ -16,10 +16,10 @@ not pushed as part of this task.
 
 The exact locally generated tree used for qualification is:
 
-- generated commit: `79a8f38d6082c98abf8b140875e3347b222bd62d`
-- generated tree: `b1cd6378ffa76655f6ce43c845f9083da393e2f1`
+- generated commit: `6ac0f269ca1abd0707fb8fc171218d5c3f259936`
+- generated tree: `f25b03b4b9afff807e73630839e96949600c3d8e`
 - MoErgo integration branch: `feat/layer-metadata-integration`
-- MoErgo integration head: `46c3c31`
+- MoErgo integration head: `8a320d3`
 
 The proof assembly used a temporary local remote and admitted the topic before
 the existing carried stack. Its final coherence resolution retained:
