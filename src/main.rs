@@ -27,11 +27,15 @@ struct Args {
     #[arg(long)]
     codex_url: Option<String>,
 
-    /// Path to the RMK-compatible glove80-control executable.
-    #[arg(long, default_value = "./bin/glove80-control")]
-    glove80_control: PathBuf,
+    /// Path to the RMK-compatible moergo-control executable.
+    #[arg(
+        long,
+        alias = "glove80-control",
+        default_value = "./bin/moergo-control"
+    )]
+    moergo_control: PathBuf,
 
-    /// Keyboard transport used by glove80-control.
+    /// Keyboard transport used by moergo-control.
     #[arg(long, value_enum, default_value_t = TransportArg::Usb)]
     transport: TransportArg,
 
@@ -93,7 +97,7 @@ async fn main() -> Result<()> {
 
     let mut state = AttentionState::default();
     let mut lighting = RmkLighting::new(
-        args.glove80_control,
+        args.moergo_control,
         args.transport.into(),
         args.overlay_ttl_ms,
         args.dry_run,

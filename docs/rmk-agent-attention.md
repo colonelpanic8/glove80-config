@@ -3,7 +3,7 @@
 `rmk-attentiond` indicates blocking Codex and Claude Code threads using three
 RMK lighting-overlay cells. It is deliberately local-only: Codex is observed
 through the Codex Desktop app-server on loopback, Claude Code posts lifecycle
-hooks to a loopback HTTP endpoint, and keyboard updates use `glove80-control`.
+hooks to a loopback HTTP endpoint, and keyboard updates use `moergo-control`.
 No OpenAI or Anthropic API token is needed.
 
 ## Signals
@@ -63,6 +63,6 @@ nix build
 nix run . -- --dry-run
 ```
 
-The daemon invokes an RMK-aware `glove80-control` separately. For an installed
-user service, pass its packaged absolute path with `--glove80-control` rather
+The daemon invokes an RMK-aware `moergo-control` separately. For an installed
+user service, pass its packaged absolute path with `--moergo-control` rather
 than the development wrapper in this repository.

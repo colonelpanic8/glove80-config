@@ -2,5 +2,5 @@
 /.envrc
 /.worktrees/
 /target/
-/dependencies/glove80-rmk/dist/
+/dependencies/moergo-rmk/dist/
 .claude-session/

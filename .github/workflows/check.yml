@@ -14,7 +14,7 @@ jobs:
           submodules: recursive
       - uses: cachix/install-nix-action@v25
       - name: Validate runtime configuration
-        run: ./bin/glove80-control config validate config/glove80.toml
+        run: just check
 
   configured-firmware:
     name: Build configured firmware
@@ -26,13 +26,13 @@ jobs:
         with:
           submodules: recursive
       - uses: cachix/install-nix-action@v25
-      - name: Build and validate both configured firmware halves
-        run: nix develop path:./dependencies/glove80-rmk --command just firmware
+      - name: Build and validate both configured keyboards
+        run: just firmware-all
       - name: Upload configured firmware bundle
         uses: actions/upload-artifact@v4
         with:
-          name: glove80-config-firmware
-          path: dependencies/glove80-rmk/dist/
+          name: moergo-config-firmware
+          path: dependencies/moergo-rmk/dist/
 
   release-master:
     name: Publish configured firmware release
@@ -53,7 +53,7 @@ jobs:
       - name: Download configured firmware bundle
         uses: actions/download-artifact@v4
         with:
-          name: glove80-config-firmware
+          name: moergo-config-firmware
           path: dist
       - name: Create or update GitHub Release
         env:
@@ -70,7 +70,7 @@ jobs:
             done
             tag="v${day}.${build}"
           fi
-          title="Glove80 firmware ${tag#v}"
+          title="MoErgo firmware ${tag#v}"
 
           previous="$(git describe --tags --abbrev=0 "${GITHUB_SHA}^" 2>/dev/null || true)"
           if [ -n "${previous}" ]; then

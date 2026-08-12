@@ -1,6 +1,6 @@
-[submodule "dependencies/glove80-rmk"]
-	path = dependencies/glove80-rmk
-	url = https://github.com/colonelpanic8/glove80-rmk.git
+[submodule "dependencies/moergo-rmk"]
+	path = dependencies/moergo-rmk
+	url = https://github.com/colonelpanic8/moergo-rmk.git
 	branch = master
 [submodule "rynkbench"]
 	path = rynkbench

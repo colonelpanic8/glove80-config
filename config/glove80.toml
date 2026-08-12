@@ -1,9 +1,9 @@
-# Ivan's Glove80 runtime configuration for the current glove80-rmk firmware.
+# Ivan's Glove80 runtime configuration for the current moergo-rmk firmware.
 bluetooth_name = "WhiteG80 {slot}"
 default_layer = 0
 #
 # This matches the compiled-in layers in
-# dependencies/glove80-rmk/crates/glove80-rmk/keyboard.toml and is applied
+# dependencies/moergo-rmk/crates/glove80-rmk/keyboard.toml and is applied
 # at runtime through RMK's native Rynk protocol:
 #
 #   just check
@@ -63,7 +63,7 @@ _______  _______       _______       KC_MPRV        KC_MNXT        --       ____
 # connected — and the USB key mirrors the scheme: green carrying typing,
 # blue plugged but idle, red unplugged. Magic+R toggles the maintenance lock;
 # R is green while unlocked and red while locked. Bond management goes through
-# `glove80-control connection`. USER(12) forwards the bootloader request to
+# `moergo-control connection`. USER(12) forwards the bootloader request to
 # the right half.
 #
 # The lighting controls use the familiar WASD cluster plus the left/right

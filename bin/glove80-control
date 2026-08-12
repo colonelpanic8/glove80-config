@@ -2,13 +2,4 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-product_root="$repo_root/dependencies/glove80-rmk"
-
-if [[ ! -f "$product_root/Cargo.toml" ]]; then
-  echo "glove80-rmk is not initialized; run 'just init' first" >&2
-  exit 1
-fi
-
-exec nix develop "path:$product_root" --command \
-  cargo run --quiet --manifest-path "$product_root/Cargo.toml" \
-  -p glove80-control -- "$@"
+exec "$repo_root/bin/moergo-control" "$@"

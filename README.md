@@ -1,14 +1,20 @@
-# Glove80 configuration
+# MoErgo keyboard configuration
 
-Ivan's source-controlled Glove80 keymap, applied to the current
-[`glove80-rmk`](https://github.com/colonelpanic8/glove80-rmk) firmware through
-RMK's native Rynk protocol.
+Ivan's source-controlled Glove80 and Go60 configuration, managed by the
+current [`moergo-rmk`](https://github.com/colonelpanic8/moergo-rmk) firmware
+through RMK's native Rynk protocol.
+
+The repositories, shared firmware layer, configuration model, and primary
+control entry point use MoErgo names, reflecting that both boards are
+first-class targets. See [Repository naming](docs/repository-rename.md) for
+the migration and compatibility policy.
 
 Personal keymap and lighting policy live in this repository. Firmware hardware
-support, reusable lighting/protocol machinery, the control CLI, and release
-packaging live in the pinned `dependencies/glove80-rmk` submodule. The firmware
+support, reusable lighting/protocol machinery, the multi-board control CLI,
+and release packaging live in the pinned `dependencies/moergo-rmk` submodule.
+The firmware
 build injects [`config/firmware.toml`](config/firmware.toml) through RMK's
-external keyboard-configuration path; `glove80-rmk` contains no personal
+external keyboard-configuration path; `moergo-rmk` contains no personal
 lighting rules.
 
 ## Setup
@@ -18,8 +24,9 @@ just init
 just check
 ```
 
-`just init` initializes `glove80-rmk` and its pinned RMK submodule. `just check`
-builds the pinned `glove80-control` and validates `config/glove80.toml` offline.
+`just init` initializes the firmware repository and its pinned RMK submodule.
+`just check` builds the pinned control tool and validates both boards' runtime
+TOML offline.
 Nix supplies the Rust and native dependencies used by the control tool.
 
 ## Apply the keymap
@@ -49,7 +56,7 @@ are replaced atomically.
 `bluetooth_name = "Glove80 {slot}"` expands `{slot}` to the active BLE slot's
 one-based number, so the keyboard advertises as `Glove80 1`, `Glove80 2`, or
 `Glove80 3`. The persistent template can also be managed directly with
-`./bin/glove80-control connection name get|set`; it is limited to 16 UTF-8
+`./bin/moergo-control connection name get|set`; it is limited to 16 UTF-8
 bytes by the legacy BLE advertising payload.
 
 To inspect or pull state in the other direction:
@@ -57,7 +64,7 @@ To inspect or pull state in the other direction:
 ```sh
 just show                         # print canonical live TOML
 just pull                         # rewrite config/glove80.toml from the keyboard
-./bin/glove80-control config pull /tmp/glove80.toml
+./bin/moergo-control config pull /tmp/glove80.toml
 ```
 
 Pull preserves existing layer IDs and names when it can parse the destination,
@@ -82,11 +89,11 @@ The same configuration commands also accept the experimental JSON backup
 format from the MoErgo Layout Editor:
 
 ```sh
-./bin/glove80-control config validate layout.json
-./bin/glove80-control config diff layout.json
-./bin/glove80-control config apply layout.json
-./bin/glove80-control config pull layout.json --format moergo-json
-./bin/glove80-control config show --format moergo-json
+./bin/moergo-control config validate layout.json
+./bin/moergo-control config diff layout.json
+./bin/moergo-control config apply layout.json
+./bin/moergo-control config pull layout.json --format moergo-json
+./bin/moergo-control config show --format moergo-json
 ```
 
 JSON import manages the runtime keymap and default layer; the editor format has
@@ -100,13 +107,14 @@ schema may evolve.
 For transport selection or any other CLI command, use the pinned wrapper:
 
 ```sh
-./bin/glove80-control --usb keymap read --all
-./bin/glove80-control --ble version
-./bin/glove80-control --usb lighting caps
-./bin/glove80-control --usb device-data
+./bin/moergo-control --usb keymap read --all
+./bin/moergo-control --ble version
+./bin/moergo-control --usb lighting caps
+./bin/moergo-control --usb device-data
 ```
 
-Run `./bin/glove80-control --help` for the complete interface.
+Run `./bin/moergo-control --help` for the complete interface. The existing
+`./bin/glove80-control` path remains as a compatibility shim.
 
 ## Firmware
 
@@ -116,11 +124,11 @@ Build release firmware from the exact pinned product stack with:
 just firmware
 ```
 
-Artifacts are written under `dependencies/glove80-rmk/dist/`. The firmware's
+Artifacts are written under `dependencies/moergo-rmk/dist/`. The firmware's
 compiled defaults currently match this keymap, while this repository remains
 the editable source of truth for subsequent runtime changes.
 
-The compact counterpart for the experimental Go60 RMK port lives in
+The compact counterpart for the Go60 RMK port lives in
 [`config/go60-firmware.toml`](config/go60-firmware.toml). Build both Go60
 halves from that configuration with:
 
@@ -128,7 +136,7 @@ halves from that configuration with:
 just go60-firmware
 ```
 
-The bundle is written under `dependencies/glove80-rmk/dist/go60/`. The Go60
+The bundle is written under `dependencies/moergo-rmk/dist/go60/`. The Go60
 port automatically prefers the board's half-duplex UART/TRRS link between
 halves and falls back to BLE between halves when the cable is absent. Host
 communication remains independently selectable between USB and BLE. Hardware
@@ -136,7 +144,7 @@ qualification is still required.
 
 The build embeds three independently checkable Git identities in the Rynk
 firmware label: this configuration repository's commit, the pinned
-`glove80-rmk` commit and semver, and the pinned RMK submodule's full
+`moergo-rmk` commit and board-crate semver, and the pinned RMK submodule's full
 `git describe` identity. Rynk also reports RMK's structured semantic version.
 The release manifest records the full configuration, product, and RMK commits.
 A dirty working tree is marked in both places.
@@ -182,16 +190,16 @@ Codex and Claude Code approval/input requests onto expiring F1-F3 lighting
 overlays. See [RMK Agent Attention](docs/rmk-agent-attention.md) for behavior,
 Claude hook configuration, and development commands.
 
-## Updating `glove80-rmk`
+## Updating `moergo-rmk`
 
 Update deliberately, inspect the upstream changes, and then commit the new
 gitlink:
 
 ```sh
-git submodule update --remote dependencies/glove80-rmk
-git -C dependencies/glove80-rmk log --oneline --decorate ORIG_HEAD..HEAD
+git submodule update --remote dependencies/moergo-rmk
+git -C dependencies/moergo-rmk log --oneline --decorate ORIG_HEAD..HEAD
 just check
-git add dependencies/glove80-rmk
+git add dependencies/moergo-rmk
 ```
 
 The submodule tracks upstream `master`, but ordinary clones and builds always

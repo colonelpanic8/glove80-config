@@ -11,7 +11,7 @@ PaletteFX settings applied through Rynk.
 Every physical light has a stable LED ID. An emitter may also be associated
 with a logical matrix key, physical coordinates, and zero or more named zones.
 Rynk exposes that topology to host tools. During `config diff` or `config
-apply`, `glove80-control` resolves readable selectors to one or more LED IDs:
+apply`, `moergo-control` resolves readable selectors to one or more LED IDs:
 
 | Runtime selector | Meaning |
 | --- | --- |

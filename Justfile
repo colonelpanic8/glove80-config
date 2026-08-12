@@ -1,8 +1,9 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-glove80_rmk := "dependencies/glove80-rmk"
-control := "./bin/glove80-control"
-config := "config/glove80.toml"
+firmware_repo := "dependencies/moergo-rmk"
+control := "./bin/moergo-control"
+glove80_config := "config/glove80.toml"
+glove80_firmware_config := "config/firmware.toml"
 go60_config := "config/go60.toml"
 go60_firmware_config := "config/go60-firmware.toml"
 
@@ -10,17 +11,26 @@ init:
     git submodule update --init --recursive
 
 check:
-    {{ control }} config validate {{ config }}
+    {{ control }} config validate {{ glove80_config }}
+    {{ control }} config validate {{ go60_config }}
+
+parity-check: check
+    bash -c 'cd {{ firmware_repo }} && nix develop path:. --command just parity-check'
+
+glove80-check:
+    {{ control }} config validate {{ glove80_config }}
+
+go60-check:
     {{ control }} config validate {{ go60_config }}
 
 apply:
-    {{ control }} config apply {{ config }}
+    {{ control }} config apply {{ glove80_config }}
 
 diff:
-    {{ control }} config diff {{ config }}
+    {{ control }} config diff {{ glove80_config }}
 
 pull:
-    {{ control }} config pull {{ config }}
+    {{ control }} config pull {{ glove80_config }}
 
 show:
     {{ control }} config show
@@ -42,11 +52,11 @@ firmware:
         if test -n "$(git status --porcelain --untracked-files=normal)"; then \
             config_dirty=true; \
         fi; \
-        config_path="$(pwd)/config/firmware.toml"; \
+        config_path="$(pwd)/{{ glove80_firmware_config }}"; \
         KEYBOARD_TOML_PATH="$config_path" \
-        GLOVE80_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
-        GLOVE80_CONFIG_GIT_DIRTY="$config_dirty" \
-            bash -c 'cd {{ glove80_rmk }} && nix develop path:. --command just dist'
+        MOERGO_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
+        MOERGO_CONFIG_GIT_DIRTY="$config_dirty" \
+            bash -c 'cd {{ firmware_repo }} && nix develop path:. --command just dist'
 
 go60-firmware:
     config_dirty=false; \
@@ -55,13 +65,15 @@ go60-firmware:
         fi; \
         config_path="$(pwd)/{{ go60_firmware_config }}"; \
         KEYBOARD_TOML_PATH="$config_path" \
-        GO60_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
-        GO60_CONFIG_GIT_DIRTY="$config_dirty" \
-            bash -c 'cd {{ glove80_rmk }} && nix develop path:. --command just go60-firmware'
+        MOERGO_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
+        MOERGO_CONFIG_GIT_DIRTY="$config_dirty" \
+            bash -c 'cd {{ firmware_repo }} && nix develop path:. --command just go60-firmware'
+
+firmware-all: firmware go60-firmware
 
 attention-check:
-    nix develop ./{{ glove80_rmk }} --command cargo test
-    nix develop ./{{ glove80_rmk }} --command cargo fmt --all -- --check
+    nix develop ./{{ firmware_repo }} --command cargo test
+    nix develop ./{{ firmware_repo }} --command cargo fmt --all -- --check
 
 attention-run *args:
-    nix develop ./{{ glove80_rmk }} --command cargo run --bin rmk-attentiond -- {{ args }}
+    nix develop ./{{ firmware_repo }} --command cargo run --bin rmk-attentiond -- {{ args }}

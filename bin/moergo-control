@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+firmware_root="$repo_root/dependencies/moergo-rmk"
+
+if [[ ! -f "$firmware_root/Cargo.toml" ]]; then
+  echo "MoErgo RMK firmware is not initialized; run 'just init' first" >&2
+  exit 1
+fi
+
+exec nix develop "path:$firmware_root" --command \
+  cargo run --quiet --manifest-path "$firmware_root/Cargo.toml" \
+  -p moergo-control -- "$@"

@@ -18,7 +18,7 @@ set -u
 
 SCRIPT_PATH="$(readlink -f "$0")"
 REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
-PRODUCT_ROOT="$REPO_ROOT/dependencies/glove80-rmk"
+PRODUCT_ROOT="$REPO_ROOT/dependencies/moergo-rmk"
 
 # Enter the development environment once for the whole flash operation. The
 # retry loop must call the already-built binary directly: invoking the wrapper
@@ -28,9 +28,9 @@ if [ -z "${IN_NIX_SHELL:-}" ] && [ -z "${GLOVE80_FLASH_DEV_SHELL:-}" ]; then
   exec nix develop "path:$PRODUCT_ROOT" --command env GLOVE80_FLASH_DEV_SHELL=1 "$SCRIPT_PATH" "$@"
 fi
 
-CONTROL="$PRODUCT_ROOT/target/debug/glove80-control"
-if ! cargo build --quiet --manifest-path "$PRODUCT_ROOT/Cargo.toml" -p glove80-control; then
-  echo "FAIL: could not build glove80-control" >&2
+CONTROL="$PRODUCT_ROOT/target/debug/moergo-control"
+if ! cargo build --quiet --manifest-path "$PRODUCT_ROOT/Cargo.toml" -p moergo-control; then
+  echo "FAIL: could not build moergo-control" >&2
   exit 4
 fi
 

@@ -1,10 +1,24 @@
-# Glove80 configuration workflow
+# MoErgo configuration workflow
+
+## Treat Glove80 and Go60 as peer targets
+
+- Shared firmware behavior belongs in the nested repository's
+  `crates/moergo-rmk`; board crates should contain only hardware-specific
+  entry points and drivers.
+- Runtime and compiled defaults are paired per board:
+  `config/glove80.toml` with `config/firmware.toml`, and `config/go60.toml`
+  with `config/go60-firmware.toml`. When a shared feature changes either pair,
+  check whether the other pair needs the equivalent setting.
+- Use `./bin/moergo-control` for new documentation and automation.
+  `./bin/glove80-control` is a compatibility shim.
+- Run both configuration validations for shared model changes and build both
+  firmware bundles for shared embedded changes.
 
 ## Apply runtime configuration before considering a firmware flash
 
 - Ordinary keymap, layer-binding, default-layer, brightness, and durable
   per-layer lighting-scene changes are runtime configuration. Apply them to
-  the connected keyboard through `./bin/glove80-control` and verify them with
+  the connected keyboard through `./bin/moergo-control` and verify them with
   the corresponding read command. Do not flash firmware just to deliver
   those changes.
 - Keep `config/glove80.toml`, `config/firmware.toml`, and the live keyboard
@@ -29,9 +43,9 @@
 - When building without Nix, do not run the nested firmware `cargo`/`xtask`
   command with its default environment. Set `KEYBOARD_TOML_PATH` to the
   absolute path of `config/firmware.toml`, and set
-  `GLOVE80_CONFIG_GIT_COMMIT` and `GLOVE80_CONFIG_GIT_DIRTY` from this outer
+  `MOERGO_CONFIG_GIT_COMMIT` and `MOERGO_CONFIG_GIT_DIRTY` from this outer
   repository before invoking `cargo +1.97.0 run -p xtask -- dist` inside
-  `dependencies/glove80-rmk`.
+  `dependencies/moergo-rmk`.
 - The crate-local `crates/glove80-rmk/keyboard.toml` is not an interchangeable
   fallback for this keyboard. A UF2 built against it can pass host tests and
   size checks yet watchdog-loop during hardware initialization. Treat a
