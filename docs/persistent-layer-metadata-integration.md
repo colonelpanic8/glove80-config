@@ -1,81 +1,73 @@
 # Persistent layer metadata integration record
 
-The RMK portion of persistent layer management is committed in the nested RMK
-repository on topic branch `feat/persistent-layer-metadata`:
+The RMK implementation lives on a normal nested-repository topic branch, not
+on generated `assembled` output:
 
+- branch: `feat/persistent-layer-metadata`
 - topic commit: `05d4327ee0ccadeef37425d5ce6f9020274d351f`
 - upstream/assembly base: `1a411da55bcaae80487ce76ca00351ef1aee32f5`
-- verified assembled tree: `f25b03b4b9afff807e73630839e96949600c3d8e`
 
-The topic adds the `GetLayerMetadata` and `SetLayerMetadata` Rynk commands,
-fixed-capacity `{ occupied, name }` metadata, compiled layer-name defaults,
-persistent storage, native API support, WASM bindings, protocol snapshots, and
-focused config/protocol/storage tests. It is intentionally not committed onto
-the generated `assembled` branch.
+The topic adds `GetLayerMetadata` and `SetLayerMetadata`, fixed-capacity
+`{ occupied, name }` slots, compiled defaults, flash persistence, native and
+WASM APIs, wire snapshots, and focused protocol/config/storage tests. It was
+not pushed as part of this task.
 
-## Assembly entry
+## Generated-stack qualification
 
-After the `patches/runtime-lighting-wake-layers.patch` entry, add:
+The exact locally generated tree used for qualification is:
 
-```toml
-[[entry]]
-branch = "fork:feat/persistent-layer-metadata"
-summary = "Device-backed logical layer occupancy and names"
-fixup = "patches/persistent-layer-metadata-coherence.patch"
-```
+- generated commit: `79a8f38d6082c98abf8b140875e3347b222bd62d`
+- generated tree: `b1cd6378ffa76655f6ce43c845f9083da393e2f1`
+- MoErgo integration branch: `feat/layer-metadata-integration`
+- MoErgo integration head: `46c3c31`
 
-The local proof used `local:feat/persistent-layer-metadata` because the topic
-was not pushed. Before publishing, push the topic branch and use the `fork:`
-source above, then run the normal fork-fold update/build/publish procedure.
+The proof assembly used a temporary local remote and admitted the topic before
+the existing carried stack. Its final coherence resolution retained:
 
-The proof build recorded nine rerere resolutions:
+1. the layer metadata rows in the final Rynk documentation, wire tests, and
+   regenerated snapshots;
+2. `layer_names` initialization in the standalone lighting `Keymap`
+   constructor introduced later in the stack;
+3. `wake_layers` in standard and split-replica state, including snapshot
+   capture and application;
+4. the existing pointing-config WASM endpoints needed to rewrite pointing
+   layer overrides losslessly.
 
-| Rerere hash | Conflict path |
-| --- | --- |
-| `17d100df383db12425096a159e159b5597c221d0` | `docs/docs/main/docs/development/rynk_protocol.md` |
-| `57b5277a6a43ab695e6b1d9a9751eb7cedc5148c` | `rmk-types/src/protocol/rynk/tests.rs` |
-| `58f8921927c1d59bd90f6049123c1f7ae9c30263` | `rmk-types/src/protocol/rynk/snapshots/wire_values.snap` |
-| `5f0f88cf113ea8025faa8c08c097663e2bd9c282` | `rynk/rynk-wasm/src/client.rs` |
-| `930c55d3c8f054d7e0ea6bce8cfb7b9cedecb2ea` | `rmk-types/src/protocol/rynk/snapshots/wire_frames.snap` |
-| `96b2594f48a2b9bf4b1bfb60cbb7fd7eb2da3c36` | `rmk/src/storage/mod.rs` |
-| `a331ff673075c25e25baa4ebccc1d2e8d48d149c` | `rmk/src/host/rynk/mod.rs` |
-| `ae495a14909b44a19363288596ef4feca3add5fd` | `rmk-types/src/protocol/rynk/command.rs` |
-| `be415d3b4d8fe301e5743b9a6d0b6512a945a958` | `rynk/src/api.rs` |
+The protocol/configuration fixup was captured at the final feature-branch
+boundary (`feat/device-data`); the wake-layer fields were retained while
+resolving the generated runtime-lighting patch; and the pointing bindings were
+applied as the final generated patch entry. These are stack-integration
+adaptations, not changes to hand-commit on `assembled`.
 
-## Required coherence fixup
+To publish later:
 
-`patches/persistent-layer-metadata-coherence.patch` must contain two stack-only
-adaptations:
+1. Push `feat/persistent-layer-metadata` to the writable RMK fork.
+2. Replace the temporary `local:` assembly source with
+   `fork:feat/persistent-layer-metadata`.
+3. Carry the recorded coherence fixups/resolutions through the assembly
+   repository and run its normal update/build/publish procedure.
+4. Update downstream pins only to the generated commit. Never hand-commit to
+   `assembled`.
 
-1. Add `layer_names: Vec::new()` to the standalone `Keymap` initializer in
-   `rmk-config/src/resolved/lighting.rs`.
-2. Expose the already-assembled pointing endpoints in
-   `rynk/rynk-wasm/src/client.rs`:
+## Verification record
 
-   ```rust
-   get_pointing_config() -> PointingConfig,
-   set_pointing_config(config: PointingConfig) -> PointingConfig,
-   ```
+The final generated tree passed:
 
-The second adaptation is required so the configurator can read, remap, write,
-and verify pointing layer overrides during a lossless layer transaction.
+- all 110 host-enabled `rmk-types` tests, including final wire snapshots;
+- all 119 `rmk-config` unit/integration tests;
+- the `layer_metadata_survives_flash_map_reopen` nextest persistence test;
+- MoErgo `just check`, including both runtime/compiled configuration models;
+- the exact Rynk WASM Nix build used by Rynkbench;
+- Rynkbench TypeScript, 253 UI/unit tests, and lint (only existing Fast Refresh
+  warnings remain).
 
-The exact locked rebuild reproduced tree
-`f25b03b4b9afff807e73630839e96949600c3d8e`. Generated commit IDs are not an
-integration invariant and must not be used as the durable reference.
+Both peer firmware bundles also built and passed UF2 validation:
 
-## Firmware proof
-
-Both target bundles were built with Cargo 1.97.0, the repository board TOMLs,
-and the verified assembled tree. Compared with the previous local known-good
-artifacts, the address ranges were:
-
-| Target | Previous | Persistent metadata build |
+| Target | Address range | Family ID |
 | --- | --- | --- |
-| Glove80 left | `0x26000-0xd4700` | `0x26000-0xd5000` |
-| Glove80 right | `0x26000-0x8a400` | `0x26000-0x8a400` |
-| Go60 left | `0x26000-0xd7b00` | `0x26000-0xd8300` |
-| Go60 right | `0x26000-0x8d100` | `0x26000-0x8d000` |
+| Glove80 left | `0x26000-0xd5c00` | `0x9807b007` |
+| Glove80 right | `0x26000-0x8a900` | `0x9808b007` |
+| Go60 left | `0x26000-0xd9700` | `0x9809b007` |
+| Go60 right | `0x26000-0x8de00` | `0x980ab007` |
 
-The family IDs remained `0x9807B007`/`0x9808B007` for Glove80 and
-`0x9809B007`/`0x980AB007` for Go60. No firmware was flashed.
+No firmware was flashed.
