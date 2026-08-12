@@ -71,6 +71,43 @@ Pull preserves existing layer IDs and names when it can parse the destination,
 but rewrites the file in canonical TOML form and therefore does not preserve
 comments.
 
+### Selector-addressed bindings
+
+A layer's `keys` grid reads well as a whole layer and badly as "these six
+keys". `[[layer.bind]]` entries address keys with the same selectors the
+[lighting model](docs/lighting.md) uses, and apply over the grid:
+
+```toml
+[[layer]]
+id = "magic"
+name = "Magic"
+keys = """…"""
+
+# QK_BOOT at matrix row 3, column 0.
+[[layer.bind]]
+key = [3, 0]
+action = "QK_BOOT"
+
+# Every key in zone 1, which is all 80 per-key positions.
+[[layer.bind]]
+zone = 1
+action = "KC_NO"
+```
+
+Binds apply in file order and the last one covering a key wins it, so a broad
+selector can go first and specific corrections after it. A layer with no `keys`
+starts transparent, which is what a layer written entirely as binds wants.
+`key = [row, col]` resolves offline; `key = N`, `led = N`, `zone = N`, and
+`all = true` are questions about the board, so `just check` only confirms they
+are well formed and names them, while `just diff` and `just apply` resolve them
+through the connected keyboard's topology. The keyboard stores a grid rather
+than the selectors that described one, so `just pull` writes layers back as
+`keys` alone.
+
+This is runtime configuration only. The compiled `[[keymap.layer]]` grids in
+[`config/firmware.toml`](config/firmware.toml) are parsed by RMK's
+`keyboard.toml` schema and take no binds.
+
 The Go60's managed runtime state lives in
 [config/go60.toml](config/go60.toml). Runtime TOML declares its logical
 5×14 matrix and carries the persisted policy for both pointing devices; the

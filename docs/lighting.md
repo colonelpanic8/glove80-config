@@ -24,6 +24,15 @@ apply`, `moergo-control` resolves readable selectors to one or more LED IDs:
 Compiled firmware uses the same selector shapes inside a target, for example
 `target = { key = [0, 0] }`.
 
+The vocabulary is not lighting-only. The same selectors address key bindings
+through `[[layer.bind]]` in the runtime configuration, where they resolve to
+matrix keys instead of emitters — `led = 34` binds the key that owns emitter
+34, and `zone = 1` binds every key in that zone. See
+[Selector-addressed bindings](../README.md#selector-addressed-bindings). The
+compiled `[[keymap.layer]]` grids in `config/firmware.toml` are still
+grid-only: that schema belongs to RMK's `keyboard.toml` parser rather than to
+this repository's host tools.
+
 One key can own multiple emitters, and some emitters need not belong to a key.
 That is why configuration resolves through the topology instead of assuming
 that a key index and an LED index are the same number.
@@ -66,9 +75,10 @@ keys rather than formal zones:
 - the Games and Paseo layers highlight their relevant keys.
 
 Adding named zones such as `left-thumb`, `right-thumb`, or `function-row`
-would make those reusable selectors. Whole-row, whole-column, and attribute
-predicates are not configuration syntax yet; today they must be written as
-individual matrix-key entries or represented by a declared zone.
+would make those reusable selectors for both lighting cells and key bindings.
+Whole-row, whole-column, and attribute predicates are not configuration syntax
+yet; today they must be written as individual matrix-key entries or
+represented by a declared zone.
 
 ## Composition and output
 
