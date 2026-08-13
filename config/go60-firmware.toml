@@ -88,7 +88,7 @@ Equal Kc1 Kc2 Kc3 Kc4 Kc5 Kc6 Kc7 Kc8 Kc9 Kc0 Minus
 Tab Q W E R T Y U I O P Backslash
 LCtrl A S D F G H J K L LT(1, Semicolon) Quote
 LShift Z X C V B N M Comma Dot Slash RShift
-End MO(2) Escape TD(0) Grave LeftBracket
+Grave MO(2) Escape TD(0) Grave LeftBracket
 Backspace LGui LAlt RGui Enter Space
 """
 
@@ -106,11 +106,11 @@ _ _ _ TG(4) _ _
 [[keymap.layer]]
 name = "Magic"
 keys = """
-OutputUsb No No No No User2 No No No No No No
+No No No No No User2 No No No No No No
 No No BacklightUp RgbTog MaintenanceModeToggle OutputModeCycle No No No No No No
 Bootloader No BacklightDown No No No No No No No No User12
 Reboot No No RgbHui No No No No No No No Reboot
-No RgbModeReverse RgbModeForward No No No
+No RgbModeReverse OutputUsb No No No
 User0 User1 User2 No No No
 """
 
