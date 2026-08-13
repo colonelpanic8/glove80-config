@@ -87,7 +87,7 @@ Equal Kc1 Kc2 Kc3 Kc4 Kc5 Kc6 Kc7 Kc8 Kc9 Kc0 Minus
 Tab Q W E R T Y U I O P Backslash
 LCtrl A S D F G H J K L LT(1, Semicolon) Quote
 LShift Z X C V B N M Comma Dot Slash RShift
-End MO(2) Escape TD(0) Grave LeftBracket
+Grave MO(2) Escape TD(0) Grave LeftBracket
 Backspace LGui LAlt RGui Enter Space
 """
 
