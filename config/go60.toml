@@ -31,11 +31,11 @@ id = "layer2"
 name = "Magic"
 keys = """
 
-QK_OUTPUT_USB -- -- -- -- USER(2) USER(0) -- -- -- -- -- -- --
+-- -- -- -- -- USER(2) USER(0) -- -- -- -- -- -- --
 -- -- BL_UP UG_TOGG MAINT_LOCK_TOG UG_OMODE USER(1) -- -- -- -- -- -- --
 QK_BOOT -- BL_DOWN -- -- -- USER(2) -- -- -- -- -- -- USER(12)
 QK_RBT -- -- UG_HUEU -- -- -- -- -- -- -- -- -- QK_RBT
--- -- -- UG_PREV UG_NEXT -- -- -- -- -- -- -- -- --
+-- -- -- UG_PREV QK_OUTPUT_USB -- -- -- -- -- -- -- -- --
 """
 
 [[layer]]
@@ -169,7 +169,7 @@ scene = [
   { layer = 2, led = 58, color = "#000000" },
   { layer = 2, led = 59, color = "#000000" },
 
-  # Magic controls: W/S brightness, old arrows effect cycle, C palette.
+  # Magic controls: W/S brightness, old Left effect reverse, C palette.
   { layer = 2, led = 18, color = "#ffff00" },
   { layer = 2, led = 19, color = "#ffff00" },
   { layer = 2, led = 16, color = "#ffffff" },
@@ -262,10 +262,10 @@ conditional_scene = [
   { led = 2, color = "#0050ff", layer = { layer = 2, active = true }, connection = { profile = 2, ble_state = "connected" } },
   { led = 2, color = "#00c020", layer = { layer = 2, active = true }, connection = { profile = 2, ble_state = "connected", transport = "ble" } },
 
-  # USB status lives on Go60's Magic+Equal key (QK_OUTPUT_USB).
-  { led = 26, color = "#b00000", layer = { layer = 2, active = true }, connection = { usb_connected = false } },
-  { led = 26, color = "#0050ff", layer = { layer = 2, active = true }, connection = { usb_connected = true } },
-  { led = 26, color = "#00c020", layer = { layer = 2, active = true }, connection = { transport = "usb" } },
+  # USB status lives on Go60's Magic+Escape key (QK_OUTPUT_USB).
+  { key = [4, 4], color = "#b00000", layer = { layer = 2, active = true }, connection = { usb_connected = false } },
+  { key = [4, 4], color = "#0050ff", layer = { layer = 2, active = true }, connection = { usb_connected = true } },
+  { key = [4, 4], color = "#00c020", layer = { layer = 2, active = true }, connection = { transport = "usb" } },
 ]
 
 [lighting.background]
