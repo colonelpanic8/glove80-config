@@ -3,8 +3,8 @@
 # Matrix, pin, flash, LED, and USB facts are transcribed from the official
 # moergo-sc/zmk Go60 board definitions in the pinned go60-rmk crate. The
 # personal keymap below is the compact counterpart of config/firmware.toml.
-# This image uses the board's RS-422-backed TRRS link between halves. The
-# Cirque trackpads are wired in src/trackpad.rs, outside this file.
+# This image uses BLE between halves; the RS-422-backed TRRS link is ignored.
+# The Cirque trackpads are wired in src/trackpad.rs, outside this file.
 
 [keyboard]
 name = "Go60"
@@ -85,7 +85,7 @@ name = "Base"
 keys = """
 Equal Kc1 Kc2 Kc3 Kc4 Kc5 Kc6 Kc7 Kc8 Kc9 Kc0 Minus
 Tab Q W E R T Y U I O P Backslash
-LCtrl A S D F G H J K L LT(1, Semicolon) Quote
+LCtrl A S D F G H J K L LT(1, Semicolon, semicolon) Quote
 LShift Z X C V B N M Comma Dot Slash RShift
 Grave MO(2) Escape TD(0) Grave LeftBracket
 Backspace LGui LAlt RGui Enter Space
@@ -149,6 +149,9 @@ _ _ _ _ _ _
 [behavior.morse.profiles.paseo_layer]
 hold_timeout = "180ms"
 
+[behavior.morse.profiles.semicolon]
+hold_timeout = "200ms"
+
 [[behavior.morse.morses]]
 profile = "paseo_layer"
 tap = "Delete"
@@ -208,7 +211,7 @@ insecure = false
 maintenance_lock_default = false
 
 [split]
-connection = "serial"
+connection = "ble"
 
 [split.central]
 rows = 5
@@ -216,7 +219,7 @@ cols = 7
 row_offset = 0
 col_offset = 0
 battery_adc_pin = "vddh"
-serial = [{ instance = "UARTE0", tx_pin = "P1_08", rx_pin = "P1_09", half_duplex = true, direction_pin = "P0_11", baudrate = 921600, timer = "TIMER2", ppi_channels = ["PPI_CH0", "PPI_CH1"] }]
+ble_addr = [0x01, 0x30, 0x36, 0x4f, 0x47, 0xc7]
 
 [split.central.matrix]
 matrix_type = "normal"
@@ -230,7 +233,7 @@ cols = 7
 row_offset = 0
 col_offset = 7
 battery_adc_pin = "vddh"
-serial = [{ instance = "UARTE0", tx_pin = "P1_08", rx_pin = "P1_09", half_duplex = true, direction_pin = "P0_11", baudrate = 921600, timer = "TIMER2", ppi_channels = ["PPI_CH0", "PPI_CH1"] }]
+ble_addr = [0x02, 0x30, 0x36, 0x4f, 0x47, 0xc7]
 
 [split.peripheral.matrix]
 matrix_type = "normal"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Flash a Glove80 half headlessly with automatic crash-loop recovery.
+# Flash a Glove80 or Go60 half headlessly with automatic crash-loop recovery.
 #
 #   glove80-safe-flash <image.uf2> [--recover <known-good.uf2>] [--peripheral]
 #                      [--watch-seconds N] [--no-watch]
@@ -36,8 +36,6 @@ fi
 
 USB_ID="16c0:27db"
 BOOT_IDS="239a:0029 239a:002a"
-LH_VOL=GLV80LHBOOT
-RH_VOL=GLV80RHBOOT
 image="" recover="" peripheral="" watch=45
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -52,10 +50,21 @@ done
 [ -n "$image" ] && [ -f "$image" ] || { echo "usage: glove80-safe-flash <image.uf2> [--recover <uf2>] [--peripheral]" >&2; exit 4; }
 [ -z "$recover" ] || [ -f "$recover" ] || { echo "recovery image not found: $recover" >&2; exit 4; }
 
-vol=$LH_VOL; [ -n "$peripheral" ] && vol=$RH_VOL
-mnt=/run/media/$USER/$vol
+volumes=(GLV80LHBOOT GO60LHBOOT)
+[ -n "$peripheral" ] && volumes=(GLV80RHBOOT GO60RHBOOT)
+mnt=""
 
-in_bootloader() { [ -f "$mnt/INFO_UF2.TXT" ] && [ -w "$mnt" ]; }
+in_bootloader() {
+  local volume candidate
+  for volume in "${volumes[@]}"; do
+    candidate="/run/media/$USER/$volume"
+    if [ -f "$candidate/INFO_UF2.TXT" ] && [ -w "$candidate" ]; then
+      mnt=$candidate
+      return 0
+    fi
+  done
+  return 1
+}
 
 enter_bootloader() {
   in_bootloader && return 0

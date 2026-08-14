@@ -35,7 +35,7 @@ keys = """
 KC_F1    KC_F2    KC_F3   KC_F4    KC_F5    --       LT(1,KC_ESC)  KC_BSPC  --       KC_F6  KC_F7    KC_F8    KC_F9          TG(1)
 KC_EQL   KC_1     KC_2    KC_3     KC_4     KC_5     TD(0)         TG(4)    KC_6     KC_7   KC_8     KC_9     KC_0           KC_MINS
 KC_TAB   KC_Q     KC_W    KC_E     KC_R     KC_T     MO(2)         KC_LGUI  KC_Y     KC_U   KC_I     KC_O     KC_P           KC_BSLS
-KC_LCTL  KC_A     KC_S    KC_D     KC_F     KC_G     KC_BSPC       KC_SPC   KC_H     KC_J   KC_K     KC_L     LT(1,KC_SCLN)  KC_QUOT
+KC_LCTL  KC_A     KC_S    KC_D     KC_F     KC_G     KC_BSPC       KC_SPC   KC_H     KC_J   KC_K     KC_L     LT(1,KC_SCLN,semicolon)  KC_QUOT
 KC_LSFT  KC_Z     KC_X    KC_C     KC_V     KC_B     KC_LGUI       KC_ENT   KC_N     KC_M   KC_COMM  KC_DOT   KC_SLSH        KC_RSFT
 KC_GRV   KC_HOME  KC_END  MO(2)    KC_ESC   --       KC_LALT       KC_RGUI  --       KC_DEL KC_DOWN  KC_LBRC  KC_RBRC        TG(3)
 """
@@ -151,6 +151,17 @@ _______  _______  KC_F15   _______  KC_F13   _______  _______  _______  KC_F19  
 _______  _______  _______  _______  _______  _______  _______  _______  _______  KC_F18   _______  _______  _______  _______
 _______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
 """
+
+# --- Tap-hold behavior -------------------------------------------------------
+# Keep the compiled Paseo profile in slot 0 so runtime profile allocation
+# remains aligned with firmware defaults; TD(0) below carries the same timing.
+[behavior.morse.profiles.paseo_layer]
+hold_timeout_ms = 180
+
+# Give the home-row semicolon layer-tap a slightly quicker hold than the
+# 250 ms global default without changing any other dual-role key.
+[behavior.morse.profiles.semicolon]
+hold_timeout_ms = 200
 
 # --- Morse table -------------------------------------------------------------
 # Morse 0 is the Paseo thumb key, addressed as TD(0) on the base layer: tap

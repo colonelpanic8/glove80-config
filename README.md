@@ -68,8 +68,11 @@ The Go60's managed runtime state lives in
 [config/go60.toml](config/go60.toml). Runtime TOML declares its logical
 5×14 matrix and carries the persisted policy for both pointing devices; the
 current policy makes device 0 (the left trackpad) scroll and device 1 (the
-right trackpad) move the cursor. Because both keyboards can be connected at
-once, Go60 recipes require an explicit Rynk HID path:
+right trackpad) move the cursor. While the Magic layer is held, the right
+trackpad switches to drag mode: tap once to latch the primary button, move to
+drag, and tap again to drop. Releasing Magic also drops the latch. Because both
+keyboards can be connected at once, Go60 recipes require an explicit Rynk HID
+path:
 
     just go60-diff /dev/hidraw12
     just go60-apply /dev/hidraw12
@@ -77,6 +80,11 @@ once, Go60 recipes require an explicit Rynk HID path:
 
 The HID number can change after reconnecting. Identify the Go60 Rynk
 interface before applying rather than reusing a stale path.
+
+Runtime lighting scenes may target a raw `led`, a logical key id, a matrix
+position such as `key = [0, 6]`, a `zone`, or `all = true`. Semantic targets
+are resolved against the connected keyboard's live lighting topology before
+diffing or applying, so configuration does not need to encode LED wiring.
 
 The same configuration commands also accept the experimental JSON backup
 format from the MoErgo Layout Editor:
@@ -128,9 +136,8 @@ just go60-firmware
 ```
 
 The bundle is written under `dependencies/glove80-rmk/dist/go60/`. The Go60
-port uses the board's half-duplex UART/TRRS link between halves and retains BLE
-for host communication. Automatic fallback to a wireless inter-half link is
-not yet implemented; hardware qualification is still required.
+port uses BLE between halves as well as for host communication; the
+half-duplex UART/TRRS link is ignored by this image.
 
 The build embeds three independently checkable Git identities in the Rynk
 firmware label: this configuration repository's commit, the pinned
