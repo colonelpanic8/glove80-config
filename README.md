@@ -67,9 +67,24 @@ just pull                         # rewrite config/glove80.toml from the keyboar
 ./bin/moergo-control config pull /tmp/glove80.toml
 ```
 
-Pull preserves existing layer IDs and names when it can parse the destination,
-but rewrites the file in canonical TOML form and therefore does not preserve
+Pull preserves existing layer IDs when it can parse the destination, but
+rewrites the file in canonical TOML form and therefore does not preserve
 comments.
+
+### Layer names
+
+Each `[[layer]]`'s `name` is persistent firmware state, not a file-local
+label: `just diff` reports a name the keyboard disagrees with, `just apply`
+writes it, and `just pull` records a rename made in Rynkbench or elsewhere.
+Names are at most 32 UTF-8 bytes. `config/firmware.toml` carries the same
+names as compiled defaults for a fresh or reset keyboard.
+
+To read or set one without a whole configuration file:
+
+```sh
+./bin/moergo-control keymap name             # list every slot
+./bin/moergo-control keymap name 3 Games     # rename layer 3
+```
 
 ### Selector-addressed bindings
 
