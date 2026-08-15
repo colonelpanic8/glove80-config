@@ -9,9 +9,9 @@ keys = """
 
 KC_EQL KC_1 KC_2 KC_3 KC_4 KC_5 KC_BSPC KC_SPC KC_6 KC_7 KC_8 KC_9 KC_0 KC_MINS
 KC_TAB KC_Q KC_W KC_E KC_R KC_T KC_LGUI KC_ENT KC_Y KC_U KC_I KC_O KC_P KC_BSLS
-KC_LCTL KC_A KC_S KC_D KC_F KC_G KC_LALT KC_RGUI KC_H KC_J KC_K KC_L LT(1,KC_SCLN) KC_QUOT
+KC_LCTL KC_A KC_S KC_D KC_F KC_G KC_LALT KC_RGUI KC_H KC_J KC_K KC_L LT(1,KC_SCLN,semicolon) KC_QUOT
 KC_LSFT KC_Z KC_X KC_C KC_V KC_B -- -- KC_N KC_M KC_COMM KC_DOT KC_SLSH KC_RSFT
--- -- KC_END MO(2) KC_ESC -- -- -- -- TD(0) KC_GRV KC_LBRC -- --
+-- -- KC_GRV MO(2) KC_ESC -- -- -- -- TD(0) KC_GRV KC_LBRC -- --
 """
 
 [[layer]]
@@ -31,11 +31,11 @@ id = "layer2"
 name = "Magic"
 keys = """
 
-QK_OUTPUT_USB -- -- -- -- USER(2) USER(0) -- -- -- -- -- -- --
+-- -- -- -- -- USER(2) USER(0) -- -- -- -- -- -- --
 -- -- BL_UP UG_TOGG MAINT_LOCK_TOG UG_OMODE USER(1) -- -- -- -- -- -- --
 QK_BOOT -- BL_DOWN -- -- -- USER(2) -- -- -- -- -- -- USER(12)
 QK_RBT -- -- UG_HUEU -- -- -- -- -- -- -- -- -- QK_RBT
--- -- -- UG_PREV UG_NEXT -- -- -- -- -- -- -- -- --
+-- -- -- UG_PREV QK_OUTPUT_USB -- -- -- -- -- -- -- -- --
 """
 
 [[layer]]
@@ -67,7 +67,7 @@ id = "layer5"
 name = "Paseo"
 keys = """
 
-KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_F1 KC_F2 KC_F3 KC_F4 KC_F5 KC_TRNS KC_TRNS KC_F6 KC_F7 KC_F8 KC_F9 KC_F10 KC_TRNS
 KC_TRNS KC_F17 KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_F14 KC_TRNS KC_TRNS
 KC_TRNS KC_TRNS KC_F15 KC_TRNS KC_F13 KC_TRNS KC_TRNS KC_TRNS KC_F19 KC_TRNS KC_TRNS KC_F16 KC_TRNS KC_TRNS
 KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- -- KC_TRNS KC_F18 KC_TRNS KC_TRNS KC_TRNS KC_TRNS
@@ -96,6 +96,12 @@ prior_idle_ms = 120
 hold_timeout_ms = 250
 gap_timeout_ms = 250
 
+[behavior.morse.profiles.paseo_layer]
+hold_timeout_ms = 180
+
+[behavior.morse.profiles.semicolon]
+hold_timeout_ms = 200
+
 [pointing]
 
 [[pointing.device]]
@@ -105,6 +111,11 @@ mode = "scroll"
 [[pointing.device]]
 device_id = 1
 mode = "cursor"
+
+[[pointing.override]]
+layer = 2
+device_id = 1
+mode = "drag"
 
 [lighting]
 brightness = 255
@@ -117,7 +128,7 @@ scene_policy = "active-stack"
 # battery gauges, connection state, and layer indicators.
 scene = [
   # Magic blackout, excluding its eight explicitly painted control LEDs.
-  { layer = 2, led = 0, color = "#000000" },
+  { layer = 2, key = [0, 6], color = "#000000" },
   { layer = 2, led = 1, color = "#000000" },
   { layer = 2, led = 2, color = "#000000" },
   { layer = 2, led = 3, color = "#000000" },
@@ -170,7 +181,7 @@ scene = [
   { layer = 2, led = 58, color = "#000000" },
   { layer = 2, led = 59, color = "#000000" },
 
-  # Magic controls: W/S brightness, old arrows effect cycle, C palette.
+  # Magic controls: W/S brightness, old Left effect reverse, C palette.
   { layer = 2, led = 18, color = "#ffff00" },
   { layer = 2, led = 19, color = "#ffff00" },
   { layer = 2, led = 16, color = "#ffffff" },
@@ -263,10 +274,10 @@ conditional_scene = [
   { led = 2, color = "#0050ff", layer = { layer = 2, active = true }, connection = { profile = 2, ble_state = "connected" } },
   { led = 2, color = "#00c020", layer = { layer = 2, active = true }, connection = { profile = 2, ble_state = "connected", transport = "ble" } },
 
-  # USB status lives on Go60's Magic+Equal key (QK_OUTPUT_USB).
-  { led = 26, color = "#b00000", layer = { layer = 2, active = true }, connection = { usb_connected = false } },
-  { led = 26, color = "#0050ff", layer = { layer = 2, active = true }, connection = { usb_connected = true } },
-  { led = 26, color = "#00c020", layer = { layer = 2, active = true }, connection = { transport = "usb" } },
+  # USB status lives on Go60's Magic+Escape key (QK_OUTPUT_USB).
+  { key = [4, 4], color = "#b00000", layer = { layer = 2, active = true }, connection = { usb_connected = false } },
+  { key = [4, 4], color = "#0050ff", layer = { layer = 2, active = true }, connection = { usb_connected = true } },
+  { key = [4, 4], color = "#00c020", layer = { layer = 2, active = true }, connection = { transport = "usb" } },
 ]
 
 [lighting.background]
