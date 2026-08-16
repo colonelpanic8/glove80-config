@@ -1,0 +1,73 @@
+# A programmer-symbols layer reached by holding a thumb key. The layer
+# lands in the target's next free slot ($symbols), and the entry point
+# wraps the existing thumb key in an LT so its tap keeps working.
+#
+#   just layout preset apply presets/symbols-layer.toml config/glove80.toml -o /tmp/merged.toml
+#   just layout preset apply presets/symbols-layer.toml config/go60.toml -o /tmp/merged-go60.toml
+#
+# The board is detected from the target's grid, and each board brings its
+# own layer grid and entry point: the Glove80 uses its home-row left thumb
+# (LH-T4), the Go60 its upper-outer left thumb (LH-T1). Edit those `at`
+# entries to move the hold; if the cell already holds a wrapped action,
+# apply fails and tells you so.
+
+[preset]
+name = "symbols-layer"
+description = "Programmer symbols layer behind an LT hold on a thumb key"
+boards = ["glove80", "go60"]
+
+# Left hand: shifted number-row symbols on the top alpha row, arithmetic
+# and quotes below. Right hand: brackets, braces, and separators on the
+# home block. TO(0) on an upper thumb key bails out if the layer ever
+# sticks.
+[[layer]]
+id = "symbols"
+name = "Symbols"
+keys.glove80 = """
+_______  _______       _______     _______        _______        --             TO(0)    _______  --             _______        _______  _______        _______        _______
+_______  _______       _______     _______        _______        _______        _______  _______  _______        _______        _______  _______        _______        _______
+_______  LSFT(KC_1)    LSFT(KC_2)  LSFT(KC_3)     LSFT(KC_4)     LSFT(KC_5)     _______  _______  LSFT(KC_6)     LSFT(KC_7)     LSFT(KC_8)  LSFT(KC_9)  LSFT(KC_0)    _______
+_______  LSFT(KC_GRV)  KC_MINS     LSFT(KC_MINS)  KC_EQL         LSFT(KC_EQL)   _______  _______  KC_LBRC        KC_RBRC        LSFT(KC_LBRC)  LSFT(KC_RBRC)  LSFT(KC_BSLS)  _______
+_______  KC_GRV        KC_QUOT     LSFT(KC_QUOT)  LSFT(KC_COMM)  LSFT(KC_DOT)   _______  _______  KC_SLSH        LSFT(KC_SLSH)  KC_SCLN  LSFT(KC_SCLN)  KC_BSLS       _______
+_______  _______       _______     _______        _______        --             _______  _______  --             _______        _______  _______        _______        _______
+"""
+keys.go60 = """
+_______  _______       _______     _______        _______        _______        TO(0)    _______  _______        _______        _______  _______        _______        _______
+_______  LSFT(KC_1)    LSFT(KC_2)  LSFT(KC_3)     LSFT(KC_4)     LSFT(KC_5)     _______  _______  LSFT(KC_6)     LSFT(KC_7)     LSFT(KC_8)  LSFT(KC_9)  LSFT(KC_0)    _______
+_______  LSFT(KC_GRV)  KC_MINS     LSFT(KC_MINS)  KC_EQL         LSFT(KC_EQL)   _______  _______  KC_LBRC        KC_RBRC        LSFT(KC_LBRC)  LSFT(KC_RBRC)  LSFT(KC_BSLS)  _______
+_______  KC_GRV        KC_QUOT     LSFT(KC_QUOT)  LSFT(KC_COMM)  LSFT(KC_DOT)   --       --       KC_SLSH        LSFT(KC_SLSH)  KC_SCLN  LSFT(KC_SCLN)  KC_BSLS       _______
+--       --            _______     _______        _______        --             --       --       --             _______        _______  _______        --             --
+"""
+
+[[patch]]
+layer = "default"
+
+# Hold for symbols, tap for whatever the key already does.
+[[patch.key]]
+at = { glove80 = "LH-T4", go60 = "LH-T1" }
+action = "LT($symbols, $key)"
+
+# Light the bracket cluster while the layer is active.
+[[lighting.scene]]
+layer = "$symbols"
+key = { glove80 = "RH-C1R4", go60 = "RH-C1R3" }
+color = "#0050ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "$symbols"
+key = { glove80 = "RH-C2R4", go60 = "RH-C2R3" }
+color = "#0050ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "$symbols"
+key = { glove80 = "RH-C3R4", go60 = "RH-C3R3" }
+color = "#00c0ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "$symbols"
+key = { glove80 = "RH-C4R4", go60 = "RH-C4R3" }
+color = "#00c0ff"
+effect = "solid"

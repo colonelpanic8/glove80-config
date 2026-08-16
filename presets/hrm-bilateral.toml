@@ -1,0 +1,137 @@
+# Bilateral home-row mods (GACS: GUI / Alt / Ctrl / Shift from pinky to
+# index) with the TailorKey v5.2 per-finger timing profiles and a dim
+# per-finger lighting cue on the default layer's home row.
+#
+#   just layout preset apply presets/hrm-bilateral.toml config/glove80.toml -o /tmp/merged.toml
+#
+# Each patch wraps whatever plain keycode is already at that cell, so the
+# preset works on QWERTY, Colemak, or any other alpha arrangement. A cell
+# that already holds a wrapped action (LT, TD, ...) fails loudly at apply
+# time; move that action or drop the patch for it before applying.
+
+[preset]
+name = "hrm-bilateral"
+description = "Bilateral GACS home-row mods with per-finger timing and lighting"
+# Home-row cells are named by physical section, so the same preset applies
+# to both boards: the home row is R4 on the Glove80 and R3 on the Go60.
+boards = ["glove80", "go60"]
+
+# Per-finger timing, ported from the TailorKey v5.2 bilateral layout:
+# slower fingers get longer hold timeouts, and opposite_hand_hold makes
+# same-hand rolls resolve as taps.
+[behavior.morse.profiles.hrm_index]
+enable_flow_tap = true
+hold_timeout_ms = 180
+quick_tap_ms = 300
+prior_idle_ms = 100
+opposite_hand_hold = true
+mode = "normal"
+
+[behavior.morse.profiles.hrm_middle]
+enable_flow_tap = true
+hold_timeout_ms = 210
+quick_tap_ms = 300
+prior_idle_ms = 150
+opposite_hand_hold = true
+mode = "normal"
+
+[behavior.morse.profiles.hrm_ring]
+enable_flow_tap = true
+hold_timeout_ms = 240
+quick_tap_ms = 300
+prior_idle_ms = 100
+opposite_hand_hold = true
+mode = "normal"
+
+[behavior.morse.profiles.hrm_pinky]
+enable_flow_tap = true
+hold_timeout_ms = 270
+quick_tap_ms = 300
+prior_idle_ms = 150
+opposite_hand_hold = true
+mode = "normal"
+
+[[patch]]
+layer = "default"
+
+[[patch.key]]
+at = { glove80 = "LH-C5R4", go60 = "LH-C5R3" }
+action = "MT($key, LGui, hrm_pinky)"
+
+[[patch.key]]
+at = { glove80 = "LH-C4R4", go60 = "LH-C4R3" }
+action = "MT($key, LAlt, hrm_ring)"
+
+[[patch.key]]
+at = { glove80 = "LH-C3R4", go60 = "LH-C3R3" }
+action = "MT($key, LCtrl, hrm_middle)"
+
+[[patch.key]]
+at = { glove80 = "LH-C2R4", go60 = "LH-C2R3" }
+action = "MT($key, LShift, hrm_index)"
+
+[[patch.key]]
+at = { glove80 = "RH-C2R4", go60 = "RH-C2R3" }
+action = "MT($key, RShift, hrm_index)"
+
+[[patch.key]]
+at = { glove80 = "RH-C3R4", go60 = "RH-C3R3" }
+action = "MT($key, RCtrl, hrm_middle)"
+
+[[patch.key]]
+at = { glove80 = "RH-C4R4", go60 = "RH-C4R3" }
+action = "MT($key, LAlt, hrm_ring)"
+
+[[patch.key]]
+at = { glove80 = "RH-C5R4", go60 = "RH-C5R3" }
+action = "MT($key, RGui, hrm_pinky)"
+
+# Dim per-finger cue on the home row: pinky violet, ring blue, middle
+# teal, index green — mirrored on both hands.
+[[lighting.scene]]
+layer = "default"
+key = { glove80 = "LH-C5R4", go60 = "LH-C5R3" }
+color = "#180030"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "default"
+key = { glove80 = "LH-C4R4", go60 = "LH-C4R3" }
+color = "#001030"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "default"
+key = { glove80 = "LH-C3R4", go60 = "LH-C3R3" }
+color = "#00301c"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "default"
+key = { glove80 = "LH-C2R4", go60 = "LH-C2R3" }
+color = "#1c3000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "default"
+key = { glove80 = "RH-C2R4", go60 = "RH-C2R3" }
+color = "#1c3000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "default"
+key = { glove80 = "RH-C3R4", go60 = "RH-C3R3" }
+color = "#00301c"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "default"
+key = { glove80 = "RH-C4R4", go60 = "RH-C4R3" }
+color = "#001030"
+effect = "solid"
+
+[[lighting.scene]]
+layer = "default"
+key = { glove80 = "RH-C5R4", go60 = "RH-C5R3" }
+color = "#180030"
+effect = "solid"

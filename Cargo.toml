@@ -9,10 +9,16 @@ license = "MIT"
 name = "rmk-attentiond"
 path = "src/main.rs"
 
+[[bin]]
+name = "moergo-layout"
+path = "src/bin/moergo-layout/main.rs"
+
 [dependencies]
 anyhow = "1.0"
 axum = "0.8"
 clap = { version = "4.5", features = ["derive"] }
+toml = "0.8"
+toml_edit = "0.22"
 futures-util = "0.3"
 serde_json = "1.0"
 tokio = { version = "1.48", features = ["macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }

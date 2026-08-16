@@ -47,6 +47,15 @@ go60-pull device:
 ctl *args:
     {{ control }} {{ args }}
 
+# Behavior usage report for every managed runtime config (docs/layout-tools.md).
+usage:
+    nix develop ./{{ firmware_repo }} --command cargo run --quiet --bin moergo-layout -- \
+        usage {{ glove80_config }} {{ go60_config }} config/tailorkey-v52-bilateral.toml
+
+# Offline layout tooling: usage / os / alpha / preset (docs/layout-tools.md).
+layout *args:
+    nix develop ./{{ firmware_repo }} --command cargo run --quiet --bin moergo-layout -- {{ args }}
+
 firmware:
     config_dirty=false; \
         if test -n "$(git status --porcelain --untracked-files=normal)"; then \

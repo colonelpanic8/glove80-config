@@ -1,0 +1,37 @@
+# A Magic-style system-controls layer for the Glove80: BLE slot selection
+# on the left thumb arc (USER(0)-USER(2) select a slot and prefer BLE
+# output), USB output on the upper thumb key, bootloader and reboot on the
+# outer pinky column (with USER(12) forwarding the bootloader request to
+# the right half), and lighting controls on the left-hand WASD-adjacent
+# keys plus the arrow pair.
+#
+#   just layout preset apply presets/magic-glove80.toml config/glove80.toml -o /tmp/merged.toml
+#
+# The entry point overwrites the key at row 2, col 6 (the upper inner
+# left-thumb key) with MO($magic) — an overwrite, not a wrap, because a
+# system layer wants a dedicated momentary key. Adjust `at` before
+# applying if that position is precious.
+
+[preset]
+name = "magic-glove80"
+description = "System-controls (Magic) layer: connection select, lighting, bootloader"
+boards = ["glove80"]
+
+[[layer]]
+id = "magic"
+name = "Magic"
+keys = """
+--       --  --       --        --       --        QK_OUTPUT_USB  --  --  --  --  --  --  --
+--       --  --       --        --       --        --             --  --  --  --  --  --  --
+--       --  BL_UP    RGB_TOG   --       UG_OMODE  --             --  --  --  --  --  --  --
+QK_BOOT  --  BL_DOWN  --        --       --        USER(0)        --  --  --  --  --  --  USER(12)
+QK_RBT   --  --       RGB_HUI   --       --        USER(1)        --  --  --  --  --  --  QK_RBT
+--       --  --       RGB_RMOD  RGB_MOD  --        USER(2)        --  --  --  --  --  --  --
+"""
+
+[[patch]]
+layer = "default"
+
+[[patch.key]]
+at = "LH-T3"
+action = "MO($magic)"

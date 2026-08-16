@@ -1,0 +1,36 @@
+# A Magic-style system-controls layer for the Go60, mirroring the Glove80
+# preset on the smaller board: BLE slot selection on the left thumb arc
+# (USER(0)-USER(2) select a slot and prefer BLE output), USB output on the
+# Esc-position key, bootloader and reboot on the outer pinky column (with
+# USER(12) forwarding the bootloader request to the right half), and
+# lighting controls on the left-hand WASD-adjacent keys.
+#
+#   just layout preset apply presets/magic-go60.toml config/go60.toml -o /tmp/merged.toml
+#
+# The entry point overwrites the key at LH-C3R5 (the lower left thumb-row
+# position this repo's own Go60 config uses for Magic) with MO($magic) —
+# an overwrite, not a wrap, because a system layer wants a dedicated
+# momentary key. Adjust `at` before applying if that position is precious.
+
+[preset]
+name = "magic-go60"
+description = "System-controls (Magic) layer: connection select, lighting, bootloader"
+boards = ["go60"]
+
+[[layer]]
+id = "magic"
+name = "Magic"
+keys = """
+--       --       --       --       --             USER(2)   USER(0)  --  --  --  --  --  --  --
+--       --       BL_UP    UG_TOGG  --             UG_OMODE  USER(1)  --  --  --  --  --  --  --
+QK_BOOT  UG_PREV  BL_DOWN  UG_NEXT  --             --        USER(2)  --  --  --  --  --  --  USER(12)
+QK_RBT   --       --       UG_HUEU  --             --        --       --  --  --  --  --  --  QK_RBT
+--       --       --       --       QK_OUTPUT_USB  --        --       --  --  --  --  --  --  --
+"""
+
+[[patch]]
+layer = "default"
+
+[[patch.key]]
+at = "LH-C3R5"
+action = "MO($magic)"
