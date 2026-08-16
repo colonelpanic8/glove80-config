@@ -112,8 +112,15 @@ A preset may contain:
   settings is an error;
 - `[[lighting.scene]]` — per-key scene cells (the target must already have
   a `[lighting]` section for these to extend);
-- `[[patch]]` — sparse edits to *existing* layers: a `layer` selector plus
-  `[[patch.key]]` entries with an `at` position and an `action`.
+- `[[patch]]` — edits to *existing* layers: a `layer` selector plus either
+  or both of a `keys` template grid and `[[patch.key]]` entries with an
+  `at` position and an `action`. In a template grid, transparent cells
+  (`_______`/`KC_TRNS`) and `--` leave the target's binding alone and
+  every other cell overwrites it, with `$key` standing for the binding
+  being replaced — so a grid of `TH($key, LSFT($key), autoshift)` wraps a
+  whole block in place. Template grids accept the per-board
+  `keys.glove80`/`keys.go60` form. Explicit `[[patch.key]]` entries apply
+  after the template, so they can refine cells it covered.
 
 ### Physical section addresses
 
@@ -159,6 +166,11 @@ Shipped presets live in `presets/`:
 - `hrm-bilateral.toml` — bilateral GACS home row mods: four per-finger
   TailorKey timing profiles, eight `$key`-wrapping patches on the home
   row, and dim per-finger scene cells. Applies to both boards;
+- `autoshift.toml` — a template-grid patch wrapping the number and alpha
+  block of the existing default layer in
+  `TH($key, LSFT($key), autoshift)` with the TailorKey timing profile:
+  tap types the key, hold types its shifted pair. Applies to both boards
+  and any alpha layout, since each cell wraps whatever is bound there;
 - `symbols-layer.toml` — a programmer symbols layer in the next free
   slot, entered by wrapping a thumb key in `LT($symbols, $key)` (the
   Glove80's home-row thumb, the Go60's upper-outer thumb), with the

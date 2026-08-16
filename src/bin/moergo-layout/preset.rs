@@ -205,6 +205,9 @@ pub fn describe(preset_text: &str) -> Result<String> {
             .get("layer")
             .map(|i| i.to_string().trim().to_string())
             .unwrap_or_else(|| "?".to_string());
+        if patch.get("keys").is_some() {
+            out.push_str(&format!("patch: layer {layer} template grid\n"));
+        }
         for key in clone_tables(patch.get("key")) {
             let at = key
                 .get("at")
@@ -371,6 +374,27 @@ fn position_from_board_entry<'a>(
     position_from_value(entry, Some(board), what)
 }
 
+/// A grid that may be per-board: a plain string, or a `keys.<board>` table
+/// picking one grid per board.
+fn board_string(item: &Item, board: Option<Board>, what: &str) -> Result<String> {
+    if let Some(text) = item.as_str() {
+        return Ok(text.to_string());
+    }
+    let Some(board) = board else {
+        bail!(
+            "{what} is per-board, but the target grid is not a recognized MoErgo \
+             board (6x14 or 5x14)"
+        );
+    };
+    match item {
+        Item::Table(table) => table.get(board.name()).and_then(|i| i.as_str()),
+        Item::Value(Value::InlineTable(table)) => table.get(board.name()).and_then(|v| v.as_str()),
+        _ => None,
+    }
+    .with_context(|| format!("{what} has no grid for board \"{}\"", board.name()))
+    .map(|s| s.to_string())
+}
+
 /// Pick the detected board's grid when a fragment layer carries per-board
 /// `keys.<board>` grids instead of a single `keys` string.
 fn resolve_layer_keys(layer: &mut Table, board: Option<Board>) -> Result<()> {
@@ -380,19 +404,7 @@ fn resolve_layer_keys(layer: &mut Table, board: Option<Board>) -> Result<()> {
     if item.as_str().is_some() {
         return Ok(());
     }
-    let Some(board) = board else {
-        bail!(
-            "this preset layer has per-board keys, but the target grid is not a \
-             recognized MoErgo board (6x14 or 5x14)"
-        );
-    };
-    let text = match &*item {
-        Item::Table(table) => table.get(board.name()).and_then(|i| i.as_str()),
-        Item::Value(Value::InlineTable(table)) => table.get(board.name()).and_then(|v| v.as_str()),
-        _ => None,
-    }
-    .with_context(|| format!("layer keys has no grid for board \"{}\"", board.name()))?
-    .to_string();
+    let text = board_string(item, board, "this preset layer's keys")?;
     *item = Item::Value(Value::String(Formatted::new(text)));
     if let Some(value) = item.as_value_mut() {
         value.decor_mut().set_prefix(" ");
@@ -748,20 +760,38 @@ fn apply_patch(
             .unwrap_or_else(|| layer_index.to_string())
     };
 
-    let edits: Vec<(usize, usize, String)> = clone_tables(patch.get("key"))
-        .iter()
-        .map(|key| {
-            let at = key
-                .get("at")
-                .context("[[patch.key]] needs at = [row, col] or a physical address")?;
-            let (row, col) = resolve_position(at, board, "[[patch.key]] at")?;
-            let action = key
-                .get("action")
-                .and_then(|v| v.as_str())
-                .context("[[patch.key]] needs an action")?;
-            Ok((row, col, action.to_string()))
-        })
-        .collect::<Result<_>>()?;
+    // A `keys` grid overlays a template onto the existing layer: transparent
+    // (`_______`/`KC_TRNS`) and `--` template cells leave the target's
+    // binding alone, and every other cell overwrites it ($key still stands
+    // for the binding being replaced). Explicit [[patch.key]] entries apply
+    // afterwards, so they can refine cells the template covered.
+    let mut edits: Vec<(usize, usize, String)> = Vec::new();
+    if let Some(item) = patch.get("keys") {
+        let grid = board_string(item, board, "[[patch]] keys")?;
+        for (row, line) in grid
+            .lines()
+            .filter(|line| !split_tokens(line).is_empty())
+            .enumerate()
+        {
+            for (col, token) in split_tokens(line).into_iter().enumerate() {
+                if token.is_hole() || token.is_transparent() {
+                    continue;
+                }
+                edits.push((row, col, token.0));
+            }
+        }
+    }
+    for key in clone_tables(patch.get("key")) {
+        let at = key
+            .get("at")
+            .context("[[patch.key]] needs at = [row, col] or a physical address")?;
+        let (row, col) = resolve_position(at, board, "[[patch.key]] at")?;
+        let action = key
+            .get("action")
+            .and_then(|v| v.as_str())
+            .context("[[patch.key]] needs an action")?;
+        edits.push((row, col, action.to_string()));
+    }
 
     let layers = doc
         .get_mut("layer")
@@ -1214,6 +1244,60 @@ enabled = false
     }
 
     #[test]
+    fn grid_patch_overlays_a_template_onto_an_existing_layer() {
+        // TARGET base: r0 = KC_TAB KC_Q TD(0), r1 = KC_LSFT KC_S LT(1,KC_SCLN).
+        let preset = r#"[preset]
+name = "template"
+
+[[patch]]
+layer = 0
+keys = """
+_______  TH($key, LSFT($key), autoshift)  _______
+KC_MUTE  _______                          _______
+"""
+
+[[patch.key]]
+at = [1, 1]
+action = "KC_F13"
+"#;
+        let (merged, notes) = apply_preset(preset, TARGET).unwrap();
+        // The covered cell wraps its existing key.
+        assert!(
+            merged.contains("TH(KC_Q, LSFT(KC_Q), autoshift)"),
+            "{merged}"
+        );
+        // A plain template cell overwrites.
+        assert!(merged.contains("KC_MUTE"));
+        // Transparent template cells leave bindings alone.
+        assert!(merged.contains("TD(0)"));
+        assert!(merged.contains("KC_TAB"));
+        // Explicit [[patch.key]] entries land after the template.
+        assert!(merged.contains("KC_F13"));
+        assert!(
+            !merged.contains("KC_S "),
+            "explicit key overrides template area: {merged}"
+        );
+        assert!(notes.iter().any(|n| n.contains("KC_Q ->")), "{notes:?}");
+    }
+
+    #[test]
+    fn grid_patch_still_rejects_bound_cells_over_holes() {
+        // TARGET's lower layer has a hole at [1, 0].
+        let preset = r#"[preset]
+name = "template"
+
+[[patch]]
+layer = 1
+keys = """
+_______  _______  _______
+KC_A     _______  _______
+"""
+"#;
+        let err = apply_preset(preset, TARGET).unwrap_err().to_string();
+        assert!(err.contains("physical hole"), "{err}");
+    }
+
+    #[test]
     fn scene_cells_need_a_lighting_section() {
         let preset = r##"[preset]
 name = "scenes"
@@ -1324,9 +1408,10 @@ KC_C  KC_D
     fn shipped_presets_apply_to_their_boards() {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/presets");
         let read = |name: &str| std::fs::read_to_string(format!("{dir}/{name}.toml")).unwrap();
-        let cases: [(&str, &[usize]); 4] = [
+        let cases: [(&str, &[usize]); 5] = [
             ("hrm-bilateral", &[6, 5]),
             ("symbols-layer", &[6, 5]),
+            ("autoshift", &[6, 5]),
             ("magic-glove80", &[6]),
             ("magic-go60", &[5]),
         ];

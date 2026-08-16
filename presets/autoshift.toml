@@ -1,0 +1,44 @@
+# AutoShift over the number and alpha block of the existing default
+# layer: tap types the key, hold types its shifted pair. This is a
+# template patch — it merges into the layer you already have rather than
+# creating a new one. Every covered cell wraps whatever plain keycode is
+# bound there ($key), so it works on QWERTY, Colemak, or Dvorak alike.
+#
+#   just layout preset apply presets/autoshift.toml config/glove80.toml -o /tmp/merged.toml
+#   just layout preset apply presets/autoshift.toml config/go60.toml -o /tmp/merged-go60.toml
+#
+# Coverage is the inner finger block (C1-C5 on both hands): the number
+# row and the three alpha rows. Outer columns and thumbs are left alone —
+# they usually hold modifiers, which have no useful shifted pair. A cell
+# already holding a wrapped action (home-row mod, layer-tap) fails loudly
+# at apply time; drop that cell from the grid or unwrap it first.
+#
+# Timing is the TailorKey v5.2 autoshift profile.
+
+[preset]
+name = "autoshift"
+description = "AutoShift on the number and alpha block: hold a key for its shifted pair"
+boards = ["glove80", "go60"]
+
+[behavior.morse.profiles.autoshift]
+hold_timeout_ms = 190
+unilateral_tap = false
+mode = "normal"
+
+[[patch]]
+layer = "default"
+keys.glove80 = """
+_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+_______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______  _______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______
+_______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______  _______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______
+_______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______  _______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______
+_______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______  _______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______
+_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+"""
+keys.go60 = """
+_______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______  _______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______
+_______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______  _______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______
+_______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______  _______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______
+_______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______  _______  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  TH($key, LSFT($key), autoshift)  _______
+_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
+"""
