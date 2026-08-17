@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# Flash a Glove80 half headlessly with automatic crash-loop recovery.
+#
+#   glove80-safe-flash <image.uf2> [--recover <known-good.uf2>] [--peripheral]
+#                      [--watch-seconds N] [--no-watch]
+#
+# Enters the UF2 bootloader over the Rynk USB protocol (retrying into the
+# short enumeration windows of a crash-looping half), waits for the
+# bootloader volume to be mounted and writable, copies the image, then
+# watches USB enumeration: a half that re-enumerates once and stays up is
+# reported stable; repeated connect/disconnect cycling is reported as a
+# crash loop. With --recover, a detected crash loop triggers an automatic
+# reflash of the known-good image, which is then itself verified.
+#
+# Exit codes: 0 image stable; 2 crash loop, recovery flashed and stable;
+# 3 crash loop and no/failed recovery; 4 flashing-machinery failure.
+set -u
+
+SCRIPT_PATH="$(readlink -f "$0")"
+REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+PRODUCT_ROOT="$REPO_ROOT/dependencies/moergo-rmk"
+
+# Enter the development environment once for the whole flash operation. The
+# retry loop must call the already-built binary directly: invoking the wrapper
+# on every attempt can spend the central's entire enumeration window starting
+# Nix and Cargo instead of opening the device.
+if [ -z "${IN_NIX_SHELL:-}" ] && [ -z "${GO60_FLASH_DEV_SHELL:-}" ]; then
+  exec nix develop "path:$PRODUCT_ROOT" --command env GO60_FLASH_DEV_SHELL=1 "$SCRIPT_PATH" "$@"
+fi
+
+CONTROL="$PRODUCT_ROOT/target/debug/moergo-control"
+if ! cargo build --quiet --manifest-path "$PRODUCT_ROOT/Cargo.toml" -p moergo-control; then
+  echo "FAIL: could not build moergo-control" >&2
+  exit 4
+fi
+
+USB_ID="16c0:27db"
+BOOT_IDS="239a:0029 239a:002a"
+LH_VOL=GO60LHBOOT
+RH_VOL=GO60RHBOOT
+image="" recover="" peripheral="" watch=45
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --recover) recover=$2; shift 2 ;;
+    --peripheral) peripheral=1; shift ;;
+    --watch-seconds) watch=$2; shift 2 ;;
+    --no-watch) watch=0; shift ;;
+    -*) echo "unknown flag: $1" >&2; exit 4 ;;
+    *) image=$1; shift ;;
+  esac
+done
+[ -n "$image" ] && [ -f "$image" ] || { echo "usage: glove80-safe-flash <image.uf2> [--recover <uf2>] [--peripheral]" >&2; exit 4; }
+[ -z "$recover" ] || [ -f "$recover" ] || { echo "recovery image not found: $recover" >&2; exit 4; }
+
+vol=$LH_VOL; [ -n "$peripheral" ] && vol=$RH_VOL
+mnt=/run/media/$USER/$vol
+
+in_bootloader() { [ -f "$mnt/INFO_UF2.TXT" ] && [ -w "$mnt" ]; }
+
+enter_bootloader() {
+  in_bootloader && return 0
+  local args=(bootloader --usb --yes)
+  [ -n "$peripheral" ] && args+=(--peripheral)
+  # A crash-looping central is only on USB ~1s per cycle; keep retrying
+  # until a request lands in one of those windows.
+  for _ in $(seq 1 60); do
+    # The bootloader may mount after the initial check while a preceding
+    # control attempt is still returning. Do not keep requesting an app that
+    # has already rebooted.
+    in_bootloader && return 0
+    if timeout 2 "$CONTROL" "${args[@]}" >/dev/null 2>&1; then return 0; fi
+    sleep 0.4
+  done
+  return 1
+}
+
+wait_mount() {
+  # The auto-mounter races the volume's appearance; wait until the mount
+  # is real and writable, then let it settle.
+  for _ in $(seq 1 80); do
+    in_bootloader && { sleep 1; return 0; }
+    sleep 0.5
+  done
+  return 1
+}
+
+copy_image() {
+  local img=$1
+  cp "$img" "$mnt/" 2>/dev/null || { sleep 2; cp "$img" "$mnt/" || return 1; }
+  sync
+  return 0
+}
+
+flash() {
+  local img=$1
+  enter_bootloader || { echo "FAIL: could not enter bootloader" >&2; return 1; }
+  wait_mount || { echo "FAIL: bootloader volume never became writable" >&2; return 1; }
+  copy_image "$img" || { echo "FAIL: could not copy UF2" >&2; return 1; }
+  echo "flashed: $img"
+}
+
+# Watch USB presence; prints "stable" or "crashloop" on stdout.
+verdict() {
+  local deadline=$((SECONDS + watch + 40)) transitions=0 prev=x present first=""
+  while [ $SECONDS -lt $deadline ]; do
+    if lsusb -d $USB_ID >/dev/null 2>&1; then present=1; else present=0; fi
+    if [ "$present" = 1 ] && [ -z "$first" ]; then
+      first=$SECONDS
+      deadline=$((SECONDS + watch))  # watch window starts at first enumeration
+    fi
+    if [ "$prev" != x ] && [ "$present" != "$prev" ]; then
+      transitions=$((transitions + 1))
+      [ $transitions -ge 6 ] && { echo crashloop; return; }
+    fi
+    prev=$present
+    sleep 0.3
+  done
+  if [ -n "$first" ] && [ $transitions -le 1 ]; then echo stable; else echo crashloop; fi
+}
+
+flash "$image" || exit 4
+[ "$watch" = 0 ] && exit 0
+
+echo "watching USB for ${watch}s..."
+v=$(verdict)
+echo "verdict: $v"
+[ "$v" = stable ] && exit 0
+
+if [ -z "$recover" ]; then
+  echo "crash loop detected and no --recover image given" >&2
+  exit 3
+fi
+
+echo "crash loop detected; auto-recovering with $recover"
+flash "$recover" || exit 3
+v=$(verdict)
+echo "recovery verdict: $v"
+[ "$v" = stable ] && exit 2 || exit 3
