@@ -251,7 +251,7 @@ scene = [
   # Equal key, so match the number legend instead.
   { layer = 1, led = 22, color = "#0000ff" },
   { layer = 2, led = 17, color = "#0000ff" },
-  { layer = 3, led = 12, color = "#0080ff" },
+  { layer = 3, led = 12, color = "#0000ff" },
   { layer = 4, led = 7, color = "#0000ff" },
   { layer = 5, led = 3, color = "#0000ff" },
 

@@ -986,7 +986,7 @@ color = "#0000ff"
 [[lighting.scene]]
 layer = 3
 key = [0, 2]
-color = "#0080ff"
+color = "#0000ff"
 
 [[lighting.scene]]
 layer = 4
