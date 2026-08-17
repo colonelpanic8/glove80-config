@@ -189,7 +189,7 @@ mode = "solid"
 [lighting.effects]
 effect = "Crosshair"
 palette = "Polarized"
-value = 0
+value = 255
 speed = 32
 
 # Per-effect parameters, by the names the firmware advertises. Only the ones
@@ -232,105 +232,9 @@ Drops = 11
 Trail = 161
 Width = 14
 
-
-# --- BISECTION RUNG A1 (docs/magic-lag-bisection.md) -------------------------
-# Minimal Magic scene: one static cell per half. Left = green on Q, right =
-# blue on P (comms canary). Full scene backed up in bisect/. Effects value
-# forced to 0 above for this rung.
-
-[[lighting.scene]]
-layer = 2
-key = [2, 1]
-color = "#00c020"
-
-[[lighting.scene]]
-layer = 2
-key = [2, 12]
-color = "#0050ff"
-
-# --- RUNG A2 addition: non-Magic layer lighting restored for comparison ------
-
-[[lighting.scene]]
-layer = 1
-key = [0, 0]
-color = "#0000ff"
-
-[[lighting.scene]]
-layer = 3
-key = [0, 2]
-color = "#0080ff"
-
-[[lighting.scene]]
-layer = 4
-key = [0, 3]
-color = "#0000ff"
-
-[[lighting.scene]]
-layer = 5
-key = [0, 4]
-color = "#0000ff"
-
-[[lighting.scene]]
-layer = 3
-key = [3, 6]
-color = "#a03000"  # the Games layer's W key
-
-[[lighting.scene]]
-layer = 3
-key = [2, 2]
-color = "#a00000"
-
-[[lighting.scene]]
-layer = 3
-key = [3, 1]
-color = "#a00000"
-
-[[lighting.scene]]
-layer = 3
-key = [3, 2]
-color = "#a00000"
-
-[[lighting.scene]]
-layer = 3
-key = [3, 3]
-color = "#a00000"
-
-[[lighting.scene]]
-layer = 5
-key = [3, 4]  # F: Fable
-color = "#d06040"
-
-[[lighting.scene]]
-layer = 5
-key = [2, 11]  # O: Opus
-color = "#d06040"
-
-[[lighting.scene]]
-layer = 5
-key = [3, 2]  # S: Sol
-color = "#0080ff"
-
-[[lighting.scene]]
-layer = 5
-key = [3, 11]  # L: Luna
-color = "#0080ff"
-
-[[lighting.scene]]
-layer = 5
-key = [2, 1]  # Q: low / quick
-color = "#00c040"
-
-[[lighting.scene]]
-layer = 5
-key = [4, 9]  # M: medium
-color = "#d08000"
-
-[[lighting.scene]]
-layer = 5
-key = [3, 8]  # H: high
-color = "#c02020"
-
-# --- RUNG A2-dose: first 20 blackout cells ------------------------------------
+# Give Magic an opaque black floor over every otherwise-unpainted LED. This
+# hides PaletteFX while preserving the explicitly colored Magic controls below
+# and the higher-priority battery/output-status rules.
 
 [[lighting.scene]]
 layer = 2
@@ -432,8 +336,6 @@ layer = 2
 key = [4, 2]
 color = "#000000"
 
-
-# --- RUNG A2-dose: cells 21-45 ------------------------------------------------
 [[lighting.scene]]
 layer = 2
 key = [5, 2]
@@ -442,6 +344,11 @@ color = "#000000"
 [[lighting.scene]]
 layer = 2
 key = [1, 1]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [2, 1]
 color = "#000000"
 
 [[lighting.scene]]
@@ -559,3 +466,602 @@ layer = 2
 key = [3, 9]
 color = "#000000"
 
+[[lighting.scene]]
+layer = 2
+key = [4, 9]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [5, 9]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [0, 10]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [1, 10]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [2, 10]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [3, 10]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [4, 10]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [5, 10]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [0, 11]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [1, 11]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [2, 11]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [3, 11]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [4, 11]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [5, 11]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [0, 12]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [1, 12]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [2, 12]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [3, 12]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [4, 12]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [5, 12]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [0, 13]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [1, 13]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [2, 13]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [3, 13]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [4, 13]
+color = "#000000"
+
+[[lighting.scene]]
+layer = 2
+key = [5, 13]
+color = "#000000"
+
+# Magic's lighting-control block, painted over the blackout. Effect and output
+# toggles report their own live state through the conditional rules below.
+# Brightness controls are yellow, effect cycling is white, and palette cycling
+# is magenta.
+
+[[lighting.scene]]
+layer = 2
+key = [2, 2]  # W: brightness up
+color = "#ffff00"
+
+[[lighting.scene]]
+layer = 2
+key = [3, 2]  # S: brightness down
+color = "#ffff00"
+
+[[lighting.scene]]
+layer = 2
+key = [5, 3]  # left arrow: previous effect
+color = "#ffffff"
+
+[[lighting.scene]]
+layer = 2
+key = [5, 4]  # right arrow: next effect
+color = "#ffffff"
+
+[[lighting.scene]]
+layer = 2
+key = [4, 3]  # C: next palette
+color = "#ff00ff"
+
+# Active-layer indicators: F1-F5 show layers 1-5 in blue while active.
+
+[[lighting.scene]]
+layer = 1
+key = [0, 0]
+color = "#0000ff"
+
+[[lighting.scene]]
+layer = 2
+key = [0, 1]
+color = "#0000ff"
+
+[[lighting.scene]]
+layer = 3
+key = [0, 2]
+color = "#0080ff"
+
+[[lighting.scene]]
+layer = 4
+key = [0, 3]
+color = "#0000ff"
+
+[[lighting.scene]]
+layer = 5
+key = [0, 4]
+color = "#0000ff"
+
+# Games-layer key highlights, moved out of the compiled table so lighting
+# lives in one place. A scene on a layer only shows while that layer is
+# active, which is what the compiled build expressed as a layer condition.
+
+[[lighting.scene]]
+layer = 3
+key = [3, 6]
+color = "#a03000"  # the Games layer's W key
+
+[[lighting.scene]]
+layer = 3
+key = [2, 2]
+color = "#a00000"
+
+[[lighting.scene]]
+layer = 3
+key = [3, 1]
+color = "#a00000"
+
+[[lighting.scene]]
+layer = 3
+key = [3, 2]
+color = "#a00000"
+
+[[lighting.scene]]
+layer = 3
+key = [3, 3]
+color = "#a00000"
+
+# Paseo mnemonic layer: Claude models are orange, Codex models are blue, and
+# effort runs from green through amber to red.
+
+[[lighting.scene]]
+layer = 5
+key = [3, 4]  # F: Fable
+color = "#d06040"
+
+[[lighting.scene]]
+layer = 5
+key = [2, 11]  # O: Opus
+color = "#d06040"
+
+[[lighting.scene]]
+layer = 5
+key = [3, 2]  # S: Sol
+color = "#0080ff"
+
+[[lighting.scene]]
+layer = 5
+key = [3, 11]  # L: Luna
+color = "#0080ff"
+
+[[lighting.scene]]
+layer = 5
+key = [2, 1]  # Q: low / quick
+color = "#00c040"
+
+[[lighting.scene]]
+layer = 5
+key = [4, 9]  # M: medium
+color = "#d08000"
+
+[[lighting.scene]]
+layer = 5
+key = [3, 8]  # H: high
+color = "#c02020"
+
+# Battery gauges on the Magic layer, five LEDs per half. Order matters:
+# later rules win the LEDs they share, so the level bands come first, the
+# low-battery overrides next, and charging last so it beats both.
+
+[[lighting.conditional_scene]]
+key = [5, 0]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 1 }
+
+[[lighting.conditional_scene]]
+key = [4, 0]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 21 }
+
+[[lighting.conditional_scene]]
+key = [3, 0]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 41 }
+
+[[lighting.conditional_scene]]
+key = [2, 0]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 61 }
+
+[[lighting.conditional_scene]]
+key = [1, 0]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 81 }
+
+[[lighting.conditional_scene]]
+key = [5, 13]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 1 }
+
+[[lighting.conditional_scene]]
+key = [4, 13]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 21 }
+
+[[lighting.conditional_scene]]
+key = [3, 13]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 41 }
+
+[[lighting.conditional_scene]]
+key = [2, 13]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 61 }
+
+[[lighting.conditional_scene]]
+key = [1, 13]
+color = "#008000"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 81 }
+
+[[lighting.conditional_scene]]
+key = [5, 0]
+color = "#a03000"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 1, max_level = 40 }
+
+[[lighting.conditional_scene]]
+key = [0, 7]
+color = "#a03000"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 21, max_level = 40 }
+
+[[lighting.conditional_scene]]
+key = [5, 0]
+color = "#a00000"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 1, max_level = 20 }
+
+[[lighting.conditional_scene]]
+key = [5, 13]
+color = "#a03000"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 1, max_level = 40 }
+
+[[lighting.conditional_scene]]
+key = [4, 13]
+color = "#a03000"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 21, max_level = 40 }
+
+[[lighting.conditional_scene]]
+key = [5, 13]
+color = "#a00000"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 1, max_level = 20 }
+
+[[lighting.conditional_scene]]
+key = [5, 0]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 1, charge = "charging" }
+
+[[lighting.conditional_scene]]
+key = [4, 0]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 21, charge = "charging" }
+
+[[lighting.conditional_scene]]
+key = [3, 0]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 41, charge = "charging" }
+
+[[lighting.conditional_scene]]
+key = [2, 0]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 61, charge = "charging" }
+
+[[lighting.conditional_scene]]
+key = [1, 0]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 0, min_level = 81, charge = "charging" }
+
+[[lighting.conditional_scene]]
+key = [5, 13]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 1, charge = "charging" }
+
+[[lighting.conditional_scene]]
+key = [4, 13]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 21, charge = "charging" }
+
+[[lighting.conditional_scene]]
+key = [3, 13]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 41, charge = "charging" }
+
+[[lighting.conditional_scene]]
+key = [2, 13]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 61, charge = "charging" }
+
+[[lighting.conditional_scene]]
+key = [1, 13]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+battery = { node = 1, min_level = 81, charge = "charging" }
+
+# Output-mode indicator: the LED on T that shows whether lighting is always on,
+# always off, or only while plugged in. Expressed as three rules gated on the
+# live policy, which is what let it stop being compiled into the firmware.
+
+[[lighting.conditional_scene]]
+key = [2, 5]
+color = "#008000"
+layer = { layer = 2, active = true }
+output_mode = "always-on"
+
+[[lighting.conditional_scene]]
+key = [2, 5]
+color = "#800000"
+layer = { layer = 2, active = true }
+output_mode = "always-off"
+
+[[lighting.conditional_scene]]
+key = [2, 5]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+output_mode = "powered-only"
+
+# PaletteFX on/off indicator on E. RGB_TOG works by
+# zeroing the extension's brightness, and that is the state this reads: green
+# while effects render, dim red while they are toggled off. The colors follow
+# the output-mode rules above, where green is on and dark red is off.
+
+[[lighting.conditional_scene]]
+key = [2, 3]
+color = "#008000"
+layer = { layer = 2, active = true }
+effects = { enabled = true }
+
+[[lighting.conditional_scene]]
+key = [2, 3]
+color = "#800000"
+layer = { layer = 2, active = true }
+effects = { enabled = false }
+
+# Connection indicator on the left thumb cluster while Magic is held.
+# One color per state on every slot key (later rules win): white = empty,
+# red = paired but idle, blue = selected or connected-but-idle, blinking white
+# = advertising, and green = carrying typing. Green means "keystrokes go here"
+# everywhere, so a connected slot only turns green once BLE is the active
+# transport — otherwise it stays blue like a plugged-but-idle USB key. The USB key (LED 0, Esc position): red = unplugged, blue =
+# plugged but typing elsewhere, green = carrying typing. Slot keys are the
+# lower arc: LED 3 = slot 1, LED 4 = slot 2, LED 5 = slot 3.
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#2a2a2a"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 0, bonded = false } }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 0, bonded = true } }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 0, ble_state = "inactive" }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#ffffff"
+effect = "blink"
+period_ms = 800
+phase_ms = 0
+duty = 50
+layer = { layer = 2, active = true }
+connection = { profile = 0, ble_state = "advertising" }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 0, ble_state = "connected" }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { profile = 0, ble_state = "connected", transport = "ble" }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#2a2a2a"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 1, bonded = false } }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 1, bonded = true } }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 1, ble_state = "inactive" }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#ffffff"
+effect = "blink"
+period_ms = 800
+phase_ms = 0
+duty = 50
+layer = { layer = 2, active = true }
+connection = { profile = 1, ble_state = "advertising" }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 1, ble_state = "connected" }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { profile = 1, ble_state = "connected", transport = "ble" }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#2a2a2a"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 2, bonded = false } }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 2, bonded = true } }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 2, ble_state = "inactive" }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#ffffff"
+effect = "blink"
+period_ms = 800
+phase_ms = 0
+duty = 50
+layer = { layer = 2, active = true }
+connection = { profile = 2, ble_state = "advertising" }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 2, ble_state = "connected" }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { profile = 2, ble_state = "connected", transport = "ble" }
+
+[[lighting.conditional_scene]]
+key = [0, 6]
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { usb_connected = false }
+
+[[lighting.conditional_scene]]
+key = [0, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { usb_connected = true }
+
+[[lighting.conditional_scene]]
+key = [0, 6]
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { transport = "usb" }
