@@ -111,6 +111,18 @@ mode = "scroll"
 device_id = 1
 mode = "cursor"
 
+# On Lower the left pad becomes a volume surface: swiping acts like a scroll
+# ring, streaming keyboard-page Volume Up/Down (0x80/0x81) steps as the finger
+# moves. Low threshold keeps it near-continuous.
+[[pointing.override]]
+layer = 1
+device_id = 0
+mode = "caret"
+disable_x = true
+threshold = 30
+keycode_up = 0x80
+keycode_down = 0x81
+
 # Holding Magic on the left thumb turns both pads into pointing tools: the
 # left one moves the cursor, and the right one drags — the mouse button is
 # down for exactly as long as a finger is on the pad, no tap gestures
