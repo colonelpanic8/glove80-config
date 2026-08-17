@@ -106,11 +106,11 @@ _ _ _ TG(4) _ _
 [[keymap.layer]]
 name = "Magic"
 keys = """
-OutputUsb No No No No User2 No No No No No No
+No No No No No User2 No No No No No No
 No No BacklightUp RgbTog MaintenanceModeToggle OutputModeCycle No No No No No No
-Bootloader No BacklightDown No No No No No No No No User12
-Reboot No No RgbHui No No No No No No No Reboot
-No RgbModeReverse RgbModeForward No No No
+Bootloader RgbModeReverse BacklightDown RgbModeForward No No No No No No No User12
+Reboot No No RgbHui No User13 No No No No No Reboot
+No No OutputUsb No No No
 User0 User1 User2 No No No
 """
 
