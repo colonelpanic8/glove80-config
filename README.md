@@ -86,11 +86,12 @@ To read or set one without a whole configuration file:
 ./bin/moergo-control keymap name 3 Games     # rename layer 3
 ```
 
-### Selector-addressed bindings
+### Keys described in one place
 
-A layer's `keys` grid reads well as a whole layer and badly as "these six
-keys". `[[layer.bind]]` entries address keys with the same selectors the
-[lighting model](docs/lighting.md) uses, and apply over the grid:
+A `keys` grid reads well as a whole layer and badly as "these six keys", and
+the scene tables put a key's color hundreds of lines from its action.
+`[[layer.key]]` entries carry both, addressed by the same selectors the
+[lighting model](docs/lighting.md) uses:
 
 ```toml
 [[layer]]
@@ -98,30 +99,60 @@ id = "magic"
 name = "Magic"
 keys = """…"""
 
-# QK_BOOT at matrix row 3, column 0.
-[[layer.bind]]
+# A black floor over every per-key emitter, then the controls over it.
+[[layer.key]]
+zone = 1
+color = "#000000"
+
+[[layer.key]]
 key = [3, 0]
 action = "QK_BOOT"
+color = "#ff0000"
 
-# Every key in zone 1, which is all 80 per-key positions.
-[[layer.bind]]
-zone = 1
-action = "KC_NO"
+# One key, several looks: rule arms read top down, first match wins, and the
+# inline color is the final unconditional arm. The layer supplies its own
+# condition, so `layer = { layer = 2, active = true }` never gets written.
+[[layer.key]]
+key = [0, 6]
+action = "QK_OUTPUT_USB"
+color = "#ff0000"
+
+[[layer.key.rule]]
+when = { connection = { transport = "usb" } }
+color = "#00ff00"
+
+[[layer.key.rule]]
+when = { connection = { usb_connected = true } }
+color = "#0000ff"
+
+# Emitters that belong to no key take the same shape, minus the action.
+[[layer.light]]
+led = 87
+color = "#202020"
 ```
 
-Binds apply in file order and the last one covering a key wins it, so a broad
-selector can go first and specific corrections after it. A layer with no `keys`
-starts transparent, which is what a layer written entirely as binds wants.
-`key = [row, col]` resolves offline; `key = N`, `led = N`, `zone = N`, and
-`all = true` are questions about the board, so `just check` only confirms they
-are well formed and names them, while `just diff` and `just apply` resolve them
-through the connected keyboard's topology. The keyboard stores a grid rather
-than the selectors that described one, so `just pull` writes layers back as
-`keys` alone.
+Either half can stand alone — an entry with only an `action` is a binding, one
+with only lighting is a scene written next to its layer. Within an arm every
+named condition must hold together; across arms the first match shows, and an
+arm with no conditions is the fallback and must come last. Entries apply in
+file order and the last one covering a key wins it, for the action and the
+lighting alike, so a broad selector can go first and corrections after it.
+That overriding is the difference from `[[lighting.scene]]`, which rejects two
+cells for one slot; a layer-attached cell wins the slot instead, including
+over a standalone one.
+
+A layer with no `keys` starts transparent. `key = [row, col]` resolves offline
+for bindings; every other form is a question about the board, so `just check`
+confirms they are well formed and names them, while `just diff` and `just
+apply` resolve them through the connected keyboard's topology. Lighting a key
+needs a `[lighting]` section to exist, since synthesizing one would claim the
+brightness, background and policy values in it. The keyboard stores a grid and
+resolved cells rather than the selectors that described them, so `just pull`
+writes layers back as `keys` and lighting back as `led` cells.
 
 This is runtime configuration only. The compiled `[[keymap.layer]]` grids in
 [`config/firmware.toml`](config/firmware.toml) are parsed by RMK's
-`keyboard.toml` schema and take no binds.
+`keyboard.toml` schema and take neither form.
 
 The Go60's managed runtime state lives in
 [config/go60.toml](config/go60.toml). Runtime TOML declares its logical
