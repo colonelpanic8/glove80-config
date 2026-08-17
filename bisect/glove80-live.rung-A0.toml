@@ -1,0 +1,1421 @@
+bluetooth_name = "WhiteG80 {slot}"
+default_layer = 0
+
+[[layer]]
+id = "layer0"
+name = "Base"
+keys = """
+
+KC_F1 KC_F2 KC_F3 KC_F4 KC_F5 -- LT(1,KC_ESC) KC_BSPC -- KC_F6 KC_F7 KC_F8 KC_F9 KC_F10
+KC_EQL KC_1 KC_2 KC_3 KC_4 KC_5 TD(0) TG(4) KC_6 KC_7 KC_8 KC_9 KC_0 KC_MINS
+KC_TAB KC_Q KC_W KC_E KC_R KC_T MO(2) KC_LGUI KC_Y KC_U KC_I KC_O KC_P KC_BSLS
+KC_LCTL KC_A KC_S KC_D KC_F KC_G KC_BSPC KC_SPC KC_H KC_J KC_K KC_L LT(1,KC_SCLN) KC_QUOT
+KC_LSFT KC_Z KC_X KC_C KC_V KC_B KC_LGUI KC_ENT KC_N KC_M KC_COMM KC_DOT KC_SLSH KC_RSFT
+KC_GRV MO(1) MO(5) KC_LEFT KC_RGHT -- KC_LALT KC_RGUI -- KC_UP KC_DOWN KC_LBRC KC_RBRC TG(3)
+"""
+
+[[layer]]
+id = "layer1"
+name = "Lower"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS LSFT(KC_EQL) LSFT(KC_MINS) LSFT(KC_9) LSFT(KC_0) KC_TRNS TO(0) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_CAPS LSFT(KC_1) LSFT(KC_2) LSFT(KC_3) LSFT(KC_4) LSFT(KC_5) KC_TRNS KC_MPLY LSFT(KC_6) LSFT(KC_7) LSFT(KC_8) LSFT(KC_9) LSFT(KC_0) KC_TRNS
+KC_TRNS KC_LBRC KC_RBRC LSFT(KC_LBRC) LSFT(KC_RBRC) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_HOME KC_END KC_MPRV KC_MNXT -- KC_TRNS KC_TRNS -- KC_VOLU KC_VOLD KC_TRNS KC_TRNS KC_TRNS
+"""
+
+[[layer]]
+id = "layer2"
+name = "Magic"
+keys = """
+
+-- -- -- -- -- -- QK_OUTPUT_USB -- -- -- -- -- -- --
+-- -- -- -- -- -- -- -- -- -- -- -- -- --
+-- -- BL_UP UG_TOGG MAINT_LOCK_TOG UG_OMODE -- -- -- -- -- -- -- --
+QK_BOOT -- BL_DOWN -- -- -- USER(0) -- -- -- -- -- -- USER(12)
+QK_RBT -- -- UG_HUEU -- -- USER(1) -- -- -- -- -- -- QK_RBT
+-- -- -- UG_PREV UG_NEXT -- USER(2) -- -- -- -- -- -- TO(3)
+"""
+
+[[layer]]
+id = "layer3"
+name = "Games"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_W KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_A KC_S KC_D KC_TRNS KC_TRNS KC_SPC KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+"""
+
+[[layer]]
+id = "layer4"
+name = "Mac Hyper"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS TG(4) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS MOD(MOD_LCTL|MOD_LALT|MOD_LGUI) -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+"""
+
+[[layer]]
+id = "layer5"
+name = "Paseo"
+keys = """
+
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_F17 KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_F14 KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_F15 KC_TRNS KC_F13 KC_TRNS KC_TRNS KC_TRNS KC_F19 KC_TRNS KC_TRNS KC_F16 KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_F18 KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+"""
+
+[[morse]]
+name = "morse 0"
+tap = "KC_DEL"
+hold = "MO(5)"
+hold_timeout_ms = 180
+
+[behavior]
+combo_timeout_ms = 50
+oneshot_timeout_ms = 1000
+tap_interval_ms = 20
+tap_capslock_interval_ms = 20
+oneshot_activate_on_keypress = false
+oneshot_quick_release = false
+
+[behavior.morse]
+enable_flow_tap = false
+prior_idle_ms = 120
+
+[behavior.morse.default_profile]
+hold_timeout_ms = 250
+gap_timeout_ms = 250
+
+[behavior.morse.profiles.paseo_layer]
+index = 0
+hold_timeout_ms = 180
+
+[pointing]
+
+[lighting]
+brightness = 255
+output_mode = "always-on"
+wake_layers = [2]
+scene_policy = "active-stack"
+
+[lighting.background]
+enabled = false
+hue = 0
+saturation = 0
+value = 0
+speed = 128
+mode = "solid"
+
+[lighting.effects]
+effect = "Reactive"
+palette = "Polarized"
+value = 0
+speed = 32
+
+[lighting.effects.params.Comet]
+"Distance pace" = 200
+"Head size" = 14
+"Lag x10ms" = 32
+"Linger x10ms" = 80
+Momentum = 168
+"Trail x10ms" = 20
+
+[lighting.effects.params.Crosshair]
+"Arm hue" = 0
+"Arm width" = 11
+Crosses = 1
+"Duration x10ms" = 90
+"Key hue" = 173
+Motion = 0
+"Pulse width" = 170
+
+[lighting.effects.params.Keyfall]
+Gravity = 0
+
+[lighting.effects.params.Rain]
+Drops = 11
+"Rain hue" = 172
+"Spawn x10ms" = 5
+Trail = 161
+Width = 14
+
+[[lighting.scene]]
+layer = 1
+led = 34
+color = "#0000ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 0
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 1
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 2
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 3
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 4
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 5
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 6
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 8
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 9
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 10
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 11
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 12
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 13
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 14
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 15
+color = "#ffffff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 16
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 17
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 19
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 20
+color = "#ff00ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 21
+color = "#ffffff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 22
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 23
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 24
+color = "#ffff00"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 25
+color = "#ffff00"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 26
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 27
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 28
+color = "#0000ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 29
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 30
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 31
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 32
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 33
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 34
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 35
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 36
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 37
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 38
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 39
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 40
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 41
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 42
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 43
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 44
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 45
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 46
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 47
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 48
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 49
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 50
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 51
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 52
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 53
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 54
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 55
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 56
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 57
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 58
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 59
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 60
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 61
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 62
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 63
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 64
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 65
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 66
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 67
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 68
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 69
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 70
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 71
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 72
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 73
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 74
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 75
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 76
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 77
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 78
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 2
+led = 79
+color = "#000000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 3
+led = 3
+color = "#a03000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 3
+led = 19
+color = "#a00000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 3
+led = 22
+color = "#0080ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 3
+led = 24
+color = "#a00000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 3
+led = 25
+color = "#a00000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 3
+led = 31
+color = "#a00000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 4
+led = 16
+color = "#0000ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 4
+led = 41
+color = "#30f2a2"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 4
+led = 45
+color = "#30f2a2"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 5
+led = 10
+color = "#0000ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 5
+led = 13
+color = "#d06040"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 5
+led = 25
+color = "#0080ff"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 5
+led = 30
+color = "#00c040"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 5
+led = 48
+color = "#c02020"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 5
+led = 54
+color = "#d08000"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 5
+led = 64
+color = "#d06040"
+effect = "solid"
+
+[[lighting.scene]]
+layer = 5
+led = 65
+color = "#0080ff"
+effect = "solid"
+
+[[lighting.conditional_scene]]
+led = 39
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 1
+
+[[lighting.conditional_scene]]
+led = 38
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 21
+
+[[lighting.conditional_scene]]
+led = 37
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 41
+
+[[lighting.conditional_scene]]
+led = 36
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 61
+
+[[lighting.conditional_scene]]
+led = 35
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 81
+
+[[lighting.conditional_scene]]
+led = 79
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 1
+
+[[lighting.conditional_scene]]
+led = 78
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 21
+
+[[lighting.conditional_scene]]
+led = 77
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 41
+
+[[lighting.conditional_scene]]
+led = 76
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 61
+
+[[lighting.conditional_scene]]
+led = 75
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 81
+
+[[lighting.conditional_scene]]
+led = 39
+color = "#a03000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 1
+max_level = 40
+
+[[lighting.conditional_scene]]
+led = 40
+color = "#a03000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 21
+max_level = 40
+
+[[lighting.conditional_scene]]
+led = 39
+color = "#a00000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 1
+max_level = 20
+
+[[lighting.conditional_scene]]
+led = 79
+color = "#a03000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 1
+max_level = 40
+
+[[lighting.conditional_scene]]
+led = 78
+color = "#a03000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 21
+max_level = 40
+
+[[lighting.conditional_scene]]
+led = 79
+color = "#a00000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 1
+max_level = 20
+
+[[lighting.conditional_scene]]
+led = 39
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 1
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 38
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 21
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 37
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 41
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 36
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 61
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 35
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 0
+min_level = 81
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 79
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 1
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 78
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 21
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 77
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 41
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 76
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 61
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 75
+color = "#0040a0"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.battery]
+node = 1
+min_level = 81
+charge = "charging"
+
+[[lighting.conditional_scene]]
+led = 7
+color = "#008000"
+effect = "solid"
+output_mode = "always-on"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[[lighting.conditional_scene]]
+led = 7
+color = "#800000"
+effect = "solid"
+output_mode = "always-off"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[[lighting.conditional_scene]]
+led = 7
+color = "#0040a0"
+effect = "solid"
+output_mode = "powered-only"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[[lighting.conditional_scene]]
+led = 18
+color = "#008000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.effects]
+enabled = true
+
+[[lighting.conditional_scene]]
+led = 18
+color = "#800000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.effects]
+enabled = false
+
+[[lighting.conditional_scene]]
+led = 3
+color = "#2a2a2a"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection.bonded]
+slot = 0
+bonded = false
+
+[[lighting.conditional_scene]]
+led = 3
+color = "#b00000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection.bonded]
+slot = 0
+bonded = true
+
+[[lighting.conditional_scene]]
+led = 3
+color = "#0050ff"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+profile = 0
+ble_state = "inactive"
+
+[[lighting.conditional_scene]]
+led = 3
+color = "#ffffff"
+effect = "blink"
+period_ms = 800
+phase_ms = 0
+duty = 50
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+profile = 0
+ble_state = "advertising"
+
+[[lighting.conditional_scene]]
+led = 3
+color = "#0050ff"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+profile = 0
+ble_state = "connected"
+
+[[lighting.conditional_scene]]
+led = 3
+color = "#00c020"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+transport = "ble"
+profile = 0
+ble_state = "connected"
+
+[[lighting.conditional_scene]]
+led = 4
+color = "#2a2a2a"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection.bonded]
+slot = 1
+bonded = false
+
+[[lighting.conditional_scene]]
+led = 4
+color = "#b00000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection.bonded]
+slot = 1
+bonded = true
+
+[[lighting.conditional_scene]]
+led = 4
+color = "#0050ff"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+profile = 1
+ble_state = "inactive"
+
+[[lighting.conditional_scene]]
+led = 4
+color = "#ffffff"
+effect = "blink"
+period_ms = 800
+phase_ms = 0
+duty = 50
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+profile = 1
+ble_state = "advertising"
+
+[[lighting.conditional_scene]]
+led = 4
+color = "#0050ff"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+profile = 1
+ble_state = "connected"
+
+[[lighting.conditional_scene]]
+led = 4
+color = "#00c020"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+transport = "ble"
+profile = 1
+ble_state = "connected"
+
+[[lighting.conditional_scene]]
+led = 5
+color = "#2a2a2a"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection.bonded]
+slot = 2
+bonded = false
+
+[[lighting.conditional_scene]]
+led = 5
+color = "#b00000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection.bonded]
+slot = 2
+bonded = true
+
+[[lighting.conditional_scene]]
+led = 5
+color = "#0050ff"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+profile = 2
+ble_state = "inactive"
+
+[[lighting.conditional_scene]]
+led = 5
+color = "#ffffff"
+effect = "blink"
+period_ms = 800
+phase_ms = 0
+duty = 50
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+profile = 2
+ble_state = "advertising"
+
+[[lighting.conditional_scene]]
+led = 5
+color = "#0050ff"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+profile = 2
+ble_state = "connected"
+
+[[lighting.conditional_scene]]
+led = 5
+color = "#00c020"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+transport = "ble"
+profile = 2
+ble_state = "connected"
+
+[[lighting.conditional_scene]]
+led = 0
+color = "#b00000"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+usb_connected = false
+
+[[lighting.conditional_scene]]
+led = 0
+color = "#0050ff"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+usb_connected = true
+
+[[lighting.conditional_scene]]
+led = 0
+color = "#00c020"
+effect = "solid"
+
+[lighting.conditional_scene.layer]
+layer = 2
+active = true
+
+[lighting.conditional_scene.connection]
+transport = "usb"
