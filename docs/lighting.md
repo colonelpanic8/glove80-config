@@ -24,11 +24,12 @@ apply`, `moergo-control` resolves readable selectors to one or more LED IDs:
 Compiled firmware uses the same selector shapes inside a target, for example
 `target = { key = [0, 0] }`.
 
-The vocabulary is not lighting-only. The same selectors address key bindings
-through `[[layer.bind]]` in the runtime configuration, where they resolve to
-matrix keys instead of emitters — `led = 34` binds the key that owns emitter
-34, and `zone = 1` binds every key in that zone. See
-[Selector-addressed bindings](../README.md#selector-addressed-bindings). The
+The vocabulary is not lighting-only. The same selectors address keys through
+`[[layer.key]]` in the runtime configuration, where one entry carries both what
+a key does and how it looks: the selector lowers to matrix keys for the action
+and to emitters for the color. `led = 34` then names the key that owns emitter
+34, and `zone = 1` names every key in that zone. See
+[Keys described in one place](../README.md#keys-described-in-one-place). The
 compiled `[[keymap.layer]]` grids in `config/firmware.toml` are still
 grid-only: that schema belongs to RMK's `keyboard.toml` parser rather than to
 this repository's host tools.
@@ -79,6 +80,30 @@ would make those reusable selectors for both lighting cells and key bindings.
 Whole-row, whole-column, and attribute predicates are not configuration syntax
 yet; today they must be written as individual matrix-key entries or
 represented by a declared zone.
+
+## Where a cell is written
+
+The two scene tables can be written standalone or attached to a layer, and the
+difference is only where the file says it:
+
+| Form | Reads as |
+| --- | --- |
+| `[[lighting.scene]]` with `layer = N` | A durable cell in that layer's scene table |
+| `[[lighting.conditional_scene]]` | A host-owned rule, conditions and all |
+| `[[layer.key]]` with `color` | The same durable cell, next to the key's action |
+| `[[layer.key.rule]]` with `when` | The same rule, with this layer's condition implied |
+| `[[layer.light]]` / `[[layer.light.rule]]` | The same two, for emitters that belong to no key |
+
+A key's rule arms read first-match-wins, with the inline `color` as the final
+unconditional arm; conditional arms lower in reverse table order so the
+device's later-cells-win composition agrees with that reading.
+
+They differ in one behavior. The standalone scene table rejects two cells for
+one slot, which is what catches a scene written twice. Layer-attached cells are
+ordered instead: they apply over the standalone table and over each other in
+the order written, so a broad selector followed by a specific correction reads
+the way the compositor below already reads. Conditional rules stay ordered in
+both forms, with the layer-attached ones after the standalone table.
 
 ## Composition and output
 
