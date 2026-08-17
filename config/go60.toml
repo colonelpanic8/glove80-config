@@ -166,8 +166,8 @@ mode = "press"
 layer = 6
 device_id = 1
 mode = "cursor"
-multiplier_x = 4
-multiplier_y = 4
+multiplier_x = 6
+multiplier_y = 6
 
 [[pointing.override]]
 layer = 7
