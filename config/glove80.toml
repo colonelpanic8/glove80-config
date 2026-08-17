@@ -22,6 +22,9 @@ default_layer = 0
 #   four physical holes at r0c5, r0c8, r5c5, r5c8. `#` comments run to the
 #   end of the line. Columns 0-6 are the left half (col 6 = left thumbs),
 #   columns 7-13 the right half (col 7 = right thumbs).
+# - A sparse layer may omit `keys` and carry `[[layer.bind]]` entries instead;
+#   every key it does not name stays transparent, and a bind's lighting scene
+#   can sit right beside it (README: "Selector-addressed bindings").
 #
 # Apply semantics: changed key bindings are written with read-back verification
 # but are not atomic across the whole keymap. Durable lighting scenes are
@@ -96,31 +99,70 @@ QK_RBT    --        --       RGB_HUI  --  --       USER(1)     --  --  --  --  -
 """
 
 # --- Layer 3: Games (left-hand WASD) ----------------------------------------
+# Written sparsely: no `keys` grid, so every key this layer does not name is
+# transparent. Each bind's highlight scene sits beside it.
 [[layer]]
 id = "games"
 name = "Games"
-keys = """
-_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
-_______  _______  KC_W     _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
-_______  KC_A     KC_S     KC_D     _______  _______  KC_SPC   _______  _______  _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
-"""
+
+[[layer.bind]]
+key = [2, 2]  # W
+action = "KC_W"
+
+[[lighting.scene]]
+layer = 3
+key = [2, 2]
+color = "#a00000"
+
+[[layer.bind]]
+key = [3, 1]  # A
+action = "KC_A"
+
+[[lighting.scene]]
+layer = 3
+key = [3, 1]
+color = "#a00000"
+
+[[layer.bind]]
+key = [3, 2]  # S
+action = "KC_S"
+
+[[lighting.scene]]
+layer = 3
+key = [3, 2]
+color = "#a00000"
+
+[[layer.bind]]
+key = [3, 3]  # D
+action = "KC_D"
+
+[[lighting.scene]]
+layer = 3
+key = [3, 3]
+color = "#a00000"
+
+[[layer.bind]]
+key = [3, 6]  # left thumb: jump
+action = "KC_SPC"
+
+[[lighting.scene]]
+layer = 3
+key = [3, 6]
+color = "#a03000"
 
 # --- Layer 4: Mac Hyper ------------------------------------------------------
 # MOD(...) directly holds the modifier combination until the key is released.
 [[layer]]
 id = "mac_hyper"
 name = "Mac Hyper"
-keys = """
-_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  _______  _______  TG(4)    _______  _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  --       _______  MOD(MOD_LCTL|MOD_LALT|MOD_LGUI)  --  _______  _______  _______  _______  _______
-"""
+
+[[layer.bind]]
+key = [1, 7]  # the toggle that entered the layer leaves it
+action = "TG(4)"
+
+[[layer.bind]]
+key = [5, 7]  # right thumb: hold for ctrl+alt+gui
+action = "MOD(MOD_LCTL|MOD_LALT|MOD_LGUI)"
 
 # --- Layer 5: Paseo ----------------------------------------------------------
 # Tap Delete normally; hold it to activate this layer. The key is TD(0), whose
@@ -145,17 +187,75 @@ _______  _______  _______  _______  _______  --       _______  MOD(MOD_LCTL|MOD_
 # only became bindable in getpaseo/paseo#2845; before that fix they rendered
 # permanently greyed out because availability was computed from the live
 # contribution set, which is empty on the settings route.
+# Written sparsely, one bind per mnemonic with its scene beside it: Claude
+# models are orange, Codex models are blue, and effort runs from green
+# through amber to red.
 [[layer]]
 id = "paseo"
 name = "Paseo"
-keys = """
-_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
-_______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______  _______
-_______  KC_F17   _______  _______  _______  _______  _______  _______  _______  _______  _______  KC_F14   _______  _______
-_______  _______  KC_F15   _______  KC_F13   _______  _______  _______  KC_F19   _______  _______  KC_F16   _______  _______
-_______  _______  _______  _______  _______  _______  _______  _______  _______  KC_F18   _______  _______  _______  _______
-_______  _______  _______  _______  _______  --       _______  _______  --       _______  _______  _______  _______  _______
-"""
+
+[[layer.bind]]
+key = [3, 4]  # F: Fable
+action = "KC_F13"
+
+[[lighting.scene]]
+layer = 5
+key = [3, 4]
+color = "#d06040"
+
+[[layer.bind]]
+key = [2, 11]  # O: Opus
+action = "KC_F14"
+
+[[lighting.scene]]
+layer = 5
+key = [2, 11]
+color = "#d06040"
+
+[[layer.bind]]
+key = [3, 2]  # S: Sol
+action = "KC_F15"
+
+[[lighting.scene]]
+layer = 5
+key = [3, 2]
+color = "#0080ff"
+
+[[layer.bind]]
+key = [3, 11]  # L: Luna
+action = "KC_F16"
+
+[[lighting.scene]]
+layer = 5
+key = [3, 11]
+color = "#0080ff"
+
+[[layer.bind]]
+key = [2, 1]  # Q: low (quick) effort
+action = "KC_F17"
+
+[[lighting.scene]]
+layer = 5
+key = [2, 1]
+color = "#00c040"
+
+[[layer.bind]]
+key = [4, 9]  # M: medium effort
+action = "KC_F18"
+
+[[lighting.scene]]
+layer = 5
+key = [4, 9]
+color = "#d08000"
+
+[[layer.bind]]
+key = [3, 8]  # H: high effort
+action = "KC_F19"
+
+[[lighting.scene]]
+layer = 5
+key = [3, 8]
+color = "#c02020"
 
 # --- Morse table -------------------------------------------------------------
 # Morse 0 is the Paseo thumb key, addressed as TD(0) on the base layer: tap
@@ -653,72 +753,8 @@ layer = 5
 key = [0, 4]
 color = "#0000ff"
 
-# Games-layer key highlights, moved out of the compiled table so lighting
-# lives in one place. A scene on a layer only shows while that layer is
-# active, which is what the compiled build expressed as a layer condition.
-
-[[lighting.scene]]
-layer = 3
-key = [3, 6]
-color = "#a03000"  # the Games layer's W key
-
-[[lighting.scene]]
-layer = 3
-key = [2, 2]
-color = "#a00000"
-
-[[lighting.scene]]
-layer = 3
-key = [3, 1]
-color = "#a00000"
-
-[[lighting.scene]]
-layer = 3
-key = [3, 2]
-color = "#a00000"
-
-[[lighting.scene]]
-layer = 3
-key = [3, 3]
-color = "#a00000"
-
-# Paseo mnemonic layer: Claude models are orange, Codex models are blue, and
-# effort runs from green through amber to red.
-
-[[lighting.scene]]
-layer = 5
-key = [3, 4]  # F: Fable
-color = "#d06040"
-
-[[lighting.scene]]
-layer = 5
-key = [2, 11]  # O: Opus
-color = "#d06040"
-
-[[lighting.scene]]
-layer = 5
-key = [3, 2]  # S: Sol
-color = "#0080ff"
-
-[[lighting.scene]]
-layer = 5
-key = [3, 11]  # L: Luna
-color = "#0080ff"
-
-[[lighting.scene]]
-layer = 5
-key = [2, 1]  # Q: low / quick
-color = "#00c040"
-
-[[lighting.scene]]
-layer = 5
-key = [4, 9]  # M: medium
-color = "#d08000"
-
-[[lighting.scene]]
-layer = 5
-key = [3, 8]  # H: high
-color = "#c02020"
+# Games and Paseo key highlights live beside their [[layer.bind]] entries
+# above; a scene on a layer only shows while that layer is active.
 
 # Battery gauges on the Magic layer, five LEDs per half. Order matters:
 # later rules win the LEDs they share, so the level bands come first, the
