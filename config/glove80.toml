@@ -89,14 +89,285 @@ _______  KC_HOME       KC_END        KC_MPRV        KC_MNXT        --       ____
 [[layer]]
 id = "magic"
 name = "Magic"
-keys = """
---        --        --       --       --  --  QK_OUTPUT_USB  --  --  --  --  --  --  --
---        --        --       --       --  --  --             --  --  --  --  --  --  --
---        --        BL_UP    RGB_TOG  MAINT_LOCK_TOG UG_OMODE --     --  --  --  --  --  --  --
-QK_BOOT   --        BL_DOWN --       --  --       USER(0)      --  --  --  --  --  --  USER(12)
-QK_RBT    --        --       RGB_HUI  --  --       USER(1)     --  --  --  --  --  --  QK_RBT
---        --        --       RGB_RMOD RGB_MOD  --  USER(2)     --  --  --  --  --  --  TO(3)
-"""
+
+# The floor: Magic blanks every key it does not name, so the named binds
+# below correct this whole-board KC_NO. `all` resolves through the keyboard's
+# topology, so `just check` only confirms it is well formed.
+[[layer.bind]]
+all = true
+action = "KC_NO"
+
+[[layer.bind]]
+key = [0, 6]  # upper Esc-position thumb key: move typing to USB
+action = "QK_OUTPUT_USB"
+
+# The USB key's state: red = unplugged, blue = plugged but typing elsewhere,
+# green = carrying typing.
+[[lighting.conditional_scene]]
+key = [0, 6]
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { usb_connected = false }
+
+[[lighting.conditional_scene]]
+key = [0, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { usb_connected = true }
+
+[[lighting.conditional_scene]]
+key = [0, 6]
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { transport = "usb" }
+
+[[layer.bind]]
+key = [2, 2]  # W: brightness up
+action = "BL_UP"
+
+[[lighting.scene]]
+layer = 2
+key = [2, 2]
+color = "#ffff00"
+
+[[layer.bind]]
+key = [2, 3]  # E: PaletteFX on/off
+action = "RGB_TOG"
+
+# E reads the state RGB_TOG flips: green while effects render, dim red while
+# they are toggled off.
+[[lighting.conditional_scene]]
+key = [2, 3]
+color = "#008000"
+layer = { layer = 2, active = true }
+effects = { enabled = true }
+
+[[lighting.conditional_scene]]
+key = [2, 3]
+color = "#800000"
+layer = { layer = 2, active = true }
+effects = { enabled = false }
+
+[[layer.bind]]
+key = [2, 4]  # R: maintenance lock toggle
+action = "MAINT_LOCK_TOG"
+
+[[layer.bind]]
+key = [2, 5]  # T: cycle lighting always-on / always-off / plugged-in-only
+action = "UG_OMODE"
+
+# T shows the live output-mode policy, which is what let the indicator stop
+# being compiled into the firmware.
+[[lighting.conditional_scene]]
+key = [2, 5]
+color = "#008000"
+layer = { layer = 2, active = true }
+output_mode = "always-on"
+
+[[lighting.conditional_scene]]
+key = [2, 5]
+color = "#800000"
+layer = { layer = 2, active = true }
+output_mode = "always-off"
+
+[[lighting.conditional_scene]]
+key = [2, 5]
+color = "#0040a0"
+layer = { layer = 2, active = true }
+output_mode = "powered-only"
+
+[[layer.bind]]
+key = [3, 0]
+action = "QK_BOOT"
+
+[[layer.bind]]
+key = [3, 2]  # S: brightness down
+action = "BL_DOWN"
+
+[[lighting.scene]]
+layer = 2
+key = [3, 2]
+color = "#ffff00"
+
+[[layer.bind]]
+key = [3, 6]  # lower thumb arc: BLE slot 1
+action = "USER(0)"
+
+# Slot keys share one color scheme (later rules win): white = empty, red =
+# paired but idle, blue = selected or connected-but-idle, blinking white =
+# advertising, green = carrying typing. Green means "keystrokes go here"
+# everywhere, so a connected slot only turns green once BLE is the active
+# transport — otherwise it stays blue like a plugged-but-idle USB key.
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#2a2a2a"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 0, bonded = false } }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 0, bonded = true } }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 0, ble_state = "inactive" }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#ffffff"
+effect = "blink"
+period_ms = 800
+phase_ms = 0
+duty = 50
+layer = { layer = 2, active = true }
+connection = { profile = 0, ble_state = "advertising" }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 0, ble_state = "connected" }
+
+[[lighting.conditional_scene]]
+key = [3, 6]
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { profile = 0, ble_state = "connected", transport = "ble" }
+
+[[layer.bind]]
+key = [3, 13]  # forward the bootloader request to the right half
+action = "USER(12)"
+
+[[layer.bind]]
+key = [4, 0]
+action = "QK_RBT"
+
+[[layer.bind]]
+key = [4, 3]  # C: next palette
+action = "RGB_HUI"
+
+[[lighting.scene]]
+layer = 2
+key = [4, 3]
+color = "#ff00ff"
+
+[[layer.bind]]
+key = [4, 6]  # lower thumb arc: BLE slot 2
+action = "USER(1)"
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#2a2a2a"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 1, bonded = false } }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 1, bonded = true } }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 1, ble_state = "inactive" }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#ffffff"
+effect = "blink"
+period_ms = 800
+phase_ms = 0
+duty = 50
+layer = { layer = 2, active = true }
+connection = { profile = 1, ble_state = "advertising" }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 1, ble_state = "connected" }
+
+[[lighting.conditional_scene]]
+key = [4, 6]
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { profile = 1, ble_state = "connected", transport = "ble" }
+
+[[layer.bind]]
+key = [4, 13]  # reboot the right half
+action = "QK_RBT"
+
+[[layer.bind]]
+key = [5, 3]  # left arrow: previous effect
+action = "RGB_RMOD"
+
+[[lighting.scene]]
+layer = 2
+key = [5, 3]
+color = "#ffffff"
+
+[[layer.bind]]
+key = [5, 4]  # right arrow: next effect
+action = "RGB_MOD"
+
+[[lighting.scene]]
+layer = 2
+key = [5, 4]
+color = "#ffffff"
+
+[[layer.bind]]
+key = [5, 6]  # lower thumb arc: BLE slot 3
+action = "USER(2)"
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#2a2a2a"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 2, bonded = false } }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#b00000"
+layer = { layer = 2, active = true }
+connection = { bonded = { slot = 2, bonded = true } }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 2, ble_state = "inactive" }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#ffffff"
+effect = "blink"
+period_ms = 800
+phase_ms = 0
+duty = 50
+layer = { layer = 2, active = true }
+connection = { profile = 2, ble_state = "advertising" }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#0050ff"
+layer = { layer = 2, active = true }
+connection = { profile = 2, ble_state = "connected" }
+
+[[lighting.conditional_scene]]
+key = [5, 6]
+color = "#00c020"
+layer = { layer = 2, active = true }
+connection = { profile = 2, ble_state = "connected", transport = "ble" }
+
+[[layer.bind]]
+key = [5, 13]
+action = "TO(3)"
 
 # --- Layer 3: Games (left-hand WASD) ----------------------------------------
 # Written sparsely: no `keys` grid, so every key this layer does not name is
@@ -696,35 +967,9 @@ layer = 2
 key = [5, 13]
 color = "#000000"
 
-# Magic's lighting-control block, painted over the blackout. Effect and output
-# toggles report their own live state through the conditional rules below.
-# Brightness controls are yellow, effect cycling is white, and palette cycling
-# is magenta.
-
-[[lighting.scene]]
-layer = 2
-key = [2, 2]  # W: brightness up
-color = "#ffff00"
-
-[[lighting.scene]]
-layer = 2
-key = [3, 2]  # S: brightness down
-color = "#ffff00"
-
-[[lighting.scene]]
-layer = 2
-key = [5, 3]  # left arrow: previous effect
-color = "#ffffff"
-
-[[lighting.scene]]
-layer = 2
-key = [5, 4]  # right arrow: next effect
-color = "#ffffff"
-
-[[lighting.scene]]
-layer = 2
-key = [4, 3]  # C: next palette
-color = "#ff00ff"
+# Magic's lighting controls and state indicators live beside their
+# [[layer.bind]] entries in the layer section above: brightness controls are
+# yellow, effect cycling is white, and palette cycling is magenta.
 
 # Active-layer indicators: F1-F5 show layers 1-5 in blue while active.
 
@@ -916,188 +1161,5 @@ color = "#0040a0"
 layer = { layer = 2, active = true }
 battery = { node = 1, min_level = 81, charge = "charging" }
 
-# Output-mode indicator: the LED on T that shows whether lighting is always on,
-# always off, or only while plugged in. Expressed as three rules gated on the
-# live policy, which is what let it stop being compiled into the firmware.
-
-[[lighting.conditional_scene]]
-key = [2, 5]
-color = "#008000"
-layer = { layer = 2, active = true }
-output_mode = "always-on"
-
-[[lighting.conditional_scene]]
-key = [2, 5]
-color = "#800000"
-layer = { layer = 2, active = true }
-output_mode = "always-off"
-
-[[lighting.conditional_scene]]
-key = [2, 5]
-color = "#0040a0"
-layer = { layer = 2, active = true }
-output_mode = "powered-only"
-
-# PaletteFX on/off indicator on E. RGB_TOG works by
-# zeroing the extension's brightness, and that is the state this reads: green
-# while effects render, dim red while they are toggled off. The colors follow
-# the output-mode rules above, where green is on and dark red is off.
-
-[[lighting.conditional_scene]]
-key = [2, 3]
-color = "#008000"
-layer = { layer = 2, active = true }
-effects = { enabled = true }
-
-[[lighting.conditional_scene]]
-key = [2, 3]
-color = "#800000"
-layer = { layer = 2, active = true }
-effects = { enabled = false }
-
-# Connection indicator on the left thumb cluster while Magic is held.
-# One color per state on every slot key (later rules win): white = empty,
-# red = paired but idle, blue = selected or connected-but-idle, blinking white
-# = advertising, and green = carrying typing. Green means "keystrokes go here"
-# everywhere, so a connected slot only turns green once BLE is the active
-# transport — otherwise it stays blue like a plugged-but-idle USB key. The USB key (LED 0, Esc position): red = unplugged, blue =
-# plugged but typing elsewhere, green = carrying typing. Slot keys are the
-# lower arc: LED 3 = slot 1, LED 4 = slot 2, LED 5 = slot 3.
-
-[[lighting.conditional_scene]]
-key = [3, 6]
-color = "#2a2a2a"
-layer = { layer = 2, active = true }
-connection = { bonded = { slot = 0, bonded = false } }
-
-[[lighting.conditional_scene]]
-key = [3, 6]
-color = "#b00000"
-layer = { layer = 2, active = true }
-connection = { bonded = { slot = 0, bonded = true } }
-
-[[lighting.conditional_scene]]
-key = [3, 6]
-color = "#0050ff"
-layer = { layer = 2, active = true }
-connection = { profile = 0, ble_state = "inactive" }
-
-[[lighting.conditional_scene]]
-key = [3, 6]
-color = "#ffffff"
-effect = "blink"
-period_ms = 800
-phase_ms = 0
-duty = 50
-layer = { layer = 2, active = true }
-connection = { profile = 0, ble_state = "advertising" }
-
-[[lighting.conditional_scene]]
-key = [3, 6]
-color = "#0050ff"
-layer = { layer = 2, active = true }
-connection = { profile = 0, ble_state = "connected" }
-
-[[lighting.conditional_scene]]
-key = [3, 6]
-color = "#00c020"
-layer = { layer = 2, active = true }
-connection = { profile = 0, ble_state = "connected", transport = "ble" }
-
-[[lighting.conditional_scene]]
-key = [4, 6]
-color = "#2a2a2a"
-layer = { layer = 2, active = true }
-connection = { bonded = { slot = 1, bonded = false } }
-
-[[lighting.conditional_scene]]
-key = [4, 6]
-color = "#b00000"
-layer = { layer = 2, active = true }
-connection = { bonded = { slot = 1, bonded = true } }
-
-[[lighting.conditional_scene]]
-key = [4, 6]
-color = "#0050ff"
-layer = { layer = 2, active = true }
-connection = { profile = 1, ble_state = "inactive" }
-
-[[lighting.conditional_scene]]
-key = [4, 6]
-color = "#ffffff"
-effect = "blink"
-period_ms = 800
-phase_ms = 0
-duty = 50
-layer = { layer = 2, active = true }
-connection = { profile = 1, ble_state = "advertising" }
-
-[[lighting.conditional_scene]]
-key = [4, 6]
-color = "#0050ff"
-layer = { layer = 2, active = true }
-connection = { profile = 1, ble_state = "connected" }
-
-[[lighting.conditional_scene]]
-key = [4, 6]
-color = "#00c020"
-layer = { layer = 2, active = true }
-connection = { profile = 1, ble_state = "connected", transport = "ble" }
-
-[[lighting.conditional_scene]]
-key = [5, 6]
-color = "#2a2a2a"
-layer = { layer = 2, active = true }
-connection = { bonded = { slot = 2, bonded = false } }
-
-[[lighting.conditional_scene]]
-key = [5, 6]
-color = "#b00000"
-layer = { layer = 2, active = true }
-connection = { bonded = { slot = 2, bonded = true } }
-
-[[lighting.conditional_scene]]
-key = [5, 6]
-color = "#0050ff"
-layer = { layer = 2, active = true }
-connection = { profile = 2, ble_state = "inactive" }
-
-[[lighting.conditional_scene]]
-key = [5, 6]
-color = "#ffffff"
-effect = "blink"
-period_ms = 800
-phase_ms = 0
-duty = 50
-layer = { layer = 2, active = true }
-connection = { profile = 2, ble_state = "advertising" }
-
-[[lighting.conditional_scene]]
-key = [5, 6]
-color = "#0050ff"
-layer = { layer = 2, active = true }
-connection = { profile = 2, ble_state = "connected" }
-
-[[lighting.conditional_scene]]
-key = [5, 6]
-color = "#00c020"
-layer = { layer = 2, active = true }
-connection = { profile = 2, ble_state = "connected", transport = "ble" }
-
-[[lighting.conditional_scene]]
-key = [0, 6]
-color = "#b00000"
-layer = { layer = 2, active = true }
-connection = { usb_connected = false }
-
-[[lighting.conditional_scene]]
-key = [0, 6]
-color = "#0050ff"
-layer = { layer = 2, active = true }
-connection = { usb_connected = true }
-
-[[lighting.conditional_scene]]
-key = [0, 6]
-color = "#00c020"
-layer = { layer = 2, active = true }
-connection = { transport = "usb" }
+# The output-mode, effects, connection-slot, and USB-key indicators live
+# beside their [[layer.bind]] entries in the Magic layer section above.
