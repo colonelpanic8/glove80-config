@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Flash a Glove80 half headlessly with automatic crash-loop recovery.
+# Flash a Go60 half headlessly with automatic crash-loop recovery.
 #
-#   glove80-safe-flash <image.uf2> [--recover <known-good.uf2>] [--peripheral]
-#                      [--watch-seconds N] [--no-watch]
+#   go60-safe-flash <image.uf2> [--recover <known-good.uf2>] [--peripheral]
+#                   [--watch-seconds N] [--no-watch]
 #
 # Enters the UF2 bootloader over the Rynk USB protocol (retrying into the
 # short enumeration windows of a crash-looping half), waits for the
@@ -49,7 +49,7 @@ while [ $# -gt 0 ]; do
     *) image=$1; shift ;;
   esac
 done
-[ -n "$image" ] && [ -f "$image" ] || { echo "usage: glove80-safe-flash <image.uf2> [--recover <uf2>] [--peripheral]" >&2; exit 4; }
+[ -n "$image" ] && [ -f "$image" ] || { echo "usage: go60-safe-flash <image.uf2> [--recover <uf2>] [--peripheral]" >&2; exit 4; }
 [ -z "$recover" ] || [ -f "$recover" ] || { echo "recovery image not found: $recover" >&2; exit 4; }
 
 vol=$LH_VOL; [ -n "$peripheral" ] && vol=$RH_VOL

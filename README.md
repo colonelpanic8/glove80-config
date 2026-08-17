@@ -194,6 +194,14 @@ halves and falls back to BLE between halves when the cable is absent. Host
 communication remains independently selectable between USB and BLE. Hardware
 qualification is still required.
 
+The product repository's stock Go60 configuration is canonical for hardware,
+runtime capacities, event queues, storage, split transport, and lighting
+topology. `just go60-firmware` first verifies that the personal compiled
+defaults differ only in bindings and their named Magic wake-layer index. After
+building, it compares the resulting platform-profile digest with a stock build
+from the same source. When that source has a profile-aware GitHub release, the
+locally reproduced stock UF2 hashes must also match the published bundle.
+
 The build embeds three independently checkable Git identities in the Rynk
 firmware label: this configuration repository's commit, the pinned
 `moergo-rmk` commit and board-crate semver, and the pinned RMK submodule's full

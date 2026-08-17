@@ -9,6 +9,10 @@
   `config/glove80.toml` with `config/firmware.toml`, and `config/go60.toml`
   with `config/go60-firmware.toml`. When a shared feature changes either pair,
   check whether the other pair needs the equivalent setting.
+- The pinned product repository's Go60 configuration is canonical for every
+  compiled setting except personal default bindings. `just go60-profile-check`
+  must accept `config/go60-firmware.toml`; do not bypass that check when adding
+  a personal default.
 - Use `./bin/moergo-control` for new documentation and automation.
   `./bin/glove80-control` is a compatibility shim.
 - Run both configuration validations for shared model changes and build both

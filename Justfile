@@ -23,6 +23,10 @@ glove80-check:
 go60-check:
     {{ control }} config validate {{ go60_config }}
 
+go60-profile-check:
+    config_path="$(pwd)/{{ go60_firmware_config }}"; \
+        bash -c 'cd {{ firmware_repo }} && nix develop path:. --command cargo run --quiet -p xtask -- verify-config-profile crates/go60-rmk/keyboard.toml "'"$config_path"'"'
+
 apply:
     {{ control }} config apply {{ glove80_config }}
 
@@ -67,7 +71,7 @@ firmware:
         MOERGO_CONFIG_GIT_DIRTY="$config_dirty" \
             bash -c 'cd {{ firmware_repo }} && nix develop path:. --command just dist'
 
-go60-firmware:
+go60-firmware: go60-profile-check
     config_dirty=false; \
         if test -n "$(git status --porcelain --untracked-files=normal)"; then \
             config_dirty=true; \
@@ -77,6 +81,7 @@ go60-firmware:
         MOERGO_CONFIG_GIT_COMMIT="$(git rev-parse HEAD)" \
         MOERGO_CONFIG_GIT_DIRTY="$config_dirty" \
             bash -c 'cd {{ firmware_repo }} && nix develop path:. --command just go60-firmware'
+    nix develop path:./{{ firmware_repo }} --command ./bin/go60-firmware-reference-check
 
 firmware-all: firmware go60-firmware
 

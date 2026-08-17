@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="$(readlink -f "$0")"
+REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+PRODUCT_ROOT="$REPO_ROOT/dependencies/moergo-rmk"
+PERSONAL_MANIFEST="$PRODUCT_ROOT/dist/go60/manifest.json"
+RELEASES_URL="https://api.github.com/repos/colonelpanic8/moergo-rmk/releases?per_page=100"
+
+[ -f "$PERSONAL_MANIFEST" ] || {
+  echo "personal Go60 manifest not found: $PERSONAL_MANIFEST" >&2
+  exit 1
+}
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+stock_dir="$tmpdir/stock"
+
+(
+  cd "$PRODUCT_ROOT"
+  env \
+    -u KEYBOARD_TOML_PATH \
+    -u MOERGO_CONFIG_GIT_COMMIT \
+    -u MOERGO_CONFIG_GIT_DIRTY \
+    -u GO60_CONFIG_GIT_COMMIT \
+    -u GO60_CONFIG_GIT_DIRTY \
+    MOERGO_DIST_DIR="$stock_dir" \
+    just go60-firmware
+)
+
+STOCK_MANIFEST="$stock_dir/manifest.json"
+
+compare_json() {
+  local label=$1 query=$2 left=$3 right=$4
+  local left_value right_value
+  left_value="$(jq -ecS "$query" "$left")"
+  right_value="$(jq -ecS "$query" "$right")"
+  if [ "$left_value" != "$right_value" ]; then
+    echo "$label mismatch" >&2
+    echo "  $left: $left_value" >&2
+    echo "  $right: $right_value" >&2
+    return 1
+  fi
+}
+
+compare_platform() {
+  local configured=$1 stock=$2
+  compare_json "source commit" '.source.commit' "$configured" "$stock"
+  compare_json "RMK commit" '.rmk.commit' "$configured" "$stock"
+  compare_json "RMK identity" '.rmk.version' "$configured" "$stock"
+  compare_json "Rust toolchain" '.rustToolchain' "$configured" "$stock"
+  compare_json "platform profile" '.configurationHashes.platformProfile' "$configured" "$stock"
+  compare_json "application range" '.applicationRange' "$configured" "$stock"
+  compare_json "UF2 families" '[.artifacts[] | {half, target, familyId: .uf2.familyId}] | sort_by(.half)' "$configured" "$stock"
+}
+
+compare_platform "$PERSONAL_MANIFEST" "$STOCK_MANIFEST"
+source_commit="$(jq -er '.source.commit' "$STOCK_MANIFEST")"
+
+release_url=""
+if releases_json="$(curl -fsSL "$RELEASES_URL" 2>/dev/null)"; then
+  release_url="$(
+    jq -r --arg commit "$source_commit" \
+      '[.[] | select(.target_commitish == $commit) | .assets[] | select(.name == "go60-rmk.zip") | .browser_download_url][0] // empty' \
+      <<<"$releases_json"
+  )"
+fi
+
+if [ -z "$release_url" ]; then
+  echo "Go60 reference: locally built stock firmware (no matching published release for $source_commit)"
+  echo "platform profile: $(jq -r '.configurationHashes.platformProfile' "$STOCK_MANIFEST")"
+  exit 0
+fi
+
+release_zip="$tmpdir/go60-rmk.zip"
+release_dir="$tmpdir/release"
+mkdir -p "$release_dir"
+curl -fsSL "$release_url" -o "$release_zip"
+unzip -q "$release_zip" -d "$release_dir"
+RELEASE_MANIFEST="$release_dir/manifest.json"
+
+if ! jq -e '.schemaVersion >= 2 and .configurationHashes.platformProfile' "$RELEASE_MANIFEST" >/dev/null; then
+  echo "Go60 reference: locally built stock firmware (matching release predates profile manifests)"
+  echo "platform profile: $(jq -r '.configurationHashes.platformProfile' "$STOCK_MANIFEST")"
+  exit 0
+fi
+
+compare_platform "$STOCK_MANIFEST" "$RELEASE_MANIFEST"
+compare_json "stock configuration" '.configurationHashes.canonical' "$STOCK_MANIFEST" "$RELEASE_MANIFEST"
+compare_json "stock UF2 hashes" '[.artifacts[] | {half, sha256: .uf2.sha256}] | sort_by(.half)' "$STOCK_MANIFEST" "$RELEASE_MANIFEST"
+
+echo "Go60 reference: published stock release $release_url"
+echo "platform profile: $(jq -r '.configurationHashes.platformProfile' "$STOCK_MANIFEST")"
+echo "published stock UF2 hashes reproduce locally"
