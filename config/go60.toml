@@ -134,6 +134,8 @@ mode = "scroll"
 [[pointing.device]]
 device_id = 1
 mode = "cursor"
+multiplier_x = 2
+multiplier_y = 2
 
 # On Lower the left pad becomes a media surface: vertical motion streams
 # keyboard-page Volume Up/Down (0x80/0x81), horizontal motion sends previous
@@ -170,15 +172,15 @@ mode = "press"
 layer = 6
 device_id = 1
 mode = "cursor"
-multiplier_x = 6
-multiplier_y = 6
+multiplier_x = 8
+multiplier_y = 8
 
 [[pointing.override]]
 layer = 7
 device_id = 1
 mode = "cursor"
-multiplier_x = 2
-multiplier_y = 2
+multiplier_x = 3
+multiplier_y = 3
 
 [lighting]
 brightness = 255
