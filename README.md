@@ -9,13 +9,14 @@ control entry point use MoErgo names, reflecting that both boards are
 first-class targets. See [Repository naming](docs/repository-rename.md) for
 the migration and compatibility policy.
 
-Personal keymap and lighting policy live in this repository. Firmware hardware
-support, reusable lighting/protocol machinery, the multi-board control CLI,
-and release packaging live in the pinned `dependencies/moergo-rmk` submodule.
-The firmware
-build injects [`config/firmware.toml`](config/firmware.toml) through RMK's
-external keyboard-configuration path; `moergo-rmk` contains no personal
-lighting rules.
+Personal keymap and lighting policy live in the runtime TOMLs in this
+repository. Firmware hardware support, reusable lighting/protocol machinery,
+the multi-board control CLI, and release packaging live in the pinned
+`dependencies/moergo-rmk` submodule.
+The firmware build injects [`config/firmware.toml`](config/firmware.toml)
+through RMK's external keyboard-configuration path. Its compiled defaults stay
+stock apart from the Glove80's bilateral thumb metadata; personal state is
+restored with the runtime apply commands.
 
 ## Setup
 
@@ -76,8 +77,8 @@ comments.
 Each `[[layer]]`'s `name` is persistent firmware state, not a file-local
 label: `just diff` reports a name the keyboard disagrees with, `just apply`
 writes it, and `just pull` records a rename made in Rynkbench or elsewhere.
-Names are at most 32 UTF-8 bytes. `config/firmware.toml` carries the same
-names as compiled defaults for a fresh or reset keyboard.
+Names are at most 32 UTF-8 bytes. A fresh or reset keyboard starts with stock
+compiled names; `just apply` restores the names declared here.
 
 To read or set one without a whole configuration file:
 
@@ -207,9 +208,9 @@ Build release firmware from the exact pinned product stack with:
 just firmware
 ```
 
-Artifacts are written under `dependencies/moergo-rmk/dist/`. The firmware's
-compiled defaults currently match this keymap, while this repository remains
-the editable source of truth for subsequent runtime changes.
+Artifacts are written under `dependencies/moergo-rmk/dist/`. Compiled defaults
+remain stock. After erased persistent storage, run `just apply` to restore the
+personal Glove80 runtime configuration.
 
 The compact counterpart for the Go60 RMK port lives in
 [`config/go60-firmware.toml`](config/go60-firmware.toml). Build both Go60
@@ -225,13 +226,14 @@ halves and falls back to BLE between halves when the cable is absent. Host
 communication remains independently selectable between USB and BLE. Hardware
 qualification is still required.
 
-The product repository's stock Go60 configuration is canonical for hardware,
-runtime capacities, event queues, storage, split transport, and lighting
-topology. `just go60-firmware` first verifies that the personal compiled
-defaults differ only in bindings and their named Magic wake-layer index. After
-building, it compares the resulting platform-profile digest with a stock build
-from the same source. When that source has a profile-aware GitHub release, the
-locally reproduced stock UF2 hashes must also match the published bundle.
+The product repository's stock Go60 configuration is canonical for every
+compiled setting. `just firmware-config-check` compares the outer firmware
+TOMLs semantically with their pinned stock files, allowing only the Glove80
+bilateral-thumb metadata. After building, the Go60 reference check compares the
+resulting platform profile with a stock build from the same source. When that
+source has a profile-aware GitHub release, the locally reproduced stock UF2
+hashes must also match the published bundle. After erased persistent storage,
+run `just go60-apply <device>` to restore the personal runtime configuration.
 
 The build embeds three independently checkable Git identities in the Rynk
 firmware label: this configuration repository's commit, the pinned

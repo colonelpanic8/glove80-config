@@ -5,14 +5,15 @@
 - Shared firmware behavior belongs in the nested repository's
   `crates/moergo-rmk`; board crates should contain only hardware-specific
   entry points and drivers.
-- Runtime and compiled defaults are paired per board:
-  `config/glove80.toml` with `config/firmware.toml`, and `config/go60.toml`
-  with `config/go60-firmware.toml`. When a shared feature changes either pair,
-  check whether the other pair needs the equivalent setting.
-- The pinned product repository's Go60 configuration is canonical for every
-  compiled setting except personal default bindings. `just go60-profile-check`
-  must accept `config/go60-firmware.toml`; do not bypass that check when adding
-  a personal default.
+- Runtime and compiled configuration are intentionally separate. Personal
+  bindings, layer names, behavior records, Bluetooth names, pointing policy,
+  and lighting policy belong only in `config/glove80.toml` and
+  `config/go60.toml`.
+- The pinned product repository's board configurations are canonical compiled
+  defaults. `config/go60-firmware.toml` must match its stock board file
+  semantically; `config/firmware.toml` may differ only by marking the twelve
+  Glove80 thumb keys bilateral for runtime `opposite_hand_hold` behavior. Run
+  `just firmware-config-check` and do not add personal compiled defaults.
 - Use `./bin/moergo-control` for new documentation and automation.
   `./bin/glove80-control` is a compatibility shim.
 - Run both configuration validations for shared model changes and build both
@@ -25,10 +26,10 @@
   the connected keyboard through `./bin/moergo-control` and verify them with
   the corresponding read command. Do not flash firmware just to deliver
   those changes.
-- Keep `config/glove80.toml`, `config/firmware.toml`, and the live keyboard
-  state aligned. `config/glove80.toml` uses Rynk/VIA keycode names, while
-  `config/firmware.toml` provides the equivalent compiled defaults for a
-  fresh or reset keyboard.
+- Keep each runtime TOML and the corresponding live keyboard state aligned.
+  The firmware TOMLs intentionally retain stock defaults; a fresh or reset
+  keyboard needs `just apply` or `just go60-apply <device>` to restore the
+  personal runtime configuration.
 - Use `just diff` before runtime mutations and `just apply` to write and verify
   the source TOML. Use `just show` for a read-only canonical export. `just
   pull` intentionally rewrites `config/glove80.toml` from live persistent
@@ -50,11 +51,9 @@
   `MOERGO_CONFIG_GIT_COMMIT` and `MOERGO_CONFIG_GIT_DIRTY` from this outer
   repository before invoking `cargo +1.97.0 run -p xtask -- dist` inside
   `dependencies/moergo-rmk`.
-- The crate-local `crates/glove80-rmk/keyboard.toml` is not an interchangeable
-  fallback for this keyboard. A UF2 built against it can pass host tests and
-  size checks yet watchdog-loop during hardware initialization. Treat a
-  firmware artifact built without the explicit outer TOML as invalid, even
-  when its source commit and RMK pin are otherwise correct.
+- Keep using the explicit outer Glove80 TOML: it carries the approved bilateral
+  thumb metadata and is covered by the source-parity check. Treat an artifact
+  built without that configuration and outer-repository provenance as invalid.
 - Compare the produced UF2 address ranges with the last known-good bundle
   before flashing. A surprising range change is a build-input warning, not
   proof of RAM exhaustion. Qualify the left/central half first and keep a

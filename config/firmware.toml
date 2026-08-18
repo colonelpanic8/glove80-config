@@ -28,31 +28,20 @@ ble_profiles_num = 4
 # skipped event (15 ms maximum interval) to retain some radio savings.
 split_central_max_latency_powered = 0
 split_central_max_latency_battery = 1
-# Room for an imported MoErgo layout's behavior tables. TailorKey lands at 59
-# morses and 20 combos once its per-finger home-row-mod layers collapse, and
-# every slot has to exist at compile time because a `TD(n)` keymap cell is only
-# runtime-editable within the compiled capacity.
+# Hardware-qualified capacity for imported MoErgo behavior tables. TailorKey
+# v5.2 Bilateral needs 59 morses and 20 combos, so 64/32 leaves useful runtime
+# headroom without inflating startup work.
 #
-# These values are an empirically established ceiling, not a computed one. 64/32
-# boots and is verified; 128/64 resets the board in a loop of exactly 10 s, which
-# is the nRF hardware watchdog's timeout. Do not raise them without flashing
-# through `bin/glove80-safe-flash --recover <known-good.uf2>`, which detects the
-# loop and rolls back on its own.
-#
-# What is known about the failure: the half enumerates within a second and then
-# resets at precisely the watchdog deadline, so the feeder never pets even once —
-# and RMK joins that feeder LAST, so any earlier task that fails to yield on its
-# first poll starves it outright. Something after the join therefore monopolizes
-# the executor for over 10 s, and its cost scales with these two numbers.
-#
-# What is NOT the cause, each having been proposed and disproven: static RAM
-# (255/255 fits with ~83 KB of stack to spare), the storage partition (auto-sized
-# to 128 KB, and the `[storage]` settings below are ignored under DFU), the
-# boot-time record read (now a single traversal that yields every 32 records),
-# and the boot-time storage rewrite (it completes before USB comes up, inside
-# that first second). The layer count is likewise innocent: 16 boots fine.
+# These are practical startup ceilings, not aspirational maxima. Builds with
+# larger behavior tables have enumerated and then reset at the nRF watchdog's
+# exact 10 s deadline because initialization failed to yield to the watchdog
+# feeder. Static RAM headroom and a successful build do not prove a larger
+# configuration will boot. Do not raise these values without a left-half
+# hardware canary and a known-good recovery UF2 ready.
 morse_max_num = 64
 combo_max_num = 32
+# The RMK default macro space (256 bytes) is sufficient for the imported short
+# macros, so it is intentionally not enlarged here.
 
 [layout]
 rows = 6
@@ -62,7 +51,7 @@ cols = 14
 # bottom two rows where the hand actually finds them. Key centres derived from
 # this walk are the only geometry the lighting engine has, so this arrangement
 # — not column adjacency in the matrix — is what "nearby" means to the spatial
-# effects (Reactive, Crosshair, Ripple, Rain, Vortex). Positions are transcribed in key
+# effects (Reactive, Ripple, Rain, Vortex). Positions are transcribed in key
 # units from the MoErgo ZMK board definition, glove80-layouts.dtsi.
 #
 # Written in the same order as the ZMK matrix transform in glove80.dtsi, which
@@ -102,8 +91,8 @@ thumb_5_7 = { x = 0.1854, y = 2.125, r = -60.0 }
 layers = 16
 # Ported from legacy glove80-config/config/glove80.keymap. Layers: 0 Base,
 # 1 Lower, 2 Magic,
-# 3 Games, 4 Mac Hyper, 5 Paseo. Layers 6-15 are unassigned editable capacity,
-# sized so an imported MoErgo layout fits without a reflash.
+# 3 Games, 4 Mac Hyper. Layers 5-15 are unassigned editable capacity, sized so
+# an imported editor layout fits without a rebuild.
 # Substitutions from the ZMK keymap:
 #   - &magic hold-tap        -> MO(2) plus board-local lighting wake/status
 #   - lower left thumb arc   -> User0..User2 (select the slot AND prefer
@@ -123,8 +112,8 @@ F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
 Equal Kc1 Kc2 Kc3 Kc4 Kc5 Kc6 Kc7 Kc8 Kc9 Kc0 Minus
 Tab Q W E R T Y U I O P Backslash
 LCtrl A S D F G H J K L LT(1, Semicolon) Quote
-LShift Z X C V B Escape TD(0) MO(2) LGui TG(4) Backspace N M Comma Dot Slash RShift
-Grave MO(1) MO(5) Left Right Backspace LGui LAlt RGui Enter Space Up Down LeftBracket RightBracket TG(3)
+LShift Z X C V B LT(1, Escape) Delete MO(2) LGui TG(4) Backspace N M Comma Dot Slash RShift
+Grave Home End Left Right Backspace LGui LAlt RGui Enter Space Up Down LeftBracket RightBracket TG(3)
 """
 
 [[keymap.layer]]
@@ -135,7 +124,7 @@ _ _ _ _ _ _ _ _ _ _ _ _
 _ WM(Equal, LShift) WM(Minus, LShift) WM(Kc9, LShift) WM(Kc0, LShift) _ _ _ _ _ _ _
 CapsLock WM(Kc1, LShift) WM(Kc2, LShift) WM(Kc3, LShift) WM(Kc4, LShift) WM(Kc5, LShift) WM(Kc6, LShift) WM(Kc7, LShift) WM(Kc8, LShift) WM(Kc9, LShift) WM(Kc0, LShift) _
 _ LeftBracket RightBracket WM(LeftBracket, LShift) WM(RightBracket, LShift) _ _ _ TO(0) _ _ _ _ _ _ _ _ _
-_ Home End MediaPrevTrack MediaNextTrack _ _ _ _ _ MediaPlayPause AudioVolUp AudioVolDown _ _ _
+_ _ _ MediaPrevTrack MediaNextTrack _ _ _ _ _ MediaPlayPause AudioVolUp AudioVolDown _ _ _
 """
 
 [[keymap.layer]]
@@ -143,10 +132,10 @@ name = "Magic"
 keys = """
 No No No No No No No No No No
 No No No No No No No No No No No No
-No No BacklightUp RgbTog MaintenanceModeToggle OutputModeCycle No No No No No No
-Bootloader No BacklightDown No No No No No No No No User12
-Reboot No No RgbHui No No OutputUsb No No No No No No No No No No Reboot
-No No No RgbModeReverse RgbModeForward User0 User1 User2 No No No No No No No TO(3)
+No No No No MaintenanceModeToggle No No No No No No No
+Bootloader OutputModeCycle BacklightDown BacklightUp No No No No No No No User12
+Reboot No RgbTog RgbModeForward RgbHui No OutputUsb No No No No No No No No No No Reboot
+No No No No No User0 User1 User2 No No No No No No No TO(3)
 """
 
 [[keymap.layer]]
@@ -172,30 +161,13 @@ _ _ _ _ _ _ _ _ _ _ TG(4) _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ MOD(LCtrl | LAlt | LGui) _ _ _ _ _ _ _
 """
 
-[[keymap.layer]]
-name = "Paseo"
-# F/O/S/L emit F13-F16; Q/M/H emit F17-F19.
-keys = """
-_ _ _ _ _ _ _ _ _ _
-_ _ _ _ _ _ _ _ _ _ _ _
-_ F17 _ _ _ _ _ _ _ F14 _ _
-_ _ F15 _ F13 _ F19 _ _ F16 _ _
-_ _ _ _ _ _ _ _ _ _ _ _ _ F18 _ _ _ _
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-"""
-
-# TD(0) is the Paseo thumb key: tap Delete, hold for layer 5. It is a
-# deliberate thumb hold rather than a rolled home row mod, so it commits
-# sooner than the 250 ms every other tap-hold on this board uses. Written as
-# a morse rather than `LT(5, Delete, ...)` so the runtime configuration in
-# config/glove80.toml can express the same key and retune it without a flash.
-[behavior.morse.profiles.paseo_layer]
-hold_timeout = "180ms"
-
-[[behavior.morse.morses]]
-profile = "paseo_layer"
-tap = "Delete"
-hold = "MO(5)"
+# Each half's Reactive-lighting key-hit processor subscribes in addition to
+# RMK's base consumers. Split and BLE feature additions are accounted for
+# separately by RMK's subscriber resolver.
+[event.keyboard]
+channel_size = 16
+pubs = 2
+subs = 4
 
 # The local lighting processor and the central semantic-replication task both
 # subscribe. Split and Rynk feature additions are accounted for separately by
@@ -224,16 +196,16 @@ channel_size = 3
 pubs = 2
 subs = 4
 
-# MagicKeyActions consumes the board-reserved User12 action and any legacy
-# user-number lighting actions a board elects to configure.
+# MagicKeyActions consumes the board-reserved User12 action and any lighting
+# control actions supplied by an external keyboard configuration.
 [event.action]
 channel_size = 16
 pubs = 1
 subs = 1
 
-# The information-lighting state tracks both halves' live battery reports, and
-# the semantic-replication task subscribes as well so battery changes reach the
-# peripheral as a context delta.
+# Board subscribers: the information-lighting state and the split lighting
+# replication task each track both halves' live battery reports. RMK adds
+# its own internal subscribers on top of these counts.
 [event.battery_status]
 channel_size = 2
 pubs = 1
@@ -253,7 +225,7 @@ num_sectors = 8
 
 [ble]
 enabled = true
-name = "WhiteG80 {slot}"
+name = "Glove80 {slot}"
 
 [host]
 vial_enabled = false
@@ -302,15 +274,6 @@ col_pins = ["P1_06", "P1_04", "P0_02", "P1_07", "P1_05", "P1_03", "P1_01"]
 [lighting]
 topology_revision = 1
 
-[lighting.controls]
-# Magic+T binds OutputModeCycle directly. Layer 2 temporarily wakes a dark
-# board without changing the selected policy; T reports the selected policy.
-wake_layers = [2]
-initial_output_mode = "powered_only"
-# In powered-only mode each half evaluates its own USB/VBUS input. This is
-# independent of whether USB or BLE is selected as the keyboard transport.
-powered_only_scope = "local"
-
 [[lighting.zone]]
 id = 1
 name = "per-key"
@@ -329,56 +292,13 @@ capabilities = ["rgb", "addressable"]
 
 [lighting.background]
 # Leave keys without an explicit layer, status, or host-overlay contribution
-# dark. The selected three-state output policy gates every lighting source.
+# dark. The master output toggle still gates every lighting source together.
 enabled = false
 hue = 0
 saturation = 0
 value = 0
 speed = 128
 mode = "solid"
-
-# Magic replaces PaletteFX with a dark information view. The all-LED black
-# floor hides the extension effect; later cells restore the keys that expose
-# Magic controls. Battery and output-mode indicators compose above this layer.
-[[lighting.layer_scene]]
-layer = 2
-
-[[lighting.layer_scene.cell]]
-target = { all = true }
-effect = { kind = "solid", color = [0, 0, 0] }
-
-# E: PaletteFX on/off.
-[[lighting.layer_scene.cell]]
-target = { key = [2, 3] }
-effect = { kind = "solid", color = [0, 192, 64] }
-
-# W/S: brightness up/down, shown in yellow.
-[[lighting.layer_scene.cell]]
-target = { key = [2, 2] }
-effect = { kind = "solid", color = [255, 255, 0] }
-
-[[lighting.layer_scene.cell]]
-target = { key = [3, 2] }
-effect = { kind = "solid", color = [255, 255, 0] }
-
-# Left/right arrows: previous/next PaletteFX effect.
-[[lighting.layer_scene.cell]]
-target = { key = [5, 3] }
-effect = { kind = "solid", color = [255, 255, 255] }
-
-[[lighting.layer_scene.cell]]
-target = { key = [5, 4] }
-effect = { kind = "solid", color = [255, 255, 255] }
-
-# C: next PaletteFX palette, shown in magenta.
-[[lighting.layer_scene.cell]]
-target = { key = [4, 3] }
-effect = { kind = "solid", color = [255, 0, 255] }
-
-# F2 is this layer's active-layer indicator, matching F1/F3/F4/F5 on the others.
-[[lighting.layer_scene.cell]]
-target = { key = [0, 1] }
-effect = { kind = "solid", color = [0, 0, 255] }
 
 [[lighting.emitter]]
 id = 0
@@ -1020,31 +940,25 @@ node = 1
 output = 0
 physical_index = 39
 
-# Immutable status rules. These are compiled from configuration, evaluated
-# against live state on both halves, and exposed read-only over Rynk.
-
-# F1-F5 report non-default layers 1-5 in blue while active. Inactive layers
-# contribute no indicator light; layer 0 needs none because it is always active.
-
-# Magic+T reports the selected three-state lighting policy only while the Magic
-# layer is active. Persisted runtime rules use the same predicates and effects.
+# Magic+A reports the selected three-state lighting policy only while the Magic
+# layer is active. Persisted runtime rules may override these compiled defaults.
 [[lighting.conditional_scene]]
 layer = { layer = 2, active = true }
 output_mode = "always_on"
 [[lighting.conditional_scene.cell]]
-target = { key = [2, 5] }
+target = { led = 31 }
 effect = { kind = "solid", color = [0, 128, 0] }
 
 [[lighting.conditional_scene]]
 layer = { layer = 2, active = true }
 output_mode = "always_off"
 [[lighting.conditional_scene.cell]]
-target = { key = [2, 5] }
+target = { led = 31 }
 effect = { kind = "solid", color = [128, 0, 0] }
 
 [[lighting.conditional_scene]]
 layer = { layer = 2, active = true }
 output_mode = "powered_only"
 [[lighting.conditional_scene.cell]]
-target = { key = [2, 5] }
+target = { led = 31 }
 effect = { kind = "solid", color = [0, 64, 160] }

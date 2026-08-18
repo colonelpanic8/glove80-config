@@ -10,7 +10,7 @@ go60_firmware_config := "config/go60-firmware.toml"
 init:
     git submodule update --init --recursive
 
-check:
+check: firmware-config-check
     {{ control }} config validate {{ glove80_config }}
     {{ control }} config validate {{ go60_config }}
 
@@ -23,9 +23,15 @@ glove80-check:
 go60-check:
     {{ control }} config validate {{ go60_config }}
 
-go60-profile-check:
+firmware-config-check:
+    config_path="$(pwd)/{{ glove80_firmware_config }}"; \
+        bash -c 'cd {{ firmware_repo }} && nix develop path:. --command cargo run --quiet -p xtask -- verify-stock-config crates/glove80-rmk/keyboard.toml "'"$config_path"'" --allow-bilateral-thumbs'
     config_path="$(pwd)/{{ go60_firmware_config }}"; \
-        bash -c 'cd {{ firmware_repo }} && nix develop path:. --command cargo run --quiet -p xtask -- verify-config-profile crates/go60-rmk/keyboard.toml "'"$config_path"'"'
+        bash -c 'cd {{ firmware_repo }} && nix develop path:. --command cargo run --quiet -p xtask -- verify-stock-config crates/go60-rmk/keyboard.toml "'"$config_path"'"'
+
+glove80-profile-check: firmware-config-check
+
+go60-profile-check: firmware-config-check
 
 apply:
     {{ control }} config apply {{ glove80_config }}
@@ -60,7 +66,7 @@ usage:
 layout *args:
     nix develop ./{{ firmware_repo }} --command cargo run --quiet --bin moergo-layout -- {{ args }}
 
-firmware:
+firmware: firmware-config-check
     config_dirty=false; \
         if test -n "$(git status --porcelain --untracked-files=normal)"; then \
             config_dirty=true; \
@@ -71,7 +77,7 @@ firmware:
         MOERGO_CONFIG_GIT_DIRTY="$config_dirty" \
             bash -c 'cd {{ firmware_repo }} && nix develop path:. --command just dist'
 
-go60-firmware: go60-profile-check
+go60-firmware: firmware-config-check
     config_dirty=false; \
         if test -n "$(git status --porcelain --untracked-files=normal)"; then \
             config_dirty=true; \

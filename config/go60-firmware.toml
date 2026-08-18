@@ -1,11 +1,10 @@
-# Ivan's MoErgo Go60 RMK configuration.
+# MoErgo Go60 experimental RMK configuration.
 #
 # Matrix, pin, flash, LED, and USB facts are transcribed from the official
-# moergo-sc/zmk Go60 board definitions in the pinned go60-rmk crate. The
-# personal keymap below is the compact counterpart of config/firmware.toml.
-# This image prefers the board's RS-422-backed TRRS link between halves and
-# falls back to BLE when the cable is absent. The Cirque trackpads are wired
-# in src/trackpad.rs, outside this file.
+# moergo-sc/zmk Go60 board definitions. This image prefers the board's
+# RS-422-backed TRRS link between halves and falls back to BLE when the cable
+# is absent. The Cirque trackpads are wired in src/trackpad.rs, outside this
+# file.
 
 [keyboard]
 name = "Go60"
@@ -66,94 +65,60 @@ thumb_3 = { x = -2.0, y = -0.75 }
 [keymap]
 layers = 16
 
-# The four full Go60 rows correspond to the Glove80 number, top-letter,
-# home, and bottom-letter rows. The six lower thumb keys carry over in their
-# physical order. The Glove80 function row, upper thumb row, and the two outer
-# keys on each half's bottom finger row do not exist here.
-#
-# The displaced high-value bindings are folded onto nearby keys:
-# - the former left/right arrow keys are Magic and Escape
-# - the key next to Space is Delete on tap and Paseo on hold
-# - Lower+right GUI: toggle Mac Hyper; Mac Hyper+left GUI exits it
-# - Lower+right Shift: toggle Games; right Shift exits Games while active
-# - Lower+Minus: toggle Lower durably
-#
-# Lower carries arrows on WASD plus media controls. Home and the right bracket
-# remain on Lower.
-
 [[keymap.layer]]
 name = "Base"
 keys = """
 Equal Kc1 Kc2 Kc3 Kc4 Kc5 Kc6 Kc7 Kc8 Kc9 Kc0 Minus
 Tab Q W E R T Y U I O P Backslash
-LCtrl A S D F G H J K L LT(1, Semicolon) Quote
-LShift Z X C V B N M Comma Dot Slash RShift
-End MO(2) Escape TD(0) Grave LeftBracket
-Backspace LGui LAlt RGui Enter Space
+Escape A S D F G H J K L Semicolon Quote
+MO(3) Z X C V B N M Comma Dot Slash TG(1)
+Grave Delete Backspace LGui LeftBracket RightBracket
+MO(2) LShift LCtrl LAlt Space MT(Enter, RAlt)
 """
 
 [[keymap.layer]]
-name = "Lower"
+name = "Keypad"
 keys = """
-F1 F2 F3 F4 F5 _ _ F6 F7 F8 F9 TG(1)
-_ _ Up _ _ _ _ _ _ MediaPrevTrack MediaNextTrack _
-CapsLock Left Down Right _ _ _ _ _ _ _ _
-_ _ _ _ _ _ Home _ _ _ _ TG(3)
-_ _ _ AudioVolUp AudioVolDown RightBracket
-_ _ _ TG(4) _ _
+_ _ _ _ _ _ _ _ _ _ _ _
+_ _ _ _ _ _ _ _ _ _ _ _
+_ _ _ _ _ _ _ _ _ _ _ _
+_ _ _ _ _ _ _ _ _ _ _ _
+_ _ _ _ _ _
+_ _ _ _ _ _
+"""
+
+[[keymap.layer]]
+name = "Symbol Nav"
+keys = """
+_ _ _ _ _ _ _ _ _ _ _ _
+_ _ _ _ _ _ _ _ _ _ _ _
+_ _ _ _ _ _ _ _ _ _ _ _
+_ _ _ _ _ _ _ _ _ _ _ _
+_ _ _ _ _ _
+_ _ _ _ _ _
 """
 
 [[keymap.layer]]
 name = "Magic"
 keys = """
-No No No No No User2 No No No No No No
-No No BacklightUp RgbTog MaintenanceModeToggle OutputModeCycle No No No No No No
-Bootloader RgbModeReverse BacklightDown RgbModeForward No No No No No No No User12
-Reboot No No RgbHui No User13 No No No No No Reboot
-No No OutputUsb No No No
-User0 User1 User2 No No No
+User10 No No No No No No No No No No User11
+Bootloader OutputModeCycle BacklightDown BacklightUp No RgbTog No No No No No User12
+Reboot No No No No No No No No No No No
+No No No No No No No No No No No No
+No No No No No No
+No No No No No TO(0)
 """
 
 [[keymap.layer]]
-name = "Games"
-keys = """
-_ _ _ _ _ _ _ _ _ _ _ _
-_ _ W _ _ _ _ _ _ _ _ _
-_ A S D _ _ _ _ _ _ _ _
-_ _ _ _ _ _ _ _ _ _ _ TG(3)
-_ _ _ _ _ _
-Space _ _ _ _ _
-"""
-
-[[keymap.layer]]
-name = "Mac Hyper"
+name = "Factory"
 keys = """
 _ _ _ _ _ _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ _ _ _ _
 _ _ _ _ _ _ _ _ _ _ _ _
 _ _ _ _ _ _
-_ TG(4) _ MOD(LCtrl | LAlt | LGui) _ _
-"""
-
-[[keymap.layer]]
-name = "Paseo"
-keys = """
-_ _ _ _ _ _ _ _ _ _ _ _
-_ F17 _ _ _ _ _ _ _ F14 _ _
-_ _ F15 _ F13 _ F19 _ _ F16 _ _
-_ _ _ _ _ _ _ F18 _ _ _ _
-_ _ _ _ _ _
 _ _ _ _ _ _
 """
-
-[behavior.morse.profiles.paseo_layer]
-hold_timeout = "180ms"
-
-[[behavior.morse.morses]]
-profile = "paseo_layer"
-tap = "Delete"
-hold = "MO(5)"
 
 [event.keyboard]
 channel_size = 16
@@ -247,9 +212,7 @@ col_pins = ["P0_14", "P0_13", "P0_16", "P0_15", "P0_17", "P0_20", "P0_24"]
 topology_revision = 1
 
 [lighting.controls]
-# Holding Magic temporarily wakes lighting so the layer's controls and status
-# remain visible even when the selected output policy would leave the board dark.
-wake_layers = [2]
+wake_layers = [3]
 
 [[lighting.zone]]
 id = 1

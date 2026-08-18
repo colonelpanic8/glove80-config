@@ -1,10 +1,11 @@
 # Lighting model
 
-The firmware owns the physical lighting topology; the runtime configuration
-owns the durable policy. `config/firmware.toml` declares keys, LED emitters,
-geometry, zones, outputs, and boot defaults. `config/glove80.toml` declares the
-editable layer scenes, conditional indicators, brightness, output policy, and
-PaletteFX settings applied through Rynk.
+The firmware owns the physical lighting topology and stock boot defaults; the
+runtime configuration owns the durable personal policy. `config/firmware.toml`
+declares stock keys, LED emitters, geometry, zones, and outputs.
+`config/glove80.toml` declares the personal keymap, editable layer scenes,
+conditional indicators, brightness, output policy, and PaletteFX settings
+applied through Rynk.
 
 ## From a key selector to an LED
 

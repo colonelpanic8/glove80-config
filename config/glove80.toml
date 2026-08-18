@@ -2,9 +2,8 @@
 bluetooth_name = "WhiteG80 {slot}"
 default_layer = 0
 #
-# This matches the compiled-in layers in
-# dependencies/moergo-rmk/crates/glove80-rmk/keyboard.toml and is applied
-# at runtime through RMK's native Rynk protocol:
+# This personal state is intentionally separate from the stock compiled
+# defaults and is applied at runtime through RMK's native Rynk protocol:
 #
 #   just check
 #   just diff
@@ -14,8 +13,8 @@ default_layer = 0
 #
 # Keymap model:
 # - A [[layer]]'s position in this file is its firmware layer slot (0-7).
-# - `id` and `name` are host-side labels. The firmware stores neither; pull
-#   preserves existing labels when possible and otherwise synthesizes them.
+# - `id` is a source label; `name` is persistent firmware state restored by
+#   apply. Pull preserves existing IDs when possible.
 # - `keys` is the 6x14 grid, row-major, whitespace-separated, one row per
 #   line. Tokens are the same QMK-style names `keymap read`/`keymap set`
 #   use (see `keymap find`); `--` is an unbound key (KC_NO) and marks the
