@@ -123,7 +123,7 @@ F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
 Equal Kc1 Kc2 Kc3 Kc4 Kc5 Kc6 Kc7 Kc8 Kc9 Kc0 Minus
 Tab Q W E R T Y U I O P Backslash
 LCtrl A S D F G H J K L LT(1, Semicolon) Quote
-LShift Z X C V B LT(1, Escape) TD(0) MO(2) LGui TG(4) Backspace N M Comma Dot Slash RShift
+LShift Z X C V B Escape TD(0) MO(2) LGui TG(4) Backspace N M Comma Dot Slash RShift
 Grave MO(1) MO(5) Left Right Backspace LGui LAlt RGui Enter Space Up Down LeftBracket RightBracket TG(3)
 """
 
