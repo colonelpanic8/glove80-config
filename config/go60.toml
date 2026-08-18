@@ -353,7 +353,7 @@ speed = 128
 mode = "solid"
 
 [lighting.effects]
-effect = "Crosshair"
+effect = "Reactive"
 palette = "Polarized"
 value = 255
 speed = 32
