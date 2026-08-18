@@ -8,10 +8,10 @@ name = "Base"
 keys = """
 
 KC_EQL KC_1 KC_2 KC_3 KC_4 KC_5 KC_BSPC KC_SPC KC_6 KC_7 KC_8 KC_9 KC_0 KC_MINS
-KC_TAB KC_Q KC_W KC_E KC_R KC_T KC_LGUI KC_ENT KC_Y KC_U KC_I KC_O KC_P KC_BSLS
-LM(7,MOD_LCTL) KC_A KC_S KC_D KC_F KC_G KC_LALT LM(7,MOD_RGUI) KC_H KC_J KC_K KC_L LT(1,KC_SCLN) KC_QUOT
+LT(7,KC_TAB) KC_Q KC_W KC_E KC_R KC_T KC_LGUI KC_ENT KC_Y KC_U KC_I KC_O KC_P KC_BSLS
+LM(6,MOD_LCTL) KC_A KC_S KC_D KC_F KC_G KC_LALT LM(6,MOD_RGUI) KC_H KC_J KC_K KC_L LT(1,KC_SCLN) KC_QUOT
 KC_LSFT KC_Z KC_X KC_C KC_V KC_B -- -- KC_N KC_M KC_COMM KC_DOT KC_SLSH KC_RSFT
--- -- KC_GRV MO(2) KC_ESC -- -- -- -- TD(0) MO(6) KC_LBRC -- --
+-- -- KC_GRV MO(2) KC_ESC -- -- -- -- TD(0) KC_NO KC_LBRC -- --
 """
 
 # F-keys sit on the number they are named after: F1 on 1 through F10 on 0.
@@ -65,7 +65,7 @@ keys = """
 
 KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
 KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS TG(4) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
-KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS LM(7,MOD_LCTL|MOD_LALT|MOD_LGUI) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
+KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS LM(6,MOD_LCTL|MOD_LALT|MOD_LGUI) KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
 KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
 -- -- KC_TRNS KC_TRNS KC_TRNS -- -- -- -- KC_TRNS KC_TRNS KC_TRNS -- --
 """
@@ -82,26 +82,19 @@ KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- -- KC_TRNS KC_F18 KC_TRNS KC_
 -- -- KC_TRNS KC_TRNS KC_TRNS -- -- -- -- KC_TRNS KC_TRNS KC_TRNS -- --
 """
 
-# Held from the key between Paseo and [ on the right fifth row. The right
-# pad's cursor runs boosted while held; the layer is otherwise transparent.
+# Held from the hyper key (right GUI position; also Mac-mode Hyper) or the
+# left Control key (caps lock position) via LM(6, ...): the modifier works
+# as usual but the right pad's cursor runs at 6x its normal sensitivity while
+# it's down.
 [[layer]]
 id = "layer6"
-name = "Mouse Boost"
-keys = """
+name = "Pointer Zoom"
 
-KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
-KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
-KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
-KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS -- -- KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS KC_TRNS
--- -- KC_TRNS KC_TRNS KC_TRNS -- -- -- -- KC_TRNS KC_TRNS KC_TRNS -- --
-"""
-
-# Held from the hyper key (right GUI position; also Mac-mode Hyper) or the
-# left Control key (caps lock position) via LM(7, ...): the modifier works
-# as usual but the right pad's cursor runs boosted while it's down.
+# Tap Tab normally; hold it to make ordinary primary taps on the right pad
+# emit the secondary mouse button.
 [[layer]]
 id = "layer7"
-name = "Pointer Zoom"
+name = "Right Click"
 
 [[morse]]
 name = "morse 0"
@@ -172,15 +165,16 @@ mode = "press"
 layer = 6
 device_id = 1
 mode = "cursor"
-multiplier_x = 8
-multiplier_y = 8
+multiplier_x = 12
+multiplier_y = 12
 
 [[pointing.override]]
 layer = 7
 device_id = 1
 mode = "cursor"
-multiplier_x = 3
-multiplier_y = 3
+multiplier_x = 2
+multiplier_y = 2
+primary_button = 2
 
 [lighting]
 brightness = 255
