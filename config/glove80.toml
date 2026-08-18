@@ -96,6 +96,28 @@ name = "Magic"
 all = true
 action = "KC_NO"
 
+# F1-F5 — the same keys whose LEDs indicate layers 1-5 — latch those
+# layers on/off.
+[[layer.key]]
+key = [0, 0]
+action = "TG(1)"
+
+[[layer.key]]
+key = [0, 1]
+action = "TG(2)"
+
+[[layer.key]]
+key = [0, 2]
+action = "TG(3)"
+
+[[layer.key]]
+key = [0, 3]
+action = "TG(4)"
+
+[[layer.key]]
+key = [0, 4]
+action = "TG(5)"
+
 [[layer.key]]
 key = [0, 6]  # upper Esc-position thumb key: move typing to USB
 action = "QK_OUTPUT_USB"
