@@ -578,11 +578,18 @@ mode = "solid"
 
 # Rynk's generic lighting-extension state. Names come from the connected
 # firmware's extension descriptor; PaletteFX is the current provider.
+#
+# This is the tuned Crosshair/Amber setup the firmware also compiles in as its
+# boot default (`DEFAULT_EFFECT*` in `crates/moergo-rmk/src/lighting.rs`), so a
+# board that has never persisted a selection and a board that has just had this
+# profile applied look the same. Amber is what makes the cross warm; the
+# per-effect `Arm hue` and `Key hue` below are indices into whichever palette
+# is selected, not absolute colors.
 [lighting.effects]
 effect = "Crosshair"
-palette = "Polarized"
+palette = "Amber"
 value = 255
-speed = 32
+speed = 108
 
 # Per-effect parameters, by the names the firmware advertises. Only the ones
 # listed here are managed: anything left out keeps whatever the keyboard has,
@@ -605,7 +612,7 @@ Motion = 0
 # `Distance pace` decides how much of that a shorter hop gives back -- at 200
 # a next-key hop costs about a third of a full crossing, which is what keeps
 # the comet in touch with fast typing. Every duration here is scaled by the
-# shared `speed = 32` above, so the real full-board flight is nearer 440 ms.
+# shared `speed = 108` above, so the real full-board flight is nearer 345 ms.
 [lighting.effects.params.Comet]
 "Lag x10ms" = 32
 "Distance pace" = 200
