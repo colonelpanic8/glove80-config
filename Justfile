@@ -45,14 +45,15 @@ pull:
 show:
     {{ control }} config show
 
-go60-diff device:
-    {{ control }} config diff --device {{ device }} {{ go60_config }}
+go60-diff device="":
+    {{ control }} --usb {{ if device != "" { "--device " + device + " " } else { "" } }}config diff {{ go60_config }}
 
-go60-apply device:
-    {{ control }} config apply --device {{ device }} {{ go60_config }}
+go60-apply device="":
+    @echo 'Applying Go60 runtime configuration (Rynk USB device: {{ if device != "" { device } else { "auto-detect" } }})'
+    {{ control }} --usb {{ if device != "" { "--device " + device + " " } else { "" } }}config apply {{ go60_config }}
 
-go60-pull device:
-    {{ control }} config pull --device {{ device }} {{ go60_config }}
+go60-pull device="":
+    {{ control }} --usb {{ if device != "" { "--device " + device + " " } else { "" } }}config pull {{ go60_config }}
 
 ctl *args:
     {{ control }} {{ args }}

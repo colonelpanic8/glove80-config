@@ -159,12 +159,16 @@ The Go60's managed runtime state lives in
 [config/go60.toml](config/go60.toml). Runtime TOML declares its logical
 5×14 matrix and carries the persisted policy for both pointing devices; the
 current policy makes device 0 (the left trackpad) scroll and device 1 (the
-right trackpad) move the cursor. Because both keyboards can be connected at
-once, Go60 recipes require an explicit Rynk HID path:
+right trackpad) move the cursor. If only one Rynk USB device is connected, the
+Go60 recipes autodetect it:
 
-    just go60-diff /dev/hidraw12
+    just go60-diff
+    just go60-apply
+    just go60-pull
+
+When both keyboards are connected, pass the Go60's Rynk HID path explicitly:
+
     just go60-apply /dev/hidraw12
-    just go60-pull /dev/hidraw12
 
 The HID number can change after reconnecting. Identify the Go60 Rynk
 interface before applying rather than reusing a stale path.
