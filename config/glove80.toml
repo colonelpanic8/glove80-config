@@ -579,24 +579,18 @@ mode = "solid"
 # Rynk's generic lighting-extension state. Names come from the connected
 # firmware's extension descriptor; PaletteFX is the current provider.
 #
-# This is the tuned Crosshair/Amber setup the firmware also compiles in as its
-# boot default (`DEFAULT_EFFECT*` in `crates/moergo-rmk/src/lighting.rs`), so a
-# board that has never persisted a selection and a board that has just had this
-# profile applied look the same. Amber is what makes the cross warm; the
-# per-effect `Arm hue` and `Key hue` below are indices into whichever palette
-# is selected, not absolute colors.
+# Match the Go60's default effect selection and shared rendering settings.
 [lighting.effects]
-effect = "Crosshair"
-palette = "Amber"
+effect = "Reactive"
+palette = "Polarized"
 value = 255
-speed = 108
+speed = 32
 
 # Per-effect parameters, by the names the firmware advertises. Only the ones
 # listed here are managed: anything left out keeps whatever the keyboard has,
 # which is what makes live tuning in Rynkbench safe to leave in place.
 #
-# Crosshair is the default effect. Its full live tuning is pinned here so the
-# source profile reproduces the current look exactly.
+# Keep Crosshair's full live tuning pinned for when it is selected by cycling.
 [lighting.effects.params.Crosshair]
 "Arm hue" = 0
 "Arm width" = 11
@@ -612,7 +606,7 @@ Motion = 0
 # `Distance pace` decides how much of that a shorter hop gives back -- at 200
 # a next-key hop costs about a third of a full crossing, which is what keeps
 # the comet in touch with fast typing. Every duration here is scaled by the
-# shared `speed = 108` above, so the real full-board flight is nearer 345 ms.
+# shared `speed = 32` above, so the real full-board flight is nearer 440 ms.
 [lighting.effects.params.Comet]
 "Lag x10ms" = 32
 "Distance pace" = 200
