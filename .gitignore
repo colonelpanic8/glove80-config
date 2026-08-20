@@ -1,5 +1,4 @@
 /.direnv/
-/.envrc
 /.worktrees/
 /target/
 /dependencies/moergo-rmk/dist/

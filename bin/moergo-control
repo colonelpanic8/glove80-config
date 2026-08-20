@@ -9,6 +9,5 @@ if [[ ! -f "$firmware_root/Cargo.toml" ]]; then
   exit 1
 fi
 
-exec nix develop "path:$firmware_root" --command \
-  cargo run --quiet --manifest-path "$firmware_root/Cargo.toml" \
+exec cargo run --manifest-path "$firmware_root/Cargo.toml" \
   -p moergo-control -- "$@"

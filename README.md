@@ -188,7 +188,10 @@ rejected with its exact layer and key position rather than silently changed.
 The Layout Editor itself describes JSON import/export as experimental, so the
 schema may evolve.
 
-For transport selection or any other CLI command, use the pinned wrapper:
+For transport selection or any other CLI command, use the wrapper from the
+active direnv environment. It runs the pinned RMK workspace with Cargo
+directly; the environment supplies the Rust toolchain and native BLE build
+dependencies:
 
 ```sh
 ./bin/moergo-control --usb keymap read --all
